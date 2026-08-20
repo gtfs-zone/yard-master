@@ -889,16 +889,16 @@ Every properties page gets an explicit Save. Field-level validation errors come
 back from the API and render next to the field that caused them, which is the
 main thing the old admin does well and must not be lost.
 
-- [ ] `POST`/`PATCH`/`DELETE` for feeds, trackers, alerts, informed entities
-- [ ] Members and invites: add, remove, and the owner-only checks
-- [ ] `POST /api/feeds/{id}/transfer`
-- [ ] Traccar provisioning rehomed: QR and deep link in the tracker panel
-- [ ] A shared form renderer: dirty tracking, Save/Revert, disabled while in
+- [x] `POST`/`PATCH`/`DELETE` for feeds, trackers, alerts, informed entities
+- [x] Members and invites: add, remove, and the owner-only checks
+- [x] `POST /api/feeds/{id}/transfer`
+- [x] Traccar provisioning rehomed: QR and deep link in the tracker panel
+- [x] A shared form renderer: dirty tracking, Save/Revert, disabled while in
       flight, field errors from a 422
-- [ ] Destructive actions behind a typed confirmation
-- [ ] pytest for every write path, including the scoping tests from phase 2
+- [x] Destructive actions behind a typed confirmation
+- [x] pytest for every write path, including the scoping tests from phase 2
       repeated against the mutating verbs
-- [ ] Bulk tracker create (a prefix and a count), respecting the
+- [x] Bulk tracker create (a prefix and a count), respecting the
       `(feed_id, nickname)` constraint phase 3 added
 
 **Gotchas.** Deleting a tracker should also retire its Traccar device, matched
@@ -910,6 +910,90 @@ holds the surrogate, so a nickname is free to change under a live link. A
 rename can still collide with the `(feed_id, nickname)` constraint, so it needs
 the same field-level 422 handling as any other validated write. Invites match on **verified** email
 only; that rule is an account-takeover boundary and moves across untouched.
+
+### What the pass turned up
+
+**A form cannot live in the panel.** A properties page is a synchronous string
+renderer re-run on every session event, so an `<input>` rendered into it loses
+what was typed the moment a tracker updates or a list request lands. Every form
+is therefore a modal — `entity-form.ts`, built on the vendored `showModal` —
+which owns its own DOM and outlives every re-render underneath it. Save/Revert,
+the in-flight disable and the field errors all belong to that one file, and the
+pages stayed pure string renderers, which is what phase 5 bought and what phase
+7's live pushes would otherwise have broken. Inline editing would have needed a
+re-render-suppression mechanism `PanelRenderer` does not have.
+
+**`showModal` already had the in-flight behaviour.** Its `triggerAction`
+disables every button for the duration of the action's promise and re-enables
+them if the action returns `true`, which is exactly what a save wants: open
+with what was typed still in it on a validation error, closed on success. What
+it does not know about is the dirty state, so an action that keeps the modal
+open leaves Save enabled on a form nobody touched; the fix is a `setTimeout`
+re-sync, because the re-enable happens in the continuation of an `await` and
+anything queued as a microtask would run before it.
+
+**A 422 names its field and a 409 does not.** FastAPI's 422 `detail` is a list
+whose `loc` ends in the field, so `ApiError.fields` maps them and the form puts
+each message under the input that caused it — the one thing SQLAdmin did well.
+A 409 is a conflict about the whole request, and only the caller knows which
+field to blame, so `conflictField` is how "that feed name is taken" ends up
+under `feed_name` rather than in a banner.
+
+**`datetime-local` has no timezone, and the server stamps UTC on a naive one.**
+An alert's active period would have been read as UTC wherever the browser
+actually is. `toLocalInput`/`fromLocalInput` convert both ways, so what leaves
+the form is an absolute instant with its offset. The editor deliberately works
+in the *reader's* zone while the panel displays these instants in the *feed's*:
+a bare `datetime-local` cannot honestly claim any other zone, and the field
+says which one it means.
+
+**Deleting a feed is a manual cascade.** `Feed.members` and `Feed.invites`
+cascade in the model; trackers, rules, alerts and entities do not, so a delete
+that did not clear them would have raised a foreign-key error rather than doing
+anything. `DELETE /feeds/{id}` clears them in one transaction, and the same
+shape appears twice more: deleting a tracker takes its rules, deleting an alert
+takes its entities.
+
+**The Traccar device is retired now, which the old admin never did.** It only
+ever created devices, so every deleted tracker left a device answering for a
+credential that mapped to nothing. `delete_device` was added to the client and
+`provision_device`/`retire_device` wrap both halves best-effort: the row is
+already committed (or already gone), and a Traccar outage must not turn a
+successful write into a 500. Deleting a feed retires its whole fleet the same
+way, after the commit.
+
+**The alert enumerations existed twice.** `routers/ingest.py` had the GTFS-RT
+cause/effect/severity `Literal`s and `admin/views.py` had them again as wtforms
+choices. A value one writer rejects has to be a value the other rejects, or the
+same feed publishes fields only half of it believes in, so they moved to
+`alert_enums.py` and ingest imports them. The frontend mirrors the names in
+`managed-render.ts`, which is the fourth copy and the only one that cannot be
+imported.
+
+**The create response is the detail form, deliberately.** Whoever just made a
+tracker is about to provision it, so `POST /feeds/{id}/trackers` answers with
+`device_key` and the frontend caches it straight into the session rather than
+fetching the detail again a moment later. Bulk create answers with the summary
+form instead: nobody provisions forty trackers in one go, and forty credentials
+in one response is forty credentials in one place.
+
+**Bulk create numbers past what exists.** `(feed_id, nickname)` is unique and
+starting at 1 every time is the easiest way to collide with it, so the highest
+existing `{prefix}{n}` is what the numbering continues from. Running the same
+bulk create twice extends the fleet rather than failing.
+
+**The buttons follow `can_manage`, not `is_owner`.** Editing a feed and
+creating trackers or alerts are open to any member, matching the admin this
+replaces; transferring, deleting and managing people are not. Showing a member
+a button that answers 403 would be worse than not offering it, and `can_manage`
+is the permission (an admin has it on somebody else's feed) rather than the
+fact.
+
+**cafe-car's lock was pinning a railroad-club from before phase 3.** The venv
+had no `TrackerRuleException` and no `Tracker.device_key`, so the suite could
+not import, let alone run. `uv lock --upgrade-package railroad-club` to
+`489ee1c` is part of this commit; phase 3 changed the library and never moved
+the pin.
 
 ---
 
