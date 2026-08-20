@@ -4,9 +4,10 @@
  *
  * yard-master's own page. test-track shows a feed status page here; this repo
  * is a manager, so the no-focus page is a hierarchy instead. The managed half
- * (trackers, assignments, alerts, people) sits above the divider and is filled
- * in phase 5b; the GTFS half below it comes from the in-browser zip and is what
- * this phase renders.
+ * (trackers, assignments, alerts, people) sits above the divider and comes from
+ * the API; the GTFS half below it comes from the in-browser zip. The two are
+ * independent: the managed half renders the moment a feed is selected, while
+ * the zip is still downloading, or never arrives at all.
  *
  * Section bodies are `<details>` so the panel renderer's open-detail tracking
  * survives a re-render. Long sections are capped: a large feed has tens of
@@ -115,6 +116,92 @@ function renderStops(ctx: RenderContext): string {
   );
 }
 
+// ─── The managed half ────────────────────────────────────────────────────────
+
+/** A section that is one link rather than a list: no count, no disclosure. */
+function treeLink(ctx: RenderContext, state: PageState, title: string, note: string): string {
+  return `
+    <div class="rounded-lg border border-base-300 px-3 py-2 text-sm font-semibold flex justify-between gap-2">
+      ${entityLink(ctx, state, title, 'link link-hover')}
+      <span class="opacity-50 font-normal text-xs self-center">${escHtml(note)}</span>
+    </div>`;
+}
+
+function renderTrackers(ctx: RenderContext): string {
+  const trackers = [...ctx.session.trackers.values()].sort((a, b) =>
+    a.nickname.localeCompare(b.nickname)
+  );
+  const shown = trackers.slice(0, CONFIG.TREE_LIST_MAX);
+  const rows = shown
+    .map((tracker) => {
+      // A tracker with a fix is in `vehicles`, keyed by the same id the map
+      // paints it under; one without has simply never reported.
+      const live = ctx.session.vehicles.has(tracker.id);
+      return `<li class="flex items-center gap-2 min-w-0">
+        <span class="min-w-0 truncate">${entityLink(
+          ctx,
+          { type: 'tracker', tracker_id: tracker.id },
+          tracker.nickname
+        )}</span>
+        <span class="ml-auto shrink-0 badge badge-xs ${
+          live ? 'badge-success' : 'badge-ghost'
+        }">${escHtml(live ? 'reporting' : 'no fix')}</span>
+      </li>`;
+    })
+    .join('');
+
+  return treeSection(
+    'trackers',
+    'Trackers',
+    trackers.length,
+    trackers.length
+      ? `<ul class="space-y-1 text-xs">${rows}</ul>${cappedNote(trackers.length, shown.length)}`
+      : '<p class="text-xs opacity-60">No trackers yet.</p>'
+  );
+}
+
+function renderAlerts(ctx: RenderContext): string {
+  const alerts = [...ctx.session.serviceAlerts.values()].sort((a, b) => b.id - a.id);
+  const shown = alerts.slice(0, CONFIG.TREE_LIST_MAX);
+  const rows = shown
+    .map(
+      (alert) => `<li class="flex items-center gap-2 min-w-0">
+        <span class="min-w-0 truncate">${entityLink(
+          ctx,
+          { type: 'alert', alert_id: String(alert.id) },
+          alert.header_text || `Alert ${alert.id}`
+        )}</span>
+        <span class="ml-auto opacity-50 tabular-nums shrink-0">${escHtml(
+          `${alert.entity_count} entit${alert.entity_count === 1 ? 'y' : 'ies'}`
+        )}</span>
+      </li>`
+    )
+    .join('');
+
+  return treeSection(
+    'alerts',
+    'Service alerts',
+    alerts.length,
+    alerts.length
+      ? `<ul class="space-y-1 text-xs">${rows}</ul>${cappedNote(alerts.length, shown.length)}`
+      : '<p class="text-xs opacity-60">No service alerts.</p>'
+  );
+}
+
+function renderManaged(ctx: RenderContext): string {
+  const people = ctx.session.people;
+  const peopleNote = people
+    ? `${people.members.length} member${people.members.length === 1 ? '' : 's'}${
+        people.invites.length ? `, ${people.invites.length} invited` : ''
+      }`
+    : '';
+  return `
+    ${renderTrackers(ctx)}
+    ${treeLink(ctx, { type: 'assignments' }, 'Assignments', '')}
+    ${renderAlerts(ctx)}
+    ${treeLink(ctx, { type: 'people' }, 'People', peopleNote)}`;
+}
+
 /**
  * Where the zip is up to. The managed half of the tree works without it, so
  * "still downloading" and "did not load" are states the tree renders in, not
@@ -152,6 +239,8 @@ export function renderTreePage(ctx: RenderContext): string {
         session.feed.feed_name,
         'link link-hover'
       )}</h2>
+      <div class="space-y-2">${renderManaged(ctx)}</div>
+      <div class="divider text-xs opacity-60 my-1">Schedule</div>
       ${renderStaticStatus(ctx)}
       <div class="space-y-2">${gtfs}</div>
     </div>`;

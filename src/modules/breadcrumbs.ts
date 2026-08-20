@@ -10,6 +10,9 @@
    - `trip` added, with its route as the parent when the feed names one.
    - HOME is the feed root rather than test-track's "Feed status" page, and it
      is labelled with the selected feed's name.
+   - `alertLabel` reads the managed `serviceAlerts` map first, since an
+     `alert` PageState names a row in the API rather than a decoded entity, and
+     falls back to the live payload for one that is only there.
    - `validateState` answers true for the managed variants while the API list
      is still loading: an empty `trackers` map means "not fetched yet" as often
      as it means "no such tracker", and falling back to home on a slow request
@@ -51,6 +54,8 @@ export function trackerLabel(session: FeedSession, trackerId: string): string {
 }
 
 export function alertLabel(session: FeedSession, alertId: string): string {
+  const managed = session.serviceAlerts.get(alertId);
+  if (managed) return managed.header_text || `Alert ${alertId}`;
   const alert = session.alerts.get(alertId)?.alert;
   const header = alert?.headerText?.translation?.[0]?.text;
   return header ? String(header) : `Alert ${alertId}`;
@@ -89,6 +94,13 @@ type AlertParent =
 
 /** The first entity an alert names that we have a page for. */
 function alertParent(session: FeedSession, alertId: string): AlertParent | null {
+  // The managed detail is the authority when it has been fetched; the entity
+  // list only exists on the detail, so a summary alone names no parent.
+  for (const entity of session.alertDetails.get(alertId)?.entities ?? []) {
+    if (entity.route_id) return { type: 'route', route_id: entity.route_id };
+    if (entity.stop_id) return { type: 'stop', stop_id: entity.stop_id };
+  }
+
   const informed = session.alerts.get(alertId)?.alert.informedEntity;
   if (!informed) return null;
 
@@ -197,6 +209,7 @@ export function validateState(session: FeedSession, state: PageState): boolean {
     case 'tracker':
       return session.trackers.size === 0 || session.trackers.has(state.tracker_id);
     case 'alert':
-      return session.alerts.size === 0 || session.alerts.has(state.alert_id);
+      if (session.serviceAlerts.has(state.alert_id)) return true;
+      return session.serviceAlerts.size === 0 && session.alerts.size === 0;
   }
 }

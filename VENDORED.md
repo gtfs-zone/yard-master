@@ -37,11 +37,15 @@ The exception is `modal-utils.ts`. coloring-book's copy is a superset of
 test-track's older one, and `notification-system.ts` imports `renderCloseIcon`
 from the newer form, so that one row still names coloring-book.
 
-`src/modules/pages/trip-page.ts` and `src/modules/pages/tree-page.ts` are in
+`src/modules/pages/trip-page.ts`, `src/modules/pages/tree-page.ts`,
+`src/modules/pages/feed-page.ts`, `src/modules/pages/tracker-page.ts`,
+`src/modules/pages/people-page.ts` and `src/modules/managed-render.ts` are in
 neither tier and deliberately absent from the table: they are yard-master's own
 files with no upstream at all. test-track browses route, stop, vehicle and
 alert, and shows a feed status page when nothing is focused; this repo's
-hierarchy runs Route -> Trips -> Trip and its no-focus page is a browse tree.
+hierarchy runs Route -> Trips -> Trip, its no-focus page is a browse tree, and
+the managed half of that tree — feeds, trackers, alerts and people — has no
+counterpart upstream at all, because test-track owns none of those objects.
 
 Run `pnpm vendor:check` to diff every `verbatim` entry against its recorded SHA
 in the repo its `Source repo` column names (rows whose sibling is not checked out
@@ -77,7 +81,7 @@ left alone.
 | `src/modules/alerts.ts` | `test-track` | `src/modules/alerts.ts` | 56f120a | verbatim | Alert lookups by route, stop and trip over the session's alert map |
 | `src/modules/feed-time.ts` | `test-track` | `src/modules/feed-time.ts` | 56f120a | verbatim | `adoptFeedTimezone` and the feed-local clock helpers. Every transit time is rendered against the feed's zone, never the browser's |
 | `src/modules/render-utils.ts` | `test-track` | `src/modules/render-utils.ts` | 56f120a | verbatim | Shared page furniture: `escHtml`, `entityLink`, `routeBadge`, the raw-column table, and the time/delay formatters. `RenderContext.session` resolves against yard-master's own `feed-session.ts`, which is deliberately shaped like test-track's |
-| `src/modules/search-entries.ts` | `test-track` | `src/modules/search-entries.ts` | 56f120a | modified | Builds `SearchController` entries from the session. See the banner's `@changes`: the vehicle loop became a tracker loop and the priorities bucket managed objects ahead of GTFS objects |
+| `src/modules/search-entries.ts` | `test-track` | `src/modules/search-entries.ts` | 56f120a | modified | Builds `SearchController` entries from the session. See the banner's `@changes`: the vehicle loop became a tracker loop over the API's list, service alerts were added, and the priorities bucket managed objects ahead of GTFS objects |
 | `src/types/page-state.ts` | `test-track` | `src/types/page-state.ts` | 56f120a | modified | The union of every page. See the banner's `@changes`: yard-master's nine variants replace test-track's five |
 | `src/modules/page-state-manager.ts` | `test-track` | `src/modules/page-state-manager.ts` | 56f120a | modified | Owns the current focus, the navigation history and the hash. See the banner's `@changes`: the hash codec is rewritten around an explicit `type` param |
 | `src/modules/breadcrumbs.ts` | `test-track` | `src/modules/breadcrumbs.ts` | fa12a57 | modified | The breadcrumb trail and `validateState`. See the banner's `@changes`: the variant set is yard-master's, trackers resolve against the API list, and a managed object is accepted while its list is still empty |
@@ -89,7 +93,7 @@ left alone.
 | `src/modules/route-sequence.ts` | `test-track` | `src/modules/route-sequence.ts` | fa12a57 | verbatim | Merges a route's trips into one ordered stop list per direction, with per-stop trip counts and repeat-visit handling. Born in coloring-book |
 | `src/modules/route-graph.ts` | `test-track` | `src/modules/route-graph.ts` | fa12a57 | verbatim | Assigns the strip's rows to lanes so branches and merges can be drawn. Born in coloring-book |
 | `src/modules/route-strip.ts` | `test-track` | `src/modules/route-strip.ts` | fa12a57 | verbatim | The strip's SVG rail: lane geometry, row paths, dots and the endpoint heuristics. `STRIP_ROW_CLASS` is what `panel-renderer.ts` delegates stop hovering off. Born in coloring-book |
-| `src/modules/pages/alert-page.ts` | `test-track` | `src/modules/pages/alert-page.ts` | fa12a57 | verbatim | The GTFS-RT alert page and `renderAlertList`, which the route, stop and trip pages all embed. Phase 5b takes this file over for the managed `Alert` object and it moves to `modified` or `adopted` then |
+| `src/modules/pages/alert-page.ts` | `test-track` | `src/modules/pages/alert-page.ts` | fa12a57 | modified | `renderAlertList`, which the route, stop and trip pages all embed, plus both alert pages. See the banner's `@changes`: the page renders the managed `Alert` from the API, and test-track's decoded-entity page is kept underneath it as the fallback for an alert that is only in the live payload |
 | `src/modules/pages/route-page.ts` | `test-track` | `src/modules/pages/route-page.ts` | fa12a57 | modified | The route strip. See the banner's `@changes`: `vehicle` links became `tracker` links, the wording follows, and a Trips section lists the direction's trips |
 | `src/modules/pages/stop-page.ts` | `test-track` | `src/modules/pages/stop-page.ts` | fa12a57 | modified | The stop and station page. See the banner's `@changes`: `vehicle` links became `tracker` links and a departure's headsign links to its trip page |
 | `src/modules/panel-renderer.ts` | `test-track` | `src/modules/panel-renderer.ts` | fa12a57 | modified | The panel dispatcher, its scroll/`<details>` restore and the shared ticker. See the banner's `@changes`: yard-master's session events, no status page to hand back to, and the nine-variant switch |

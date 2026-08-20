@@ -11,7 +11,11 @@
      arrive after the page it belongs to, without a scroll reset.
    - The dispatcher covers yard-master's nine variants: `home` renders the
      tree, `trip` is this repo's own page, `vehicle` is gone, and the managed
-     variants render a placeholder until phase 5b. */
+     variants render this repo's own pages. `assignments` is the one left as a
+     placeholder, since the calendar is its own phase.
+   - `meUserId` added to the hooks: the people page marks the signed-in row,
+     and `RenderContext` is a verbatim type that has no business growing a
+     field for it. */
 /**
  * The right panel's object pages: one dispatcher over `PageState`, plus the
  * furniture every page shares.
@@ -29,8 +33,11 @@ import { RtIndex } from './rt-index';
 import type { RenderContext } from './render-utils';
 import { escHtml, formatRelative } from './render-utils';
 import { renderAlertPage } from './pages/alert-page';
+import { renderFeedPage } from './pages/feed-page';
+import { renderPeoplePage } from './pages/people-page';
 import { renderRoutePage } from './pages/route-page';
 import { renderStopPage } from './pages/stop-page';
+import { renderTrackerPage } from './pages/tracker-page';
 import { renderTreePage } from './pages/tree-page';
 import { renderTripPage } from './pages/trip-page';
 
@@ -41,6 +48,8 @@ export interface PanelRendererHooks {
   href: (state: PageState) => string;
   /** Light a stop on the map while its route-strip row is hovered. */
   hoverStop: (stop_id: string | null) => void;
+  /** The signed-in user's id, or null before `/me` has answered. */
+  meUserId: () => number | null;
 }
 
 function renderBreadcrumbs(ctx: RenderContext, items: BreadcrumbItem[]): string {
@@ -231,11 +240,15 @@ export class PanelRenderer {
       case 'alert':
         return renderAlertPage(ctx, this.state);
       case 'feed':
+        return renderFeedPage(ctx);
       case 'tracker':
-      case 'assignments':
+        return renderTrackerPage(ctx, this.state);
       case 'people':
-        // The managed half of the panel, which phase 5b writes.
-        return `<p class="text-sm opacity-50">${escHtml(this.state.type)} pages arrive in phase 5b.</p>`;
+        return renderPeoplePage(ctx, this.hooks.meUserId());
+      case 'assignments':
+        // The calendar is its own phase; the page state and its date param are
+        // already linkable so nothing has to be re-keyed when it lands.
+        return `<p class="text-sm opacity-50">The assignments calendar is not built yet.</p>`;
     }
   }
 }

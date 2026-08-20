@@ -1,11 +1,36 @@
 /* @vendored-from test-track:src/modules/pages/alert-page.ts
    @sha fa12a57
-   @status verbatim */
+   @status modified
+   @changes
+   - `renderAlertPage` renders the *managed* alert, the row this app owns, from
+     `session.serviceAlerts` and the entities `session.alertDetails` carries.
+     test-track's decoded-entity page is kept below it as
+     `renderRtAlertPage`, which is what a `PageState` naming an alert that is
+     only in the live payload still falls back to.
+   - `renderManagedEntity` added: an `InformedEntity` row from the API, whose
+     columns are flat where a GTFS-RT `EntitySelector` nests the trip half.
+   - Everything the route, stop and trip pages embed — `renderAlertList`,
+     `statusBadge`, the translation and active-period renderers — is
+     test-track's, unchanged. */
 /**
  * The alert page, plus the compact alert list every other page embeds.
+ *
+ * Two objects share this file and this `PageState` variant, which is worth
+ * being explicit about. The *managed* alert is a row in cafe-car with a numeric
+ * id, and it is what this app creates, browses and publishes. The `AlertRecord`
+ * is what a consumer decoding the published feed sees. Here they are the same
+ * disruption seen from two ends, so `alert_id` is `String(Alert.id)` and the
+ * managed row is what the page shows.
+ *
+ * The one trap: cafe-car numbers the entities in the published GTFS-RT feed
+ * positionally (`entity.id = str(i)`), so an `AlertRecord.id` is *not* an
+ * `Alert.id`. Nothing fills `session.alerts` yet; whatever does has to key it
+ * by the managed id, or the links the route and stop pages emit will point at
+ * the wrong alert.
  */
 
 import type { AlertRecord, ServiceAlert } from '../../gtfs-rt';
+import type { Alert, InformedEntity } from '../../types/api';
 import type { PageState } from '../../types/page-state';
 import {
   ALERT_LEVEL_LABELS,
@@ -20,6 +45,7 @@ import {
   translations,
 } from '../alerts';
 import type { RenderContext } from '../render-utils';
+import { formatIso } from '../managed-render';
 import {
   entityLink,
   escHtml,
@@ -182,16 +208,152 @@ function renderInformedEntity(ctx: RenderContext, e: EntitySelector): string {
   </li>`;
 }
 
+/** The managed alert's own window, which is one period rather than a list. */
+function renderManagedWindow(alert: Alert): string {
+  if (!alert.active_period_start && !alert.active_period_end) {
+    return `<p class="text-xs opacity-60">No window set — the alert is published for as long as it exists.</p>`;
+  }
+  return propList([
+    prop('From', escHtml(alert.active_period_start ? formatIso(alert.active_period_start) : 'always')),
+    prop('Until', escHtml(alert.active_period_end ? formatIso(alert.active_period_end) : 'open-ended')),
+  ]);
+}
+
+/**
+ * One informed entity from the API, linked to the pages for what it names.
+ *
+ * The API's row is flat where GTFS-RT nests the trip descriptor, so the trip
+ * half is `trip_id` / `trip_route_id` / `trip_start_date` rather than a
+ * `trip` object. Everything it names is a string the feed's own author typed,
+ * and none of it is validated against the zip, so an id that resolves gets a
+ * link and one that does not is still shown as what was entered.
+ */
+function renderManagedEntity(ctx: RenderContext, e: InformedEntity): string {
+  const feed = ctx.session.staticFeed;
+  const parts: string[] = [];
+
+  const add = (label: string, valueHtml: string): void => {
+    parts.push(`<span class="opacity-60">${escHtml(label)}</span> ${valueHtml}`);
+  };
+
+  if (e.agency_id) add('agency', escHtml(e.agency_id));
+  if (e.route_type !== null) add('route_type', escHtml(String(e.route_type)));
+  if (e.route_id) {
+    const route = feed?.routes.get(e.route_id);
+    add(
+      'route',
+      route
+        ? entityLink(ctx, { type: 'route', route_id: route.id }, route.short_name || route.long_name || route.id)
+        : escHtml(e.route_id),
+    );
+  }
+  if (e.stop_id) {
+    const stop = feed?.stops.get(e.stop_id);
+    add('stop', stop ? entityLink(ctx, { type: 'stop', stop_id: stop.id }, stop.name || stop.id) : escHtml(e.stop_id));
+  }
+  if (e.direction_id !== null) add('direction', escHtml(String(e.direction_id)));
+  if (e.trip_id) {
+    const trip = feed?.trips.get(e.trip_id);
+    add(
+      'trip',
+      trip
+        ? entityLink(ctx, { type: 'trip', trip_id: trip.trip_id, route_id: trip.route_id }, trip.headsign || trip.trip_id)
+        : escHtml(e.trip_id),
+    );
+  }
+  if (e.trip_route_id) add('trip route', escHtml(e.trip_route_id));
+  if (e.trip_start_date) add('start date', escHtml(e.trip_start_date));
+  if (e.trip_start_time) add('start time', escHtml(e.trip_start_time));
+
+  return `<li class="text-xs rounded border border-base-300 p-2">
+    <div class="flex flex-wrap gap-x-3 gap-y-1">${
+      parts.length ? parts.join('') : '<span class="opacity-50">names nothing — applies to the whole feed</span>'
+    }</div>
+  </li>`;
+}
+
+/** The informed entities, or the count while the detail request is in flight. */
+function renderManagedEntities(ctx: RenderContext, alert: Alert): string {
+  const detail = ctx.session.alertDetails.get(String(alert.id));
+  if (!detail) {
+    return alert.entity_count === 0
+      ? '<p class="text-xs opacity-60">No informed entities — the alert applies to the whole feed.</p>'
+      : `<p class="text-xs opacity-60">Loading ${escHtml(String(alert.entity_count))} informed entit${
+          alert.entity_count === 1 ? 'y' : 'ies'
+        }…</p>`;
+  }
+  if (detail.entities.length === 0) {
+    return '<p class="text-xs opacity-60">No informed entities — the alert applies to the whole feed.</p>';
+  }
+  return `<ul class="space-y-1">${detail.entities.map(e => renderManagedEntity(ctx, e)).join('')}</ul>`;
+}
+
+/** Whether the managed alert's window contains this moment. */
+function managedIsActive(alert: Alert, now = Date.now()): boolean {
+  const start = alert.active_period_start ? Date.parse(alert.active_period_start) : null;
+  const end = alert.active_period_end ? Date.parse(alert.active_period_end) : null;
+  if (start !== null && now < start) return false;
+  if (end !== null && now > end) return false;
+  return true;
+}
+
+/** The managed alert: the row this app owns and publishes. */
+function renderManagedAlertPage(ctx: RenderContext, alert: Alert): string {
+  const active = managedIsActive(alert);
+  return `
+    <div class="space-y-4">
+      <div class="space-y-2">
+        <div class="flex items-center gap-2">
+          ${
+            active
+              ? '<span class="badge badge-warning badge-xs">active</span>'
+              : '<span class="badge badge-ghost badge-xs">not active</span>'
+          }
+        </div>
+        <h2 class="text-lg font-semibold leading-tight">${escHtml(alert.header_text)}</h2>
+        ${
+          alert.description_text
+            ? `<p class="text-sm whitespace-pre-wrap">${escHtml(alert.description_text)}</p>`
+            : ''
+        }
+        ${
+          alert.url
+            ? `<p class="text-xs"><a href="${escHtml(alert.url)}" target="_blank" rel="noopener"
+                 class="link break-all">${escHtml(alert.url)}</a></p>`
+            : ''
+        }
+      </div>
+
+      ${section(
+        'Properties',
+        propList([
+          prop('Cause', escHtml(alert.cause ?? '—')),
+          prop('Effect', escHtml(alert.effect ?? '—')),
+          prop('Severity', escHtml(alert.severity_level ?? '—')),
+        ]),
+      )}
+
+      ${section('Active window', renderManagedWindow(alert))}
+      ${section('Informed entities', renderManagedEntities(ctx, alert))}
+    </div>`;
+}
+
 export function renderAlertPage(
   ctx: RenderContext,
   state: Extract<PageState, { type: 'alert' }>,
 ): string {
+  const managed = ctx.session.serviceAlerts.get(state.alert_id);
+  if (managed) return renderManagedAlertPage(ctx, managed);
+
+  // Not one of this feed's rows. It may still be in the live payload, which is
+  // a different object with its own id space, so say which one is missing.
   const record = ctx.session.alerts.get(state.alert_id);
-  if (!record) {
-    return `${missing(`Alert ${state.alert_id}`)}
-      <p class="text-xs opacity-50 mt-2">GTFS-RT alerts are keyed on the feed entity id, and some
-      producers regenerate those between polls — the same disruption may now be under a different id.</p>`;
-  }
+  if (!record) return missing(`Alert ${state.alert_id}`);
+  return renderRtAlertPage(ctx, record);
+}
+
+/** test-track's page: the decoded GTFS-RT entity, as a consumer sees it. */
+function renderRtAlertPage(ctx: RenderContext, record: AlertRecord): string {
   const alert = record.alert;
   const url = preferredText(alert.url);
 

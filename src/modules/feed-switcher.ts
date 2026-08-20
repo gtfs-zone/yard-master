@@ -16,24 +16,10 @@
 import { createFeed, listFeeds } from './api-client';
 import { ApiError } from './api-client';
 import { escHtml } from './render-utils';
+import { loadStatusBadge } from './managed-render';
 import { showModal } from './modal-utils';
 import { notify } from './notification-system';
 import type { Feed } from '../types/api';
-
-/** Badge wording for a feed's last static load. Null is not "pending". */
-function loadBadge(feed: Feed): string {
-  if (!feed.load) {
-    return '<span class="badge badge-ghost badge-sm">never loaded</span>';
-  }
-  const cls =
-    {
-      success: 'badge-success',
-      failed: 'badge-error',
-      running: 'badge-info',
-      pending: 'badge-warning',
-    }[feed.load.status] ?? 'badge-ghost';
-  return `<span class="badge ${cls} badge-sm">${escHtml(feed.load.status)}</span>`;
-}
 
 function feedRow(feed: Feed, selectedId: number | null): string {
   const owner = feed.is_owner ? 'yours' : `shared by ${feed.owner_name ?? 'someone'}`;
@@ -46,7 +32,7 @@ function feedRow(feed: Feed, selectedId: number | null): string {
     >
     <div class="flex items-center gap-2">
       <span class="font-semibold">${escHtml(feed.feed_name)}</span>
-      ${loadBadge(feed)}
+      ${loadStatusBadge(feed.load)}
       <span class="text-xs opacity-50 ml-auto">${escHtml(owner)}</span>
     </div>
     <p class="text-xs opacity-60 truncate">${escHtml(feed.static_feed_url)}</p>

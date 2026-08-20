@@ -15,7 +15,10 @@
      immediately because it awaits the load; here a `route`/`stop`/`trip` link
      cannot resolve until the zip parses, so `applyPendingFocus` runs at each
      stage and only the last one is entitled to call a link dead.
-   - `onFeedChange` added to the hooks, and `refreshFeed`/`clearFeed` with it. */
+   - `onFeedChange` added to the hooks, and `refreshFeed`/`clearFeed` with it.
+   - `loadPageData` added: a managed page may need an object the list requests
+     do not carry (a tracker's `device_key`, an alert's informed entities), so
+     every focus change asks for what the page it opened needs. */
 /**
  * The single entry point for selecting a feed and for changing focus.
  *
@@ -42,7 +45,16 @@ import { pageStatesEqual } from '../types/page-state';
 import type { Feed, Me } from '../types/api';
 import { buildBreadcrumbs, validateState } from './breadcrumbs';
 import type { FeedSession } from './feed-session';
-import { getFeed, listFeeds, listTrackers, SessionExpiredError } from './api-client';
+import {
+  getAlert,
+  getFeed,
+  getPeople,
+  getTracker,
+  listAlerts,
+  listFeeds,
+  listTrackers,
+  SessionExpiredError,
+} from './api-client';
 import { getMe } from './api-client';
 import { notify } from './notification-system';
 import { PageStateManager } from './page-state-manager';
@@ -69,13 +81,21 @@ export class AppState {
    */
   private pendingFocus: PageState | null = null;
 
+  /**
+   * Detail requests already in flight, keyed by the page that asked. The panel
+   * re-renders on every session event, and a focus can be announced more than
+   * once while a feed is being adopted, so without this a slow request would be
+   * fired again on each pass.
+   */
+  private loadingPages = new Set<string>();
+
   constructor(session: FeedSession, hooks: AppStateHooks) {
     this.session = session;
     this.hooks = hooks;
 
     this.pages.setBreadcrumbBuilder((state) => buildBreadcrumbs(session, state));
     this.pages.setStateValidator((state) => validateState(session, state));
-    this.pages.addNavigationHandler((event) => this.hooks.onFocusChange(event.to));
+    this.pages.addNavigationHandler((event) => this.emitFocus(event.to));
 
     // The parsed feed is the last thing a linked route/stop/trip was waiting
     // for, and the first thing that can invalidate a focus carried over from
@@ -116,7 +136,7 @@ export class AppState {
     } catch (err) {
       if (err instanceof SessionExpiredError) return;
       notify.error(`Could not reach the API: ${describe(err)}`);
-      this.hooks.onFocusChange(this.focus);
+      this.emitFocus(this.focus);
       return;
     }
 
@@ -130,7 +150,7 @@ export class AppState {
       // No feed means no focus worth restoring: every page but home is scoped
       // to one.
       this.hooks.onFeedChange(null);
-      this.hooks.onFocusChange(this.focus);
+      this.emitFocus(this.focus);
       return;
     }
 
@@ -197,16 +217,94 @@ export class AppState {
   }
 
   /**
-   * The feed's managed objects. Only trackers for now; rules, alerts and people
-   * are fetched by the pages that show them in later phases.
+   * The feed's managed objects: everything the browse tree counts.
+   *
+   * All three in parallel and all three eagerly, because the tree shows a count
+   * for each and a count that arrives one page visit later is worse than three
+   * small requests on selection. Rules are not here: they belong to the
+   * calendar, which asks for a date range rather than for everything.
+   *
+   * One failing does not take the others down — a member who may read the feed
+   * but not its people should still get their trackers.
    */
   private async loadManagedObjects(feed: Feed): Promise<void> {
+    await Promise.all([
+      this.fetchInto('trackers', () => listTrackers(feed.id), (rows) =>
+        this.session.setTrackers(rows)
+      ),
+      this.fetchInto('service alerts', () => listAlerts(feed.id), (rows) =>
+        this.session.setServiceAlerts(rows)
+      ),
+      this.fetchInto('members', () => getPeople(feed.id), (people) =>
+        this.session.setPeople(people)
+      ),
+    ]);
+  }
+
+  /** One list request, reported by name and never allowed to throw at a caller. */
+  private async fetchInto<T>(
+    what: string,
+    fetch: () => Promise<T>,
+    apply: (value: T) => void
+  ): Promise<void> {
     try {
-      this.session.setTrackers(await listTrackers(feed.id));
+      apply(await fetch());
     } catch (err) {
       if (err instanceof SessionExpiredError) return;
-      notify.error(`Could not load trackers: ${describe(err)}`);
+      notify.error(`Could not load ${what}: ${describe(err)}`);
     }
+  }
+
+  /**
+   * Whatever the page just opened needs and the list requests did not carry.
+   *
+   * A tracker's `device_key` and an alert's informed entities are served by the
+   * detail endpoints alone, so they are fetched on arrival rather than for
+   * every row of a list. The result goes into the session, which re-renders the
+   * panel; nothing here returns anything to the caller.
+   */
+  private async loadPageData(state: PageState): Promise<void> {
+    const key = JSON.stringify(state);
+    if (this.loadingPages.has(key)) return;
+
+    const session = this.session;
+    let load: (() => Promise<void>) | null = null;
+
+    if (state.type === 'tracker' && !session.trackerDetails.has(state.tracker_id)) {
+      load = async () => session.setTrackerDetail(await getTracker(state.tracker_id));
+    } else if (state.type === 'alert' && !session.alertDetails.has(state.alert_id)) {
+      // The id is the managed row's, so it goes back to a number here and
+      // nowhere else: everything above this line keys alerts by string.
+      const id = Number(state.alert_id);
+      if (Number.isFinite(id)) load = async () => session.setAlertDetail(await getAlert(id));
+    } else if (state.type === 'people' && !session.people && session.feed) {
+      const feedId = session.feed.id;
+      load = async () => session.setPeople(await getPeople(feedId));
+    }
+    if (!load) return;
+
+    this.loadingPages.add(key);
+    try {
+      await load();
+    } catch (err) {
+      if (!(err instanceof SessionExpiredError)) {
+        notify.error(`Could not load this ${state.type}: ${describe(err)}`);
+      }
+    } finally {
+      this.loadingPages.delete(key);
+    }
+  }
+
+  /**
+   * Announce a focus, and fetch what its page needs.
+   *
+   * Every path that changes the page goes through here — the navigation
+   * handler, the boot restore and the pending-focus resolver — so a page can
+   * never be shown without the request that fills it having been made.
+   */
+  private emitFocus(state: PageState): void {
+    void this.loadPageData(state);
+    this.hooks.onFocusChange(state);
   }
 
   /** Re-read the selected feed's row, e.g. after asking for a reload. */
@@ -252,7 +350,7 @@ export class AppState {
       // `adoptState` is silent, and the feed params were written around it, so
       // the focus half of the hash has to be put back.
       this.pages.syncHash();
-      this.hooks.onFocusChange(this.focus);
+      this.emitFocus(this.focus);
       return;
     }
 
@@ -261,7 +359,7 @@ export class AppState {
       notify.warning(`Nothing in this feed matches the linked ${pending.type}.`);
       this.pages.adoptState({ type: 'home' });
       this.pages.syncHash();
-      this.hooks.onFocusChange(this.focus);
+      this.emitFocus(this.focus);
     }
   }
 

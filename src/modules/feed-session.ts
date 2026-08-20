@@ -25,7 +25,7 @@
  */
 import { GTFSStatic } from '../gtfs-static';
 import type { AlertRecord, TripUpdate } from '../gtfs-rt';
-import type { Feed, Tracker } from '../types/api';
+import type { Alert, AlertDetail, Feed, People, Tracker, TrackerDetail } from '../types/api';
 import type { VehiclePosition } from '../map-controller';
 import { adoptFeedTimezone } from './feed-time';
 import { feedProgressIndicator } from './feed-progress-indicator';
@@ -37,6 +37,31 @@ export class FeedSession extends EventTarget {
 
   /** This feed's trackers, keyed by `Tracker.id`. No `device_key` in here. */
   trackers = new Map<string, Tracker>();
+
+  /**
+   * Tracker detail, keyed by `Tracker.id`. This is the only place in the app
+   * that holds a `device_key`, it is fetched when the properties panel asks for
+   * it, and it is dropped with the rest of the feed's data on the next
+   * selection. Nothing else may read it.
+   */
+  trackerDetails = new Map<string, TrackerDetail>();
+
+  /**
+   * The feed's managed service alerts, keyed by `String(Alert.id)` — the same
+   * key a `PageState` of type `alert` carries.
+   *
+   * Deliberately not `alerts`: that name belongs to the decoded GTFS-RT
+   * records the vendored modules read, and the two are different objects. A
+   * managed alert is a row this app writes; an `AlertRecord` is what a
+   * consumer of the published feed sees.
+   */
+  serviceAlerts = new Map<string, Alert>();
+
+  /** Alerts whose informed entities have been fetched, by the same key. */
+  alertDetails = new Map<string, AlertDetail>();
+
+  /** Members and pending invites, or null until the list has arrived. */
+  people: People | null = null;
 
   staticFeed: GTFSStatic | null = null;
   staticError: string | null = null;
@@ -73,6 +98,46 @@ export class FeedSession extends EventTarget {
   /** Replace the tracker list. Wholesale, so a deleted tracker disappears. */
   setTrackers(trackers: Tracker[]): void {
     this.trackers = new Map(trackers.map((t) => [t.id, t]));
+    // A detail fetched for a tracker that is no longer in the list is stale,
+    // and it holds a credential, so it goes rather than lingering in memory.
+    for (const id of this.trackerDetails.keys()) {
+      if (!this.trackers.has(id)) this.trackerDetails.delete(id);
+    }
+    this.dispatchEvent(new CustomEvent('change'));
+  }
+
+  /** Cache one tracker's detail, credential included. */
+  setTrackerDetail(detail: TrackerDetail): void {
+    this.trackerDetails.set(detail.id, detail);
+    // The summary is a strict subset, so the list row is refreshed with it and
+    // a rename made elsewhere shows up without a second request.
+    this.trackers.set(detail.id, {
+      id: detail.id,
+      nickname: detail.nickname,
+      feed_id: detail.feed_id,
+    });
+    this.dispatchEvent(new CustomEvent('change'));
+  }
+
+  /** Replace the managed alert list. Wholesale, like the trackers. */
+  setServiceAlerts(alerts: Alert[]): void {
+    this.serviceAlerts = new Map(alerts.map((a) => [String(a.id), a]));
+    for (const key of this.alertDetails.keys()) {
+      if (!this.serviceAlerts.has(key)) this.alertDetails.delete(key);
+    }
+    this.dispatchEvent(new CustomEvent('change'));
+  }
+
+  /** Cache one alert's detail, which is the only form carrying its entities. */
+  setAlertDetail(detail: AlertDetail): void {
+    const key = String(detail.id);
+    this.alertDetails.set(key, detail);
+    this.serviceAlerts.set(key, detail);
+    this.dispatchEvent(new CustomEvent('change'));
+  }
+
+  setPeople(people: People): void {
+    this.people = people;
     this.dispatchEvent(new CustomEvent('change'));
   }
 
@@ -160,6 +225,10 @@ export class FeedSession extends EventTarget {
 
   private clearData(): void {
     this.trackers = new Map();
+    this.trackerDetails = new Map();
+    this.serviceAlerts = new Map();
+    this.alertDetails = new Map();
+    this.people = null;
     this.staticFeed = null;
     this.staticError = null;
     this.staticLoadedAt = null;
