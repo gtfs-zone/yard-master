@@ -12,7 +12,9 @@
  *
  * - **Dirty tracking.** Save is disabled until something actually changed, and
  *   Revert puts the initial values back. A form that was never touched cannot
- *   be saved, so an accidental Enter cannot rewrite a field with itself.
+ *   be saved, so an accidental Enter cannot rewrite a field with itself. A
+ *   create form whose defaults are already the answer opts out with
+ *   `allowPristine`.
  * - **In flight.** Every button is disabled while the request is out, which
  *   `showModal` already does for the action it triggered; the modal stays open
  *   until the write succeeds.
@@ -72,6 +74,15 @@ export interface EntityFormOptions<T> {
   submit: (values: Record<string, string>) => Promise<T>;
   /** Which field a 409's message belongs under, if any. */
   conflictField?: string;
+  /**
+   * Let a form be saved without being touched.
+   *
+   * Off by default, because an untouched edit form saving is an accidental
+   * Enter rewriting a field with itself. A *create* form whose defaults are all
+   * already right is the opposite case: the whole point of prefilling it is
+   * that it can be accepted as it stands.
+   */
+  allowPristine?: boolean;
 }
 
 /** The current value of every field, keyed by name. */
@@ -219,7 +230,7 @@ export async function showEntityForm<T>(options: EntityFormOptions<T>): Promise<
 
       const syncButtons = (): void => {
         const dirty = isDirty();
-        saveBtn.disabled = !dirty;
+        saveBtn.disabled = !dirty && !options.allowPristine;
         revertBtn.disabled = !dirty;
       };
 

@@ -10,8 +10,9 @@
    - `tracker` is keyed by `Tracker.id`, the surrogate. It is not the Traccar
      credential (that is `device_key`, which never leaves the properties panel)
      and it is genuinely unique, which nickname is not.
-   - `assignments` carries an optional `date` (YYYYMMDD, feed-local service
-     date) so a day in the calendar is linkable.
+   - `assignments` carries an optional `date` (YYYY-MM-DD, a feed-local service
+     date) so a day in the calendar is linkable. Hyphenated, matching the API
+     it is passed to, rather than GTFS's own compact form.
    - `trip` added, with `route_id` alongside `trip_id` so a trip page can render
      its breadcrumb before the zip has finished parsing.
    - `isPageState` no longer counts keys per variant; the optional members make

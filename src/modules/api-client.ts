@@ -37,6 +37,9 @@ import type {
   Me,
   People,
   Provisioning,
+  RuleException,
+  RuleExceptionWrite,
+  RuleWrite,
   ShareResult,
   Tracker,
   TrackerBulkCreate,
@@ -241,6 +244,33 @@ export const listAssignments = (feedId: number, from: string, to: string) =>
   api.get<Assignment[]>(
     `/feeds/${feedId}/assignments?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
   );
+
+/** One tracker's rules, which is what a tracker page asks for. */
+export const listTrackerRules = (trackerId: string) =>
+  api.get<TrackerRule[]>(`/trackers/${encodeURIComponent(trackerId)}/rules`);
+
+/** The tracker is fixed at creation, so it is in the path and not the body. */
+export const createRule = (trackerId: string, body: RuleWrite) =>
+  api.post<TrackerRule>(`/trackers/${encodeURIComponent(trackerId)}/rules`, body);
+
+/** Replaces the whole recurrence. The exceptions on it are left alone. */
+export const updateRule = (ruleId: number, body: RuleWrite) =>
+  api.patch<TrackerRule>(`/rules/${ruleId}`, body);
+
+/** Takes the rule's exceptions with it. */
+export const deleteRule = (ruleId: number) => api.del<void>(`/rules/${ruleId}`);
+
+/**
+ * Add or replace one date's exception. Writing a date the rule already has an
+ * exception for replaces its type rather than conflicting, so "skip this day"
+ * and "run it after all" are the same call with a different word.
+ */
+export const addRuleException = (ruleId: number, body: RuleExceptionWrite) =>
+  api.post<RuleException>(`/rules/${ruleId}/exceptions`, body);
+
+/** Drops the exception, putting the date back under the weekday flags. */
+export const deleteRuleException = (ruleId: number, exceptionId: number) =>
+  api.del<void>(`/rules/${ruleId}/exceptions/${exceptionId}`);
 
 export const updateFeed = (feedId: number, body: FeedUpdate) =>
   api.patch<Feed>(`/feeds/${feedId}`, body);

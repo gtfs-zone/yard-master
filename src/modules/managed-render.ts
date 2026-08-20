@@ -13,7 +13,8 @@
  * through one.
  */
 
-import type { LoadStatus, Member } from '../types/api';
+import type { LoadStatus, Member, TrackerRule } from '../types/api';
+import { WEEKDAY_KEYS, WEEKDAY_LABELS } from './service-date';
 import type { FeedSession } from './feed-session';
 import { escHtml, formatAbsolute, formatRelative, timestampWithAge } from './render-utils';
 
@@ -204,4 +205,84 @@ export function livenessBadge(liveness: TrackerLiveness, size = 'badge-xs'): str
     )}</span>`;
   }
   return `<span class="${cls}">no fix</span>`;
+}
+
+// ─── Rule times and recurrence ────────────────────────────────────────────────
+
+/**
+ * A rule's time as a clock reading. Seconds since **service midnight**, so a
+ * value past 86400 is the next calendar day and says so: `01:10 (+1d)` rather
+ * than a bare `01:10`, which would be a lie about which night it is.
+ *
+ * Nothing here goes through a `Date`. These are offsets into a service day, not
+ * instants, and a `Date` round-trip would rewrite 25:10 as 01:10 the wrong day
+ * — the same trap `stop_times` clock values carry.
+ */
+export function formatRuleTime(seconds: number): string {
+  const days = Math.floor(seconds / 86400);
+  const inDay = seconds - days * 86400;
+  const clock = `${String(Math.floor(inDay / 3600)).padStart(2, '0')}:${String(
+    Math.floor((inDay % 3600) / 60)
+  ).padStart(2, '0')}`;
+  const secs = inDay % 60;
+  const full = secs ? `${clock}:${String(secs).padStart(2, '0')}` : clock;
+  return days > 0 ? `${full} (+${days}d)` : full;
+}
+
+/**
+ * The same value as a form field: `25:10`, GTFS-shaped, with no day marker.
+ *
+ * The editor works in service-day hours on purpose. An overnight window is
+ * 23:00 to 25:10, which is how the feed writes it and how the resolver reads
+ * it, and offering `01:10` next to a "next day" checkbox would invent a second
+ * representation of the one number the column holds.
+ */
+export function ruleTimeInput(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  const clock = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  return secs ? `${clock}:${String(secs).padStart(2, '0')}` : clock;
+}
+
+/**
+ * `H:MM`, `HH:MM` or `HH:MM:SS` as seconds since service midnight, or null if
+ * it is not a clock time. Hours past 24 are accepted, which is the whole point.
+ */
+export function parseRuleTime(value: string): number | null {
+  const m = /^\s*(\d{1,2}):([0-5]\d)(?::([0-5]\d))?\s*$/.exec(value);
+  if (!m) return null;
+  return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3] ?? 0);
+}
+
+/** `09:00 → 17:00`, the pair as one reading. */
+export function formatWindow(start: number, end: number): string {
+  return `${formatRuleTime(start)} → ${formatRuleTime(end)}`;
+}
+
+/**
+ * When a rule runs, in one line: the weekdays, then the date range that bounds
+ * them.
+ *
+ * A rule with no weekday at all is not broken — it is a one-off, running only
+ * on the dates its exceptions add — so it is described as one rather than as
+ * "never".
+ */
+export function describeRecurrence(rule: TrackerRule): string {
+  const days = WEEKDAY_KEYS.filter((key) => rule[key]).map(
+    (key) => WEEKDAY_LABELS[WEEKDAY_KEYS.indexOf(key)]
+  );
+  const added = rule.exceptions.filter((e) => e.exception_type === 'added').length;
+  const recurrence =
+    days.length === 7
+      ? 'Every day'
+      : days.length
+        ? days.join(', ')
+        : added
+          ? `${added} date${added === 1 ? '' : 's'} only`
+          : 'No days set';
+  const range = rule.end_date
+    ? `${rule.start_date} to ${rule.end_date}`
+    : `from ${rule.start_date}`;
+  return `${recurrence} · ${range}`;
 }

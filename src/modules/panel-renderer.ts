@@ -2,8 +2,9 @@
    @sha fa12a57
    @status modified
    @changes
-   - The session events are yard-master's: `change`, `vehicles` and
-     `staticloaded` replace test-track's `vehicles` / `tripUpdates` / `alerts`.
+   - The session events are yard-master's: `change`, `vehicles`, `assignments`
+     and `staticloaded` replace test-track's `vehicles` / `tripUpdates` /
+     `alerts`.
    - No `active` flag and no `hide()`. test-track hands the panel back to a
      status page when nothing is focused; here `home` is the browse tree, so
      the panel always has something to render.
@@ -11,8 +12,7 @@
      arrive after the page it belongs to, without a scroll reset.
    - The dispatcher covers yard-master's nine variants: `home` renders the
      tree, `trip` is this repo's own page, `vehicle` is gone, and the managed
-     variants render this repo's own pages. `assignments` is the one left as a
-     placeholder, since the calendar is its own phase.
+     variants render this repo's own pages, the calendar included.
    - `meUserId` added to the hooks: the people page marks the signed-in row,
      and `RenderContext` is a verbatim type that has no business growing a
      field for it.
@@ -41,6 +41,7 @@ import { RtIndex } from './rt-index';
 import type { RenderContext } from './render-utils';
 import { escHtml, formatRelative } from './render-utils';
 import { renderAlertPage } from './pages/alert-page';
+import { renderAssignmentsPage } from './pages/assignments-page';
 import { renderFeedPage } from './pages/feed-page';
 import { renderPeoplePage } from './pages/people-page';
 import { renderRoutePage } from './pages/route-page';
@@ -102,12 +103,13 @@ export class PanelRenderer {
   }
 
   initialize(): void {
-    // `change` covers every managed update, `vehicles` the live fleet and
-    // `staticloaded` the parsed zip. All three invalidate the index, since any
-    // of them can change what a page can resolve. `vehicles` is separate from
-    // `change` because it fires per pushed fix, which the map wants and most
-    // of the rest of the app does not.
-    for (const event of ['change', 'vehicles', 'staticloaded'] as const) {
+    // `change` covers every managed update, `vehicles` the live fleet,
+    // `assignments` an expanded calendar window and `staticloaded` the parsed
+    // zip. All four invalidate the index, since any of them can change what a
+    // page can resolve. `vehicles` is separate from `change` because it fires
+    // per pushed fix, which the map wants and most of the rest of the app does
+    // not.
+    for (const event of ['change', 'vehicles', 'assignments', 'staticloaded'] as const) {
       this.session.addEventListener(event, () => {
         this.index = null;
         this.queueRender();
@@ -271,9 +273,7 @@ export class PanelRenderer {
       case 'people':
         return renderPeoplePage(ctx, this.hooks.meUserId());
       case 'assignments':
-        // The calendar is its own phase; the page state and its date param are
-        // already linkable so nothing has to be re-keyed when it lands.
-        return `<p class="text-sm opacity-50">The assignments calendar is not built yet.</p>`;
+        return renderAssignmentsPage(ctx, this.state);
     }
   }
 }

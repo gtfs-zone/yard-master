@@ -77,6 +77,10 @@ export const CONFIG = {
   // static feed.
   VEHICLE_UNMATCHED_COLOR: '#94a3b8',
 
+  // Assignment chips drawn in one calendar day cell before the rest become a
+  // "+n" count. Three fits the narrowest panel the grid is usable in.
+  CALENDAR_DAY_CHIPS: 3,
+
   // Realtime poll interval, read by the vendored poller. Per-device, so it is
   // deliberately not in the hash.
   RT_INTERVAL_KEY: 'ym.rt.interval',

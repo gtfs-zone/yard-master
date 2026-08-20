@@ -244,6 +244,37 @@ export interface InformedEntityWrite {
 }
 
 /**
+ * A rule as written. Every field is sent on every save, so an unchecked
+ * weekday is a cleared one and an absent `end_date` is an open-ended rule.
+ *
+ * `tracker_id` is not here: a rule is one tracker on one trip, the tracker is
+ * fixed when the rule is created, and reassigning a trip to somebody else is a
+ * different rule rather than an edit to this one.
+ */
+export interface RuleWrite {
+  trip_id: string;
+  monday: boolean;
+  tuesday: boolean;
+  wednesday: boolean;
+  thursday: boolean;
+  friday: boolean;
+  saturday: boolean;
+  sunday: boolean;
+  /** YYYY-MM-DD, feed-local. */
+  start_date: string;
+  end_date: string | null;
+  /** Seconds since service midnight. Past 86400 is a window crossing midnight. */
+  start_time: number;
+  end_time: number;
+}
+
+/** One date's departure from a rule's recurrence. */
+export interface RuleExceptionWrite {
+  date: string;
+  exception_type: 'added' | 'removed';
+}
+
+/**
  * What sharing an address did. `kind` is `member` when the address already had
  * a verified account and `invited` when it did not, and an invite grants
  * nothing until somebody signs in with a verified copy of it.

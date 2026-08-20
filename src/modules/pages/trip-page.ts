@@ -1,12 +1,13 @@
 /**
  * The trip page: one trip's schedule, stop by stop, with whatever the live feed
- * predicts for it laid alongside.
+ * predicts for it laid alongside, and the trackers assigned to run it.
  *
  * yard-master's own page. test-track has no trip page at all — it browses
  * route, stop, vehicle and alert — but the object hierarchy here runs
- * Route -> Trips -> Trip, because a trip is what a tracker is assigned to. The
- * assignment half of this page lands with the calendar; what is here now is the
- * schedule the zip carries and the predictions the live feed carries.
+ * Route -> Trips -> Trip, because a trip is what a tracker is assigned to. Both
+ * halves are here: the schedule and predictions the feeds carry, and the
+ * assignment rules this app owns, which can be added from this page rather than
+ * only from the calendar.
  *
  * Every clock time is rendered straight from the `stop_times` string. GTFS
  * times run past 24:00 on an overnight trip, so a `Date` round-trip would
@@ -16,6 +17,7 @@
 import type { Calendar, CalendarDate, Trip } from '../../gtfs-static';
 import type { PageState } from '../../types/page-state';
 import { alertsForTrip } from '../alerts';
+import { actionButton, describeRecurrence, formatWindow } from '../managed-render';
 import { zoneLabel } from '../feed-time';
 import type { Prediction, RtIndex } from '../rt-index';
 import type { RenderContext } from '../render-utils';
@@ -176,21 +178,78 @@ function renderSchedule(ctx: RenderContext, rt: RtIndex, trip: Trip): string {
 
 // ─── Trackers ─────────────────────────────────────────────────────────────────
 
-/** Trackers currently reporting this trip. Assignments themselves are phase 9. */
+/** Trackers reporting this trip right now, as opposed to assigned to it. */
 function renderTrackers(ctx: RenderContext, rt: RtIndex, trip: Trip): string {
   const vehicles = rt.vehiclesByTrip.get(trip.trip_id) ?? [];
   if (vehicles.length === 0) return '';
   return section(
-    'Trackers on this trip',
+    'Reporting this trip',
     `<ul class="space-y-1 text-xs">${vehicles
       .map(
         (v) => `<li>${entityLink(
           ctx,
-          { type: 'tracker', tracker_id: v.key },
+          // The tracker, not the vehicle: `key` is the tracker plus the trip
+          // instance, and only `trackerId` addresses a page.
+          { type: 'tracker', tracker_id: v.trackerId },
           vehicleDisplayName(ctx.session.staticFeed, v)
         )}</li>`
       )
       .join('')}</ul>`
+  );
+}
+
+/**
+ * Who is assigned to run this trip, and the way to assign somebody.
+ *
+ * Rules rather than expanded days: this is the standing arrangement, and which
+ * particular dates it covers is the calendar's question. The section renders
+ * even with nothing in it, because "nothing is assigned to this trip" is the
+ * answer somebody opened the page for.
+ */
+function renderAssignments(ctx: RenderContext, trip: Trip): string {
+  const session = ctx.session;
+  if (!session.rules) {
+    return section('Assignments', '<p class="text-xs opacity-60">Loading…</p>');
+  }
+
+  const rules = session.rulesForTrip(trip.trip_id);
+  const rows = rules
+    .map((rule) => {
+      const tracker = session.trackers.get(rule.tracker_id);
+      return `<li class="space-y-0.5 py-1">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="min-w-0 truncate">${
+            tracker
+              ? entityLink(ctx, { type: 'tracker', tracker_id: tracker.id }, tracker.nickname)
+              : escHtml(rule.tracker_id)
+          }</span>
+          <span class="ml-auto shrink-0 tabular-nums opacity-70">${escHtml(
+            formatWindow(rule.start_time, rule.end_time)
+          )}</span>
+        </div>
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="opacity-50 min-w-0 truncate">${escHtml(describeRecurrence(rule))}</span>
+          <span class="ml-auto shrink-0 flex gap-1">
+            ${actionButton('assign:edit', String(rule.id), 'Edit')}
+            ${actionButton('assign:delete', String(rule.id), 'Delete', 'btn-outline btn-error')}
+          </span>
+        </div>
+      </li>`;
+    })
+    .join('');
+
+  return section(
+    'Assignments',
+    `${
+      rules.length
+        ? `<ul class="text-xs">${rows}</ul>`
+        : '<p class="text-xs opacity-60">No tracker is assigned to this trip.</p>'
+    }
+     <div class="mt-2">${actionButton(
+       'assign:new-for-trip',
+       trip.trip_id,
+       'Assign a tracker'
+     )}</div>`
   );
 }
 
@@ -228,6 +287,7 @@ export function renderTripPage(
 
       ${renderAlertList(ctx, alertsForTrip(ctx.session, trip.trip_id, trip.route_id), 'Alerts')}
       ${renderTrackers(ctx, rt, trip)}
+      ${renderAssignments(ctx, trip)}
       ${renderService(trip, calendar, exceptions)}
       ${renderSchedule(ctx, rt, trip)}
 

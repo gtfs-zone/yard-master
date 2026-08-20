@@ -10,7 +10,9 @@
      without moving the camera.
    - `trip` draws the trip's own geometry on a source this file owns, spotlights
      its route and frames it. LayerManager has no `trip` focus kind and stays
-     verbatim, so the shape lives here instead.
+     verbatim, so the shape lives here instead. The same source takes a whole
+     day's assigned trips at once, which is what a selected day in the
+     assignments calendar draws.
    - `VehiclePosition` grows a `trackerId`. A tracker can carry several
      concurrent vehicles, so `key` is the tracker *plus* the trip instance and
      something else has to say which tracker they belong to; upstream's feeds
@@ -199,10 +201,20 @@ export class MapController {
   private positions: VehiclePosition[] = [];
 
   /**
-   * The focused trip's geometry, held so it can be re-added after a `setStyle`.
-   * Null when nothing is focused or the trip has no drawable path.
+   * The drawn trip geometry, held so it can be re-added after a `setStyle`.
+   * Empty when nothing is focused, or when nothing focused has a drawable path.
+   *
+   * A list rather than one path: a focused trip is one of these, and a selected
+   * day in the assignments calendar is every trip assigned on it.
    */
-  private tripShape: [number, number][] | null = null;
+  private tripShapes: [number, number][][] = [];
+
+  /**
+   * The trip ids `showTrips` last drew, so a re-draw with the same set leaves
+   * the camera alone. The calendar re-reads its window after every write, and
+   * refitting on each one would fight whoever is looking at the map.
+   */
+  private drawnTripKey = '';
 
   /** Called when the user clicks a stop, route, or vehicle on the map. */
   onSelect: ((state: PageState) => void) | null = null;
@@ -316,7 +328,8 @@ export class MapController {
 
   clearStaticFeed(): void {
     this.feed = null;
-    this.tripShape = null;
+    this.tripShapes = [];
+    this.drawnTripKey = '';
     this.whenLoaded(() => {
       this.layers.setStaticFeed(null);
       this.drawTripShape();
@@ -457,7 +470,8 @@ export class MapController {
 
       case 'trip': {
         const path = this.tripPath(state.trip_id);
-        this.tripShape = path;
+        this.tripShapes = path ? [path] : [];
+        this.drawnTripKey = '';
         this.drawTripShape();
         // Spotlight the parent route so the trip reads as one pattern within
         // it. A trip whose route is unknown still draws its own path.
@@ -535,9 +549,41 @@ export class MapController {
   }
 
   private clearTrip(): void {
-    if (this.tripShape === null) return;
-    this.tripShape = null;
+    this.drawnTripKey = '';
+    if (this.tripShapes.length === 0) return;
+    this.tripShapes = [];
     this.drawTripShape();
+  }
+
+  /**
+   * Draw a set of trips at once: the assignments calendar's selected day.
+   *
+   * Called after `focus`, which has already cleared whatever the previous page
+   * drew, and again whenever the expansion is re-read. The camera moves only
+   * when the set itself changes, so a refresh that finds the same trips does
+   * not yank the view back.
+   */
+  showTrips(tripIds: string[]): void {
+    const key = tripIds.join('\u0000');
+    this.whenLoaded(() => {
+      const changed = key !== this.drawnTripKey;
+      this.drawnTripKey = key;
+      this.tripShapes = tripIds
+        .map((id) => this.tripPath(id))
+        .filter((path): path is [number, number][] => path !== null);
+      this.drawTripShape();
+      if (!changed) return;
+
+      const bounds = boundsOf(this.tripShapes.flat());
+      if (bounds) {
+        this.map.fitBounds(bounds, {
+          padding: this.padding(),
+          maxZoom: 15,
+          duration: CONFIG.FOCUS_BOUNDS_DURATION,
+          essential: true,
+        });
+      }
+    });
   }
 
   /** Add the trip source and layers if missing, then publish the current path. */
@@ -579,15 +625,14 @@ export class MapController {
     }
 
     const source = this.map.getSource(TRIP_SOURCE) as maplibregl.GeoJSONSource;
-    source.setData(
-      this.tripShape
-        ? {
-            type: 'Feature',
-            properties: {},
-            geometry: { type: 'LineString', coordinates: this.tripShape },
-          }
-        : { type: 'FeatureCollection', features: [] }
-    );
+    source.setData({
+      type: 'FeatureCollection',
+      features: this.tripShapes.map((path) => ({
+        type: 'Feature',
+        properties: {},
+        geometry: { type: 'LineString', coordinates: path },
+      })),
+    });
   }
 
   /**

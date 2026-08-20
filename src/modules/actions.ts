@@ -24,20 +24,26 @@ import type {
   AlertWrite,
   Feed,
   InformedEntityWrite,
+  RuleWrite,
   Tracker,
   TrackerDetail,
+  TrackerRule,
 } from '../types/api';
 import type { AppState } from './app-state';
 import type { FeedSession } from './feed-session';
 import {
   addMember,
+  addRuleException,
   createAlert,
   createEntity,
+  createRule,
   createTracker,
   createTrackers,
   deleteAlert,
   deleteEntity,
   deleteFeed,
+  deleteRule,
+  deleteRuleException,
   deleteTracker,
   getAlert,
   getProvisioning,
@@ -47,6 +53,7 @@ import {
   transferFeed,
   updateAlert,
   updateFeed,
+  updateRule,
   updateTracker,
 } from './api-client';
 import { confirmAction, confirmTyped } from './confirm';
@@ -58,9 +65,14 @@ import {
   ALERT_SEVERITIES,
   enumLabel,
   fromLocalInput,
+  parseRuleTime,
   personLabel,
+  ruleTimeInput,
   toLocalInput,
 } from './managed-render';
+import { parseGtfsClock } from './feed-time';
+import { isServiceDate, today, WEEKDAY_KEYS, weekdayKey } from './service-date';
+import { pickTrip, tripName } from './trip-picker';
 import { showModal } from './modal-utils';
 import { notify } from './notification-system';
 import { escHtml } from './render-utils';
@@ -133,6 +145,21 @@ export class Actions {
           return await this.addEntity(arg);
         case 'entity:delete':
           return await this.removeEntity(arg);
+        case 'assign:new':
+          return await this.newAssignment(arg);
+        case 'assign:new-for-trip':
+          // From a trip page: the trip is settled, the date is not.
+          return await this.newAssignment('', arg);
+        case 'assign:edit':
+          return await this.editAssignment(arg);
+        case 'assign:delete':
+          return await this.removeAssignment(arg);
+        case 'assign:skip':
+          return await this.exceptOneDay(arg, 'removed');
+        case 'assign:add-day':
+          return await this.exceptOneDay(arg, 'added');
+        case 'assign:unexcept':
+          return await this.undoException(arg);
         case 'person:add':
           return await this.addPerson();
         case 'member:remove':
@@ -636,6 +663,303 @@ export class Actions {
   private async refreshAlertDetail(alertId: number): Promise<void> {
     this.session.setAlertDetail(await getAlert(alertId));
     await this.app.refreshServiceAlerts();
+  }
+
+  // ─── Assignments ───────────────────────────────────────────────────────────
+
+  /**
+   * The rule form, shared by create and edit.
+   *
+   * `trip_id` is a plain field rather than the picker: the picker runs before
+   * this form on a create, and an edit is nearly always about the times or the
+   * days, with a repointed trip the rare case that a text field still allows.
+   *
+   * The times are service-day clock readings, so 23:00 to 25:10 is how an
+   * overnight run is written and there is no "next day" checkbox inventing a
+   * second way to say the same number.
+   */
+  private ruleFields(rule: TrackerRule | null, tripId: string, startDate: string): FormField[] {
+    const weekly = !rule || WEEKDAY_KEYS.some((key) => rule[key]);
+    return [
+      {
+        name: 'trip_id',
+        label: 'Trip',
+        value: rule?.trip_id ?? tripId,
+        help: 'The trip_id as the feed spells it. Nothing checks it against the schedule, so a reloaded feed can outlive it.',
+      },
+      {
+        name: 'repeats',
+        label: 'Repeats',
+        type: 'select',
+        value: weekly ? 'weekly' : 'once',
+        options: [
+          { value: 'weekly', label: 'Every week, on the days below' },
+          { value: 'once', label: 'Once, on the start date' },
+        ],
+      },
+      ...WEEKDAY_KEYS.map((key) => ({
+        name: key,
+        label: key.charAt(0).toUpperCase() + key.slice(1),
+        type: 'checkbox' as const,
+        value: String(rule ? rule[key] : key === weekdayKey(startDate)),
+      })),
+      {
+        name: 'start_date',
+        label: 'First service date',
+        value: rule?.start_date ?? startDate,
+        help: 'YYYY-MM-DD, in the feed\u2019s timezone.',
+      },
+      {
+        name: 'end_date',
+        label: 'Last service date',
+        value: rule?.end_date ?? '',
+        placeholder: 'open-ended',
+      },
+      {
+        name: 'start_time',
+        label: 'Starts',
+        value: rule ? ruleTimeInput(rule.start_time) : '',
+        placeholder: 'HH:MM',
+      },
+      {
+        name: 'end_time',
+        label: 'Ends',
+        value: rule ? ruleTimeInput(rule.end_time) : '',
+        placeholder: 'HH:MM, or 25:10 for the small hours',
+        help: 'Past midnight keeps counting: a run ending at 01:10 the next morning is 25:10.',
+      },
+    ];
+  }
+
+  /** Everything the form cannot express as a field, checked before the write. */
+  private validateRule(values: Record<string, string>): Record<string, string> | null {
+    const errors: Record<string, string> = {};
+    if (!values.trip_id.trim()) errors.trip_id = 'A rule needs a trip';
+    if (!isServiceDate(values.start_date.trim())) {
+      errors.start_date = 'A date as YYYY-MM-DD';
+    }
+    const end = values.end_date.trim();
+    if (end && !isServiceDate(end)) errors.end_date = 'A date as YYYY-MM-DD';
+    const start_time = parseRuleTime(values.start_time);
+    const end_time = parseRuleTime(values.end_time);
+    if (start_time === null) errors.start_time = 'A clock time as HH:MM';
+    if (end_time === null) errors.end_time = 'A clock time as HH:MM';
+    if (start_time !== null && end_time !== null && end_time <= start_time) {
+      errors.end_time = 'The window ends before it starts';
+    }
+    if (values.repeats !== 'weekly' && values.repeats !== 'once') {
+      errors.repeats = 'Say whether this repeats';
+    } else if (
+      values.repeats === 'weekly' &&
+      !WEEKDAY_KEYS.some((key) => values[key] === 'true')
+    ) {
+      errors.repeats = 'Pick at least one weekday, or make it a one-off';
+    }
+    return Object.keys(errors).length ? errors : null;
+  }
+
+  /**
+   * The form's values as a rule body.
+   *
+   * A one-off is every weekday false with the start date as the whole range;
+   * the date it actually runs on is written afterwards, as an `added`
+   * exception. That is the model's own way of saying "just this day", and it
+   * means a one-off and a skipped recurrence are the same kind of object.
+   */
+  private ruleBody(values: Record<string, string>): RuleWrite {
+    const once = values.repeats === 'once';
+    const startDate = values.start_date.trim();
+    const endDate = values.end_date.trim();
+    return {
+      trip_id: values.trip_id.trim(),
+      monday: !once && values.monday === 'true',
+      tuesday: !once && values.tuesday === 'true',
+      wednesday: !once && values.wednesday === 'true',
+      thursday: !once && values.thursday === 'true',
+      friday: !once && values.friday === 'true',
+      saturday: !once && values.saturday === 'true',
+      sunday: !once && values.sunday === 'true',
+      start_date: startDate,
+      end_date: once ? startDate : endDate || null,
+      start_time: parseRuleTime(values.start_time)!,
+      end_time: parseRuleTime(values.end_time)!,
+    };
+  }
+
+  /**
+   * A trip's own schedule as the default window.
+   *
+   * A rule's window is what decides whether a fix belongs to this trip, so the
+   * trip's first departure to its last arrival is very nearly always the
+   * answer. GTFS clock values past 24:00 come through untouched, which is
+   * exactly what the column wants.
+   */
+  private tripWindow(tripId: string): { start: string; end: string } | null {
+    const times = this.session.staticFeed?.stopTimesByTrip.get(tripId);
+    if (!times || times.length === 0) return null;
+    const start = parseGtfsClock(times[0].departure_time || times[0].arrival_time || undefined);
+    const last = times[times.length - 1];
+    const end = parseGtfsClock(last.arrival_time || last.departure_time || undefined);
+    if (start === null || end === null || end <= start) return null;
+    return { start: ruleTimeInput(start), end: ruleTimeInput(end) };
+  }
+
+  /**
+   * Create an assignment. `arg` is the service date the calendar was on, or a
+   * trip id when the ask came from a trip page.
+   */
+  async newAssignment(arg: string, presetTrip: string | null = null): Promise<void> {
+    const feed = this.feedOrWarn();
+    if (!feed) return;
+
+    const trackers = [...this.session.trackers.values()].sort((a, b) =>
+      a.nickname.localeCompare(b.nickname)
+    );
+    if (trackers.length === 0) {
+      notify.warning('Create a tracker before assigning one.');
+      return;
+    }
+
+    const startDate = isServiceDate(arg) ? arg : today();
+    const tripId = presetTrip ?? (await pickTrip(this.session));
+    if (!tripId) return;
+
+    const trip = this.session.staticFeed?.trips.get(tripId);
+    const window = this.tripWindow(tripId);
+    const fields = this.ruleFields(null, tripId, startDate);
+    // Prefilled from the trip's own schedule, which is what the window is
+    // nearly always meant to be.
+    if (window) {
+      fields.find((f) => f.name === 'start_time')!.value = window.start;
+      fields.find((f) => f.name === 'end_time')!.value = window.end;
+    }
+
+    const created = await showEntityForm<TrackerRule>({
+      title: trip ? `Assign ${tripName(trip)}` : 'Assign a trip',
+      intro:
+        'A tracker reporting inside this window is running this trip, and the service date it started on is the trip\u2019s start_date in the published feed.',
+      submitLabel: 'Assign',
+      // Every field is prefilled from the trip and the day that was clicked, so
+      // the common case is opening this and pressing Assign.
+      allowPristine: true,
+      fields: [
+        {
+          name: 'tracker_id',
+          label: 'Tracker',
+          type: 'select',
+          value: trackers[0].id,
+          options: trackers.map((t) => ({ value: t.id, label: t.nickname })),
+          autofocus: true,
+        },
+        ...fields,
+      ],
+      validate: (values) => {
+        const errors = this.validateRule(values) ?? {};
+        // The select carries an empty first option, and a rule with no tracker
+        // would be posted to a path with a hole in it.
+        if (!values.tracker_id) errors.tracker_id = 'Pick a tracker';
+        return Object.keys(errors).length ? errors : null;
+      },
+      submit: async (values) => {
+        const rule = await createRule(values.tracker_id, this.ruleBody(values));
+        // A one-off is a rule with no weekday, so the date it runs on is an
+        // added exception. Written here rather than by the server, because the
+        // server's job is to store a rule, not to guess what one means.
+        if (values.repeats === 'once') {
+          await addRuleException(rule.id, {
+            date: values.start_date.trim(),
+            exception_type: 'added',
+          });
+        }
+        return rule;
+      },
+    });
+    if (!created) return;
+
+    await this.app.refreshCalendar();
+    notify.success('Assigned');
+  }
+
+  private async editAssignment(ruleId: string): Promise<void> {
+    const rule = this.session.rules?.get(Number(ruleId));
+    if (!rule) return;
+    const tracker = this.session.trackers.get(rule.tracker_id);
+
+    const updated = await showEntityForm<TrackerRule>({
+      title: tracker ? `Edit ${tracker.nickname}\u2019s assignment` : 'Edit assignment',
+      intro:
+        'Changing when a rule runs leaves its per-day exceptions alone: they name dates, and "not on the 4th" survives a change of weekday.',
+      fields: this.ruleFields(rule, rule.trip_id, rule.start_date),
+      validate: (values) => this.validateRule(values),
+      submit: async (values) => {
+        const body = this.ruleBody(values);
+        const saved = await updateRule(rule.id, body);
+        // A rule edited down to a one-off needs the date it now runs on, and
+        // the server keeps the exceptions, so writing the same one twice is a
+        // no-op rather than a duplicate.
+        if (values.repeats === 'once') {
+          await addRuleException(rule.id, {
+            date: body.start_date,
+            exception_type: 'added',
+          });
+        }
+        return saved;
+      },
+    });
+    if (!updated) return;
+
+    await this.app.refreshCalendar();
+    notify.success('Saved the assignment');
+  }
+
+  private async removeAssignment(ruleId: string): Promise<void> {
+    const rule = this.session.rules?.get(Number(ruleId));
+    if (!rule) return;
+    const tracker = this.session.trackers.get(rule.tracker_id);
+
+    const confirmed = await confirmAction({
+      title: 'Delete assignment',
+      question: `Stop ${tracker?.nickname ?? 'this tracker'} running ${rule.trip_id}?`,
+      consequences: [
+        'Every day it covers goes with it, past and future',
+        'A fix arriving inside its window stops resolving to that trip',
+      ],
+      confirmLabel: 'Delete',
+    });
+    if (!confirmed) return;
+
+    await deleteRule(rule.id);
+    await this.app.refreshCalendar();
+    notify.success('Deleted the assignment');
+  }
+
+  /**
+   * Make one day differ from the recurrence: skip it, or run on it after all.
+   *
+   * `arg` is `ruleId:date`. Writing a date the rule already has an exception
+   * for replaces it, so the two directions are the same call and neither has
+   * to delete first.
+   */
+  private async exceptOneDay(arg: string, type: 'added' | 'removed'): Promise<void> {
+    const [ruleId, date] = arg.split(':');
+    const rule = this.session.rules?.get(Number(ruleId));
+    if (!rule || !isServiceDate(date)) return;
+
+    await addRuleException(rule.id, { date, exception_type: type });
+    await this.app.refreshCalendar();
+    notify.success(type === 'removed' ? `Skipping ${date}` : `Running on ${date}`);
+  }
+
+  /** Drop a date's exception, putting it back under the weekday flags. */
+  private async undoException(arg: string): Promise<void> {
+    const [ruleId, date] = arg.split(':');
+    const rule = this.session.rules?.get(Number(ruleId));
+    const exception = rule?.exceptions.find((e) => e.date === date);
+    if (!rule || !exception) return;
+
+    await deleteRuleException(rule.id, exception.id);
+    await this.app.refreshCalendar();
+    notify.success(`${date} follows the rule again`);
   }
 
   // ─── People ────────────────────────────────────────────────────────────────

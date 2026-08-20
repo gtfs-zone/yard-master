@@ -6,7 +6,8 @@
      against `session.trackers` (the API list) rather than only against the
      live map, so a tracker that has never reported a fix still has a label.
    - `feed`, `people` and `assignments` added. They are managed objects with no
-     GTFS parent, so each is one hop off the feed root.
+     GTFS parent, so each is one hop off the feed root. A calendar day hangs
+     off the month, so `assignments` with a date is two.
    - `trip` added, with its route as the parent when the feed names one.
    - HOME is the feed root rather than test-track's "Feed status" page, and it
      is labelled with the selected feed's name.
@@ -27,6 +28,7 @@
 
 import type { BreadcrumbItem, PageState } from '../types/page-state';
 import type { FeedSession } from './feed-session';
+import { dayLabel, isServiceDate } from './service-date';
 
 function home(session: FeedSession): BreadcrumbItem {
   return { label: session.feed?.feed_name ?? 'Feed', pageState: { type: 'feed' } };
@@ -130,7 +132,13 @@ export function buildBreadcrumbs(session: FeedSession, state: PageState): Breadc
       return [home(session), { label: 'People', pageState: state }];
 
     case 'assignments':
-      return [home(session), { label: 'Assignments', pageState: { type: 'assignments' } }];
+      return [
+        home(session),
+        { label: 'Assignments', pageState: { type: 'assignments' } },
+        ...(isServiceDate(state.date)
+          ? [{ label: dayLabel(state.date), pageState: state }]
+          : []),
+      ];
 
     case 'tracker':
       return [

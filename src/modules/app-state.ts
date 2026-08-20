@@ -61,11 +61,15 @@ import {
   getPeople,
   getTracker,
   listAlerts,
+  listAssignments,
   listFeeds,
+  listRules,
   listTrackerPositions,
   listTrackers,
   SessionExpiredError,
 } from './api-client';
+import { anchorDate, gridRange } from './pages/assignments-page';
+import type { ServiceDate } from './service-date';
 import { getMe } from './api-client';
 import { notify } from './notification-system';
 import { PageStateManager } from './page-state-manager';
@@ -123,6 +127,12 @@ export class AppState {
    * would fire a list request per fix.
    */
   private chasedTrackers = new Set<string>();
+
+  /**
+   * The service-date window the calendar last asked to have expanded, so a
+   * write from anywhere in the app can re-read exactly what is on screen.
+   */
+  private assignmentWindow: { from: ServiceDate; to: ServiceDate } | null = null;
 
   constructor(session: FeedSession, hooks: AppStateHooks) {
     this.session = session;
@@ -290,6 +300,42 @@ export class AppState {
     );
   }
 
+  /** Re-read the feed's assignment rules. */
+  async refreshRules(): Promise<void> {
+    const feed = this.session.feed;
+    if (!feed) return;
+    await this.fetchInto('assignment rules', () => listRules(feed.id), (rows) =>
+      this.session.setRules(rows)
+    );
+  }
+
+  /** Expand the rules over one window, which is what the calendar draws. */
+  async refreshAssignments(from: ServiceDate, to: ServiceDate): Promise<void> {
+    const feed = this.session.feed;
+    if (!feed) return;
+    this.assignmentWindow = { from, to };
+    await this.fetchInto('assignments', () => listAssignments(feed.id, from, to), (rows) =>
+      this.session.setAssignments(from, to, rows)
+    );
+  }
+
+  /**
+   * Re-read both halves of the calendar after a write.
+   *
+   * The rules are what an editor reads and the expansion is what the grid
+   * draws, and a write to one changes the other: adding an exception changes
+   * no rule field and moves a day off the calendar. The window is the one last
+   * asked for, so a write made from a trip page refreshes whichever month the
+   * calendar was left on.
+   */
+  async refreshCalendar(): Promise<void> {
+    const window = this.assignmentWindow;
+    await Promise.all([
+      this.refreshRules(),
+      window ? this.refreshAssignments(window.from, window.to) : Promise.resolve(),
+    ]);
+  }
+
   /** Re-read the whole live fleet. The pushed fixes keep it current after. */
   async refreshPositions(): Promise<void> {
     const feed = this.session.feed;
@@ -304,6 +350,7 @@ export class AppState {
     this.stream.close();
     this.stopPruning();
     this.chasedTrackers.clear();
+    this.assignmentWindow = null;
     this.session.clear();
     localStorage.removeItem(CONFIG.SELECTED_FEED_KEY);
     this.pendingFocus = null;
@@ -374,6 +421,25 @@ export class AppState {
 
     if (state.type === 'tracker' && !session.trackerDetails.has(state.tracker_id)) {
       load = async () => session.setTrackerDetail(await getTracker(state.tracker_id));
+    } else if (state.type === 'assignments') {
+      // Both halves: the rules an editor reads, and the month the grid draws.
+      // The expansion is re-fetched only when the visible grid runs outside the
+      // window already held, so stepping between days in one month is free.
+      const { from, to } = gridRange(anchorDate(state));
+      const held = session.assignmentsRange;
+      const covered = held !== null && held.from <= from && held.to >= to;
+      if (!session.rules || !covered) {
+        load = async () => {
+          await Promise.all([
+            session.rules ? Promise.resolve() : this.refreshRules(),
+            covered ? Promise.resolve() : this.refreshAssignments(from, to),
+          ]);
+        };
+      }
+    } else if (state.type === 'trip' && !session.rules) {
+      // The trip page lists what is assigned to it, and an empty rule map
+      // would otherwise read as "nothing is".
+      load = async () => this.refreshRules();
     } else if (state.type === 'alert' && !session.alertDetails.has(state.alert_id)) {
       // The id is the managed row's, so it goes back to a number here and
       // nowhere else: everything above this line keys alerts by string.

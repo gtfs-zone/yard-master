@@ -39,12 +39,15 @@ import type { AlertRecord, TripUpdate } from '../gtfs-rt';
 import type {
   Alert,
   AlertDetail,
+  Assignment,
   Feed,
   LoadStatus as LoadStatusRow,
   People,
   Tracker,
   TrackerDetail,
+  TrackerRule,
 } from '../types/api';
+import type { ServiceDate } from './service-date';
 import type { VehiclePosition } from '../map-controller';
 import { adoptFeedTimezone } from './feed-time';
 import { feedProgressIndicator } from './feed-progress-indicator';
@@ -81,6 +84,28 @@ export class FeedSession extends EventTarget {
 
   /** Members and pending invites, or null until the list has arrived. */
   people: People | null = null;
+
+  /**
+   * The feed's assignment rules as stored, keyed by rule id, or null until
+   * they have been fetched.
+   *
+   * Null rather than an empty map, because the difference matters: a trip page
+   * that read an empty map as "no tracker is assigned to this" would say so
+   * confidently while the request was still out. The rules are not fetched on
+   * selection like the trackers are — they are only needed by the calendar and
+   * by a trip page — so "not yet asked for" is the normal state.
+   */
+  rules: Map<number, TrackerRule> | null = null;
+
+  /**
+   * The rules expanded over the window the calendar last asked for, by service
+   * date. The expansion is the server's, so the calendar and the resolver
+   * cannot disagree about which day a rule runs.
+   */
+  assignments = new Map<ServiceDate, Assignment[]>();
+
+  /** The window `assignments` covers, inclusive, or null if none is loaded. */
+  assignmentsRange: { from: ServiceDate; to: ServiceDate } | null = null;
 
   staticFeed: GTFSStatic | null = null;
   staticError: string | null = null;
@@ -250,6 +275,42 @@ export class FeedSession extends EventTarget {
     this.dispatchEvent(new CustomEvent('change'));
   }
 
+  /** Replace the rule list. Wholesale, so a deleted rule disappears. */
+  setRules(rules: TrackerRule[]): void {
+    this.rules = new Map(rules.map((r) => [r.id, r]));
+    this.dispatchEvent(new CustomEvent('change'));
+  }
+
+  /**
+   * Replace the expanded window.
+   *
+   * Its own event rather than `change`: the map draws the selected day's trips
+   * off this, and `change` fires for every managed list and every detail fetch
+   * as well.
+   */
+  setAssignments(from: ServiceDate, to: ServiceDate, rows: Assignment[]): void {
+    const byDate = new Map<ServiceDate, Assignment[]>();
+    for (const row of rows) {
+      const day = byDate.get(row.service_date);
+      if (day) day.push(row);
+      else byDate.set(row.service_date, [row]);
+    }
+    this.assignments = byDate;
+    this.assignmentsRange = { from, to };
+    this.dispatchEvent(new CustomEvent('assignments'));
+  }
+
+  /** What is assigned on one service date, earliest window first. */
+  assignmentsOn(date: ServiceDate): Assignment[] {
+    return this.assignments.get(date) ?? [];
+  }
+
+  /** Every rule naming this trip, for the trip page. Empty when unfetched. */
+  rulesForTrip(tripId: string): TrackerRule[] {
+    if (!this.rules) return [];
+    return [...this.rules.values()].filter((r) => r.trip_id === tripId);
+  }
+
   /** Replace the managed alert list. Wholesale, like the trackers. */
   setServiceAlerts(alerts: Alert[]): void {
     this.serviceAlerts = new Map(alerts.map((a) => [String(a.id), a]));
@@ -360,6 +421,9 @@ export class FeedSession extends EventTarget {
     this.serviceAlerts = new Map();
     this.alertDetails = new Map();
     this.people = null;
+    this.rules = null;
+    this.assignments = new Map();
+    this.assignmentsRange = null;
     this.staticFeed = null;
     this.staticError = null;
     this.staticLoadedAt = null;
