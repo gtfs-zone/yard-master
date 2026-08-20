@@ -1,5 +1,8 @@
+/* @vendored-from test-track:src/modules/feed-selection.ts
+   @sha 56f120a
+   @status verbatim */
 /* @vendored-from coloring-book:src/modules/feed-selection.ts
-   @sha e328ab1
+   @sha 200966a
    @status verbatim */
 /**
  * Feed selection model.

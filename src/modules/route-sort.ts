@@ -1,3 +1,6 @@
+/* @vendored-from test-track:src/modules/route-sort.ts
+   @sha 56f120a
+   @status verbatim */
 /* @vendored-from coloring-book:src/modules/route-sort.ts
    @sha a4b5ee1
    @status verbatim */

@@ -1,3 +1,6 @@
+/* @vendored-from test-track:src/modules/theme-controller.ts
+   @sha 56f120a
+   @status verbatim */
 /* @vendored-from coloring-book:src/modules/theme-controller.ts
    @sha a4b5ee1
    @status verbatim */

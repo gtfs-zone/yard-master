@@ -1,13 +1,17 @@
 /**
- * Two passes over VENDORED.md. Unlike test-track, which has a single upstream,
- * every row here names its own `Source repo` and is resolved against that
- * sibling checkout:
+ * Two passes over VENDORED.md. Every row names its own `Source repo` and is
+ * resolved against that sibling checkout, which is all but one row test-track:
  *
  * - drift: every `verbatim` entry must still match its source at the *recorded*
  *   SHA. A mismatch means someone edited the local copy.
- * - staleness: every entry, `modified` included, is checked for commits landed
+ * - staleness: `verbatim` and `modified` entries are checked for commits landed
  *   on the source path since the recorded SHA. Drift-clean says nothing about
  *   freshness, so without this a file ten commits behind reports `ok`.
+ *
+ * `adopted` rows are exempt from both. They are yard-master's files now, so
+ * there is nothing to re-sync and upstream commits on them are not news. They
+ * are counted in the summary so the tier stays visible rather than silently
+ * unchecked.
  *
  * Staleness is a warning by default, since a routine build should not break
  * the day someone commits upstream. `--strict` makes it fatal.
@@ -96,11 +100,20 @@ let drift = 0;
 let checked = 0;
 let stale = 0;
 let skipped = 0;
+let adopted = 0;
 
 // One line per absent sibling rather than one per row it would have covered.
 const reportedMissing = new Set<string>();
 
 for (const entry of entries) {
+  // Adopted before the sibling lookup: an adopted row needs no checkout, so it
+  // must not count towards `skipped` and trip the all-skipped early exit.
+  if (entry.status === 'adopted') {
+    adopted++;
+    console.log(`adopted  ${entry.localPath}`);
+    continue;
+  }
+
   const repo = repoPath(entry.sourceRepo);
   if (!existsSync(repo)) {
     skipped++;
@@ -111,8 +124,8 @@ for (const entry of entries) {
     continue;
   }
 
-  // Staleness applies to every entry: a `modified` file still has to be told
-  // about upstream work, even though its body is expected to differ.
+  // Staleness applies to every checked entry: a `modified` file still has to be
+  // told about upstream work, even though its body is expected to differ.
   const behind = commitsSince(repo, entry.sha, entry.sourcePath);
   if (behind.length > 0) {
     stale++;
@@ -161,7 +174,7 @@ if (entries.length === 0) {
   process.exit(1);
 }
 
-if (skipped === entries.length) {
+if (skipped > 0 && skipped + adopted === entries.length) {
   console.log('vendor:check skipped - no sibling repo present');
   process.exit(0);
 }
@@ -171,10 +184,13 @@ if (drift > 0) {
   process.exit(1);
 }
 
-console.log(`\n${checked} verbatim entries match.`);
+console.log(
+  `\n${checked} verbatim entries match` +
+    (adopted > 0 ? `, ${adopted} adopted not checked.` : '.')
+);
 
 if (stale > 0) {
-  const message = `${stale} of ${entries.length} entries are behind their source repo's HEAD.`;
+  const message = `${stale} of ${entries.length - adopted} checked entries are behind their source repo's HEAD.`;
   if (strict) {
     console.error(message);
     process.exit(1);

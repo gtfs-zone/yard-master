@@ -1,3 +1,6 @@
+/* @vendored-from test-track:src/modules/feed-progress-indicator.ts
+   @sha 56f120a
+   @status verbatim */
 /* @vendored-from coloring-book:src/modules/feed-progress-indicator.ts
    @sha c6199c5
    @status verbatim */

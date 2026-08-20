@@ -1,3 +1,6 @@
+/* @vendored-from test-track:src/modules/stop-layer-style.ts
+   @sha 56f120a
+   @status verbatim */
 /* @vendored-from coloring-book:src/modules/stop-layer-style.ts
    @sha cfecd04
    @status verbatim */

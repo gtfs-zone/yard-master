@@ -1,3 +1,6 @@
+/* @vendored-from test-track:src/modules/notification-system.ts
+   @sha 56f120a
+   @status verbatim */
 /* @vendored-from coloring-book:src/modules/notification-system.ts
    @sha 51e8536
    @status verbatim */

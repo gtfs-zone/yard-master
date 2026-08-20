@@ -1,14 +1,21 @@
+/* @vendored-from test-track:src/feed-session.ts
+   @sha 56f120a
+   @status adopted */
 /**
  * Owns whatever is currently selected: the parsed static GTFS, and the live
  * payloads the map and the panel read.
  *
- * Not vendored. test-track's `feed-session.ts` is built around a GTFS-RT
+ * Adopted, not copied. test-track's `feed-session.ts` is built around a GTFS-RT
  * poller it owns; here the managed objects come from the API and the live half
  * arrives on the SSE channel, so only the shape the vendored modules read
  * (`staticFeed`, `vehicles`, `alerts`, `tripUpdates`) is deliberately the same.
+ * Every module that takes a `FeedSession` reads it through that surface, which
+ * is what lets them stay verbatim.
  *
- * Phase 1 carries the static half. The API objects, the feed switcher and the
- * event stream land in phases 3 and 6.
+ * Phase 1 carries the static half. Phase 3 adds the selected feed and its API
+ * objects; phases 6 and 7 fill `vehicles` from the event stream and the
+ * positions endpoint. Those names do not change: a tracker with a fix is a
+ * `VehiclePosition` here, keyed by nickname.
  */
 import { GTFSStatic } from '../gtfs-static';
 import type { AlertRecord, TripUpdate } from '../gtfs-rt';
