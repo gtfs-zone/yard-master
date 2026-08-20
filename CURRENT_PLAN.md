@@ -603,6 +603,10 @@ against an editable install instead. Ship the three services together: an old
 vehicle-poser against the new resolver signature unpacks a `NamedTuple` where it
 expected a string.
 
+**Pushing railroad-club is allowed.** The commits do not need to wait for a
+separate approval: push them, then bump the three pins and re-run the bumped
+repos' suites against the pinned commit rather than an editable install.
+
 ---
 
 ## Phase 4: the shell, the feed switcher, and hash state
@@ -688,7 +692,8 @@ The admin's create hook, the admin's reload route and both new API routes all
 name the same task; the helper also fixes the two of them that swallowed a
 broker failure in slightly different ways.
 
-**Still to do, and blocked on the same push as phase 3.** cafe-car's venv pins
+**Still to do, and unblocked by the same push as phase 3** (which is now
+allowed, see above). cafe-car's venv pins
 railroad-club by commit, so its test suite could not import `TrackerRuleException`
 until railroad-club was installed editable into it. All 172 cafe-car tests pass
 that way. `pnpm vendor:check` reports `feed-download.ts` and `gtfs-static.ts` one
@@ -711,14 +716,16 @@ it. Nothing here talks to cafe-car, so this phase runs against a hardcoded
 Doing it early derisks the whole vendored panel and map stack against a real
 feed, months before the backend is in the way.
 
-- [ ] `panel-renderer.ts` dispatcher plus shared furniture (breadcrumbs, headers)
-- [ ] `CONFIG.DEV_FEED_URL`: one hardcoded feed, loaded on boot, deleted in phase 4
-- [ ] `pages/route-page.ts`, `pages/stop-page.ts`, `pages/trip-page.ts` from the
+- [x] `panel-renderer.ts` dispatcher plus shared furniture (breadcrumbs, headers)
+- [x] ~~`CONFIG.DEV_FEED_URL`: one hardcoded feed, loaded on boot, deleted in
+      phase 4~~ Dropped: phase 4 found it never existed, and the pages run
+      against the selected feed
+- [x] `pages/route-page.ts`, `pages/stop-page.ts`, `pages/trip-page.ts` from the
       in-browser GTFS
-- [ ] Tree navigation over the GTFS half: section headers, counts, click to focus
-- [ ] Map and panel stay in sync: focusing an object moves the camera, clicking
+- [x] Tree navigation over the GTFS half: section headers, counts, click to focus
+- [x] Map and panel stay in sync: focusing an object moves the camera, clicking
       the map focuses the object
-- [ ] Search box via `search-entries`, GTFS entries only
+- [x] Search box via `search-entries`, GTFS entries only
 
 **Gotchas.** The panel re-renders on every live event, so nothing may hold state
 in the DOM that is not also in the model. Escape everything: `trip_id`,
@@ -726,6 +733,70 @@ in the DOM that is not also in the model. Escape everything: `trip_id`,
 `map-controller` currently treats `trip` as a variant that clears focus without
 moving the camera; rendering a trip's shape is this phase's job and the
 `@changes` list has to be updated when it changes.
+
+### What the pass turned up
+
+**The route strip is nine files, not one.** `route-page.ts` reaches through
+`route-strip` -> `route-graph` -> `route-sequence` -> `scs`, and those read a
+`RouteSource` rather than `GTFSStatic` directly, which pulls in `route-source`,
+`gtfs-static-route-source` and the `gtfs-flex` types behind `StopTimeRef`. All
+seven came across verbatim and the whole chain compiles against yard-master's
+`FeedSession` unchanged, which is the clearest evidence so far that the phase 1
+decision to shape `feed-session.ts` like test-track's was the right one.
+
+**`modal-utils.ts` is not the superset VENDORED.md claimed.** coloring-book's
+copy is bigger than test-track's on every other icon, but it has no
+`renderWarningIcon`, and the alert pips on the route and stop pages need it. The
+row moved from `verbatim` to `modified` with the icon appended from test-track,
+rather than re-pointing the whole file at test-track and losing `renderPencilIcon`
+and friends. Worth knowing before phase 5b reaches for another icon.
+
+**`home` became a page, which the bottom sheet had not planned for.** test-track
+closes the sheet when nothing is focused, because nothing is focused means
+nothing to show. Here home is the browse tree, and a closed sheet hides its own
+drag handle, so closing it on a phone strands the reader with no way back to the
+only route into an object that has no map feature to tap. The sheet now follows
+feed selection rather than focus: open whenever a feed is selected, closed only
+when none is. The pre-existing trap is still there, and is not this phase's:
+dragging the sheet to `closed` by hand hides the handle the same way.
+
+**The panel re-renders itself, so the trail needed its own entry point.**
+`PanelRenderer` listens to the session and re-renders without resetting scroll,
+but the breadcrumb trail is built by `AppState`, outside it. Calling `show()` on
+every session change would have thrown the reader back to the top of a 60-stop
+strip every time a tracker moved. `setBreadcrumbs()` is the fix: replace the
+trail, keep the page and the scroll offset.
+
+**`trip` focus is drawn by `map-controller`, not `LayerManager`.** There is no
+`trip` focus kind, and adding one would edit a `verbatim` file that the whole
+map rests on. The trip's path instead goes on a source `map-controller` owns,
+under the stop layers and over the route lines, while the parent route keeps the
+ordinary route spotlight. Two consequences worth remembering: the source has to
+be re-added on `basemap:changed` like `LayerManager.rebuild()`, because
+`setStyle` drops it too, and its line color has to be re-resolved in
+`refreshAccentColor` after `LayerManager` has cleared the theme-color cache.
+
+**A trip without `shapes.txt` still draws.** The fallback is the straight line
+through its stops in `stop_sequence` order, which is an approximation and is
+labelled as one on the page rather than passed off as geometry the feed
+supplied.
+
+**Trip times are never round-tripped through a `Date`.** The trip page renders
+`arrival_time` / `departure_time` straight from the `stop_times` string, and the
+route page's trip list sorts on that string, which works precisely because GTFS
+times are zero-padded. An overnight trip's 25:10:00 is a real value and a `Date`
+would quietly rewrite it as 01:10 on the wrong day.
+
+**Both long lists are capped, and both say so.** `ROUTE_TRIP_LIST_MAX` and
+`TREE_LIST_MAX` are 200. A busy route has thousands of trips and a regional feed
+has tens of thousands of stops; the panel is not a paging UI and the search box
+already is one. The tree lists only stops with no `parent_station`, so a station's
+platforms hang off its own page rather than burying the places under their parts.
+
+**Still open.** `pnpm vendor:check` still reports `feed-download.ts` and
+`gtfs-static.ts` one commit behind test-track, unchanged from phase 4 and still
+a re-vendor rather than a fix. Every new row this phase added resolves clean at
+`fa12a57`.
 
 ---
 
