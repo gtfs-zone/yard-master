@@ -18,7 +18,11 @@
    - `onFeedChange` added to the hooks, and `refreshFeed`/`clearFeed` with it.
    - `loadPageData` added: a managed page may need an object the list requests
      do not carry (a tracker's `device_key`, an alert's informed entities), so
-     every focus change asks for what the page it opened needs. */
+     every focus change asks for what the page it opened needs.
+   - The refreshers are public: a write in `actions.ts` re-reads the list it
+     changed rather than patching the session by hand, so the panel can never
+     show a row the server did not confirm. `adoptFeedRow` is the same idea for
+     the feed itself, and owns the hash rewrite a rename needs. */
 /**
  * The single entry point for selecting a feed and for changing focus.
  *
@@ -204,6 +208,48 @@ export class AppState {
     // slow or unreachable must not hold it hostage. `loadStatic` reports its
     // own failure through `session.staticError` rather than throwing.
     void this.session.loadStatic(feed.static_feed_url, feed.feed_name);
+  }
+
+  /**
+   * Replace the selected feed's row after a write to it.
+   *
+   * `feed_name` is what the hash carries, so a rename has to rewrite the hash;
+   * leaving it would point a shareable link at a name that no longer resolves.
+   * A renamed *tracker* needs none of this, which is what the surrogate key
+   * bought: the hash holds an id nothing about a rename touches.
+   */
+  adoptFeedRow(feed: Feed): void {
+    this.session.updateFeed(feed);
+    localStorage.setItem(CONFIG.SELECTED_FEED_KEY, feed.feed_name);
+    this.pages.setFeedParams({ feed: feed.feed_name });
+    this.hooks.onFeedChange(feed);
+  }
+
+  /** Re-read the trackers, e.g. after creating, renaming or deleting one. */
+  async refreshTrackers(): Promise<void> {
+    const feed = this.session.feed;
+    if (!feed) return;
+    await this.fetchInto('trackers', () => listTrackers(feed.id), (rows) =>
+      this.session.setTrackers(rows)
+    );
+  }
+
+  /** Re-read the managed alerts. */
+  async refreshServiceAlerts(): Promise<void> {
+    const feed = this.session.feed;
+    if (!feed) return;
+    await this.fetchInto('service alerts', () => listAlerts(feed.id), (rows) =>
+      this.session.setServiceAlerts(rows)
+    );
+  }
+
+  /** Re-read the members and open invites. */
+  async refreshPeople(): Promise<void> {
+    const feed = this.session.feed;
+    if (!feed) return;
+    await this.fetchInto('members', () => getPeople(feed.id), (people) =>
+      this.session.setPeople(people)
+    );
   }
 
   /** Drop the selection entirely and return to the empty state. */

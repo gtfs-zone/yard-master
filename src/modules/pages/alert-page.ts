@@ -8,7 +8,9 @@
      `renderRtAlertPage`, which is what a `PageState` naming an alert that is
      only in the live payload still falls back to.
    - `renderManagedEntity` added: an `InformedEntity` row from the API, whose
-     columns are flat where a GTFS-RT `EntitySelector` nests the trip half.
+     columns are flat where a GTFS-RT `EntitySelector` nests the trip half. It
+     carries a Remove button; the decoded-entity page below has none, because
+     nothing there is a row this app can write.
    - Everything the route, stop and trip pages embed — `renderAlertList`,
      `statusBadge`, the translation and active-period renderers — is
      test-track's, unchanged. */
@@ -45,7 +47,7 @@ import {
   translations,
 } from '../alerts';
 import type { RenderContext } from '../render-utils';
-import { formatIso } from '../managed-render';
+import { actionButton, formatIso } from '../managed-render';
 import {
   entityLink,
   escHtml,
@@ -229,6 +231,9 @@ function renderManagedWindow(alert: Alert): string {
  * link and one that does not is still shown as what was entered.
  */
 function renderManagedEntity(ctx: RenderContext, e: InformedEntity): string {
+  // `alertId:entityId`: an entity is addressable only through its own alert,
+  // which is how the server scopes the delete too.
+  const arg = `${e.service_alert_id}:${e.id}`;
   const feed = ctx.session.staticFeed;
   const parts: string[] = [];
 
@@ -265,10 +270,11 @@ function renderManagedEntity(ctx: RenderContext, e: InformedEntity): string {
   if (e.trip_start_date) add('start date', escHtml(e.trip_start_date));
   if (e.trip_start_time) add('start time', escHtml(e.trip_start_time));
 
-  return `<li class="text-xs rounded border border-base-300 p-2">
-    <div class="flex flex-wrap gap-x-3 gap-y-1">${
+  return `<li class="text-xs rounded border border-base-300 p-2 flex items-start gap-2">
+    <div class="flex flex-wrap gap-x-3 gap-y-1 flex-1 min-w-0">${
       parts.length ? parts.join('') : '<span class="opacity-50">names nothing — applies to the whole feed</span>'
     }</div>
+    ${actionButton('entity:delete', arg, 'Remove', 'btn-ghost')}
   </li>`;
 }
 
@@ -311,6 +317,10 @@ function renderManagedAlertPage(ctx: RenderContext, alert: Alert): string {
           }
         </div>
         <h2 class="text-lg font-semibold leading-tight">${escHtml(alert.header_text)}</h2>
+        <div class="flex flex-wrap gap-2">
+          ${actionButton('alert:edit', String(alert.id), 'Edit')}
+          ${actionButton('alert:delete', String(alert.id), 'Delete', 'btn-outline btn-error')}
+        </div>
         ${
           alert.description_text
             ? `<p class="text-sm whitespace-pre-wrap">${escHtml(alert.description_text)}</p>`
@@ -334,7 +344,13 @@ function renderManagedAlertPage(ctx: RenderContext, alert: Alert): string {
       )}
 
       ${section('Active window', renderManagedWindow(alert))}
-      ${section('Informed entities', renderManagedEntities(ctx, alert))}
+      ${section(
+        'Informed entities',
+        `<div class="space-y-2">
+          ${renderManagedEntities(ctx, alert)}
+          ${actionButton('entity:add', String(alert.id), 'Add entity')}
+        </div>`
+      )}
     </div>`;
 }
 

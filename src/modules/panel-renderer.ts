@@ -15,7 +15,11 @@
      placeholder, since the calendar is its own phase.
    - `meUserId` added to the hooks: the people page marks the signed-in row,
      and `RenderContext` is a verbatim type that has no business growing a
-     field for it. */
+     field for it.
+   - `action` added to the hooks, and `data-action` delegated alongside
+     `data-nav`. test-track's panel is read-only and needs neither; here a page
+     emits a button and `actions.ts` owns what it does, which is what keeps the
+     pages pure string renderers. */
 /**
  * The right panel's object pages: one dispatcher over `PageState`, plus the
  * furniture every page shares.
@@ -50,6 +54,8 @@ export interface PanelRendererHooks {
   hoverStop: (stop_id: string | null) => void;
   /** The signed-in user's id, or null before `/me` has answered. */
   meUserId: () => number | null;
+  /** Run a write, named by the button that asked for it. */
+  action: (action: string, arg: string) => void;
 }
 
 function renderBreadcrumbs(ctx: RenderContext, items: BreadcrumbItem[]): string {
@@ -147,7 +153,18 @@ export class PanelRenderer {
   }
 
   private onClick(e: Event): void {
-    const target = (e.target as HTMLElement | null)?.closest<HTMLElement>('[data-nav]');
+    const source = e.target as HTMLElement | null;
+
+    // Actions first: a button is never inside a link, but a link may well be
+    // inside the same row as one, and a write must not also navigate.
+    const action = source?.closest<HTMLElement>('[data-action]');
+    if (action) {
+      e.preventDefault();
+      this.hooks.action(action.dataset.action!, action.dataset.arg ?? '');
+      return;
+    }
+
+    const target = source?.closest<HTMLElement>('[data-nav]');
     if (!target) return;
     // Let modified clicks do what the browser would do with a normal link.
     const mouse = e as MouseEvent;

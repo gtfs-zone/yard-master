@@ -11,7 +11,9 @@
  * is served by `GET /trackers/{id}` alone, it appears on this page and nowhere
  * else in the app, and it sits behind a closed disclosure so that opening a
  * tracker in front of somebody does not hand them the credential. Never put it
- * in the hash, a breadcrumb, a link or a log line.
+ * in the hash, a breadcrumb, a link or a log line. The provisioning dialog is
+ * the same rule again: it is opened deliberately, by the surrogate id, and the
+ * QR it shows encodes the credential just as plainly as the text does.
  */
 
 import { CONFIG } from '../../config';
@@ -19,6 +21,7 @@ import type { Tracker } from '../../types/api';
 import type { PageState } from '../../types/page-state';
 import type { VehiclePosition } from '../../map-controller';
 import type { RenderContext } from '../render-utils';
+import { actionButton } from '../managed-render';
 import {
   VEHICLE_STATUS_LABELS,
   entityLink,
@@ -137,8 +140,19 @@ export function renderTrackerPage(
         </p>
       </div>
 
+      <div class="flex flex-wrap gap-2">
+        ${actionButton('tracker:edit', tracker.id, 'Rename')}
+        ${actionButton('tracker:delete', tracker.id, 'Delete', 'btn-outline btn-error')}
+      </div>
+
       ${renderPosition(ctx, position)}
-      ${section('Provisioning', renderDeviceKey(ctx, tracker))}
+      ${section(
+        'Provisioning',
+        `<div class="space-y-2">
+          ${actionButton('tracker:provision', tracker.id, 'Show QR and link', 'btn-primary')}
+          ${renderDeviceKey(ctx, tracker)}
+        </div>`
+      )}
 
       ${section(
         'Properties',

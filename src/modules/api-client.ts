@@ -16,31 +16,51 @@
  *   is JSON including its errors, which is what makes "not JSON" unambiguous.
  * - **Errors.** A non-2xx JSON body carries FastAPI's `detail`, which is
  *   written for a person. `ApiError.message` is that string, so a caller can
- *   put it in a toast without unpacking anything.
+ *   put it in a toast without unpacking anything. A 422's `detail` is a list of
+ *   per-field objects instead, and `ApiError.fields` keeps that shape as well
+ *   as flattening it, so a form can put each message next to the input that
+ *   caused it rather than in one long line at the top.
  */
 
 import { CONFIG } from '../config';
 import type {
   Alert,
   AlertDetail,
+  AlertWrite,
   Assignment,
   Feed,
   FeedCreate,
+  FeedUpdate,
+  InformedEntity,
+  InformedEntityWrite,
   Me,
   People,
+  Provisioning,
+  ShareResult,
   Tracker,
+  TrackerBulkCreate,
+  TrackerCreate,
   TrackerDetail,
   TrackerRule,
+  TrackerUpdate,
 } from '../types/api';
 
 /** A response cafe-car built: a status, and the `detail` it explained it with. */
 export class ApiError extends Error {
   readonly status: number;
 
-  constructor(status: number, detail: string) {
+  /**
+   * A 422's messages, keyed by the field each one names. Empty for every other
+   * status, including a 409, which is a whole-request conflict that only the
+   * caller knows which field to blame.
+   */
+  readonly fields: Record<string, string>;
+
+  constructor(status: number, detail: string, fields: Record<string, string> = {}) {
     super(detail);
     this.name = 'ApiError';
     this.status = status;
+    this.fields = fields;
   }
 }
 
@@ -81,6 +101,29 @@ function describeDetail(body: unknown, fallback: string): string {
     if (lines.length) return lines.join('; ');
   }
   return fallback;
+}
+
+/**
+ * A 422's per-field messages, keyed by field.
+ *
+ * `loc` is the path into the request body — `["body", "nickname"]` — so the
+ * last element is the field a form can point at. A `loc` that stops at `body`
+ * is a whole-object validator, which has no field to blame and is left to the
+ * flattened message.
+ */
+function fieldErrors(body: unknown): Record<string, string> {
+  const detail = (body as { detail?: unknown } | null)?.detail;
+  if (!Array.isArray(detail)) return {};
+  const fields: Record<string, string> = {};
+  for (const item of detail) {
+    if (!item || typeof item !== 'object') continue;
+    const { loc, msg } = item as { loc?: unknown[]; msg?: string };
+    if (!Array.isArray(loc) || loc.length < 2 || !msg) continue;
+    const field = String(loc[loc.length - 1]);
+    // Pydantic prefixes its own messages; the form has the label already.
+    fields[field] ??= msg.replace(/^Value error, /, '');
+  }
+  return fields;
 }
 
 async function request<T>(
@@ -127,7 +170,11 @@ async function request<T>(
 
   const payload = await response.json();
   if (!response.ok) {
-    throw new ApiError(response.status, describeDetail(payload, response.statusText));
+    throw new ApiError(
+      response.status,
+      describeDetail(payload, response.statusText),
+      fieldErrors(payload)
+    );
   }
   return payload as T;
 }
@@ -181,3 +228,55 @@ export const listAssignments = (feedId: number, from: string, to: string) =>
   api.get<Assignment[]>(
     `/feeds/${feedId}/assignments?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
   );
+
+export const updateFeed = (feedId: number, body: FeedUpdate) =>
+  api.patch<Feed>(`/feeds/${feedId}`, body);
+
+/** Irreversible: the trackers, alerts and published URLs go with it. */
+export const deleteFeed = (feedId: number) => api.del<void>(`/feeds/${feedId}`);
+
+/** Owner-only, and only to somebody who is already a member. */
+export const transferFeed = (feedId: number, newOwnerId: number) =>
+  api.post<Feed>(`/feeds/${feedId}/transfer`, { new_owner_id: newOwnerId });
+
+/** Answers with the detail form: a new tracker is about to be provisioned. */
+export const createTracker = (feedId: number, body: TrackerCreate) =>
+  api.post<TrackerDetail>(`/feeds/${feedId}/trackers`, body);
+
+export const createTrackers = (feedId: number, body: TrackerBulkCreate) =>
+  api.post<Tracker[]>(`/feeds/${feedId}/trackers/bulk`, body);
+
+export const updateTracker = (trackerId: string, body: TrackerUpdate) =>
+  api.patch<Tracker>(`/trackers/${encodeURIComponent(trackerId)}`, body);
+
+/** Deletes its assignment rules with it, and retires its Traccar device. */
+export const deleteTracker = (trackerId: string) =>
+  api.del<void>(`/trackers/${encodeURIComponent(trackerId)}`);
+
+/** As secret as the credential itself: the QR encodes it. Panel only. */
+export const getProvisioning = (trackerId: string) =>
+  api.get<Provisioning>(`/trackers/${encodeURIComponent(trackerId)}/provisioning`);
+
+export const createAlert = (feedId: number, body: AlertWrite) =>
+  api.post<AlertDetail>(`/feeds/${feedId}/alerts`, body);
+
+export const updateAlert = (alertId: number, body: AlertWrite) =>
+  api.patch<AlertDetail>(`/alerts/${alertId}`, body);
+
+export const deleteAlert = (alertId: number) => api.del<void>(`/alerts/${alertId}`);
+
+export const createEntity = (alertId: number, body: InformedEntityWrite) =>
+  api.post<InformedEntity>(`/alerts/${alertId}/entities`, body);
+
+export const deleteEntity = (alertId: number, entityId: number) =>
+  api.del<void>(`/alerts/${alertId}/entities/${entityId}`);
+
+/** 201 whether it made a member or an invite; the result says which. */
+export const addMember = (feedId: number, email: string) =>
+  api.post<ShareResult>(`/feeds/${feedId}/members`, { email });
+
+export const removeMember = (feedId: number, userId: number) =>
+  api.del<void>(`/feeds/${feedId}/members/${userId}`);
+
+export const revokeInvite = (feedId: number, inviteId: number) =>
+  api.del<void>(`/feeds/${feedId}/invites/${inviteId}`);

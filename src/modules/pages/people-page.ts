@@ -9,16 +9,17 @@
  * list would blur that — an invite grants nothing until it is claimed.
  *
  * Reading is open to every member, which is why this page renders for anyone
- * with the feed selected. The mutations are owner-only and land with the rest
- * of the writes.
+ * with the feed selected. The mutations are owner-only, so the buttons appear
+ * only for a reader whose feed says `can_manage`: showing a member a Remove
+ * button that answers 403 would be worse than not offering it.
  */
 
 import type { Invite, Member } from '../../types/api';
 import type { RenderContext } from '../render-utils';
 import { escHtml, section } from '../render-utils';
-import { formatIsoDate, personLabel } from '../managed-render';
+import { actionButton, formatIsoDate, personLabel } from '../managed-render';
 
-function memberRow(member: Member, isYou: boolean): string {
+function memberRow(member: Member, isYou: boolean, canManage: boolean): string {
   const secondary = member.display_name ? member.email : null;
   return `<li class="flex items-start gap-2 text-xs">
     <div class="min-w-0 flex-1">
@@ -31,13 +32,21 @@ function memberRow(member: Member, isYou: boolean): string {
         ? '<span class="badge badge-primary badge-xs shrink-0">owner</span>'
         : `<span class="opacity-50 shrink-0">added ${escHtml(formatIsoDate(member.created_at))}</span>`
     }
+    ${
+      // The owner is not a membership row at all: they leave through a
+      // transfer, which is on the feed page.
+      canManage && !member.is_owner
+        ? actionButton('member:remove', String(member.user_id), 'Remove', 'btn-ghost')
+        : ''
+    }
   </li>`;
 }
 
-function inviteRow(invite: Invite): string {
+function inviteRow(invite: Invite, canManage: boolean): string {
   return `<li class="flex items-start gap-2 text-xs">
     <span class="min-w-0 flex-1 break-all">${escHtml(invite.email)}</span>
     <span class="opacity-50 shrink-0">invited ${escHtml(formatIsoDate(invite.created_at))}</span>
+    ${canManage ? actionButton('invite:revoke', String(invite.id), 'Revoke', 'btn-ghost') : ''}
   </li>`;
 }
 
@@ -52,14 +61,18 @@ export function renderPeoplePage(ctx: RenderContext, meUserId: number | null): s
     return personLabel(a).localeCompare(personLabel(b));
   });
 
+  const canManage = ctx.session.feed?.can_manage ?? false;
+
   return `
     <div class="space-y-4">
       <h2 class="text-lg font-semibold leading-tight">People</h2>
 
+      ${canManage ? `<div>${actionButton('person:add', '', 'Share this feed', 'btn-primary')}</div>` : ''}
+
       ${section(
         `Members (${members.length})`,
         `<ul class="space-y-2">${members
-          .map((m) => memberRow(m, m.user_id === meUserId))
+          .map((m) => memberRow(m, m.user_id === meUserId, canManage))
           .join('')}</ul>`
       )}
 
@@ -67,7 +80,9 @@ export function renderPeoplePage(ctx: RenderContext, meUserId: number | null): s
         people.invites.length
           ? section(
               `Pending invites (${people.invites.length})`,
-              `<ul class="space-y-2">${people.invites.map(inviteRow).join('')}</ul>
+              `<ul class="space-y-2">${people.invites
+                .map((i) => inviteRow(i, canManage))
+                .join('')}</ul>
                <p class="text-xs opacity-50">An invited address becomes a member the first time
                somebody signs in with it.</p>`
             )

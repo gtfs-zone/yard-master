@@ -19,6 +19,7 @@ import type { Stop } from '../../gtfs-static';
 import type { PageState } from '../../types/page-state';
 import type { RenderContext } from '../render-utils';
 import { entityLink, escHtml, routeBadge } from '../render-utils';
+import { actionButton } from '../managed-render';
 import { routeSortKey } from '../route-sort';
 
 /** A collapsible section: a header with a count, and a list under it. */
@@ -150,13 +151,20 @@ function renderTrackers(ctx: RenderContext): string {
     })
     .join('');
 
+  // The create buttons live in the section rather than on the feed page: this
+  // is the list somebody is looking at when they notice one is missing.
+  const create = `<div class="flex flex-wrap gap-2 mt-2">
+    ${actionButton('tracker:new', '', 'New tracker')}
+    ${actionButton('tracker:bulk', '', 'Add several')}
+  </div>`;
+
   return treeSection(
     'trackers',
     'Trackers',
     trackers.length,
-    trackers.length
+    (trackers.length
       ? `<ul class="space-y-1 text-xs">${rows}</ul>${cappedNote(trackers.length, shown.length)}`
-      : '<p class="text-xs opacity-60">No trackers yet.</p>'
+      : '<p class="text-xs opacity-60">No trackers yet.</p>') + create
   );
 }
 
@@ -182,9 +190,10 @@ function renderAlerts(ctx: RenderContext): string {
     'alerts',
     'Service alerts',
     alerts.length,
-    alerts.length
+    (alerts.length
       ? `<ul class="space-y-1 text-xs">${rows}</ul>${cappedNote(alerts.length, shown.length)}`
-      : '<p class="text-xs opacity-60">No service alerts.</p>'
+      : '<p class="text-xs opacity-60">No service alerts.</p>') +
+      `<div class="mt-2">${actionButton('alert:new', '', 'New alert')}</div>`
   );
 }
 

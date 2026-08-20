@@ -19,6 +19,7 @@ import { reloadFeed, SessionExpiredError } from './modules/api-client';
 import { SearchController } from './modules/search-controller';
 import { buildSearchEntries } from './modules/search-entries';
 import { PanelRenderer } from './modules/panel-renderer';
+import { Actions } from './modules/actions';
 
 // ─── Shell ────────────────────────────────────────────────────────────────────
 const version = document.getElementById('app-version');
@@ -92,11 +93,16 @@ const appState = new AppState(session, {
   },
 });
 
+// Every write the panel can start. Declared here rather than inside the hooks
+// so the same instance answers every button, whichever page emitted it.
+const actions = new Actions(appState, session);
+
 panel = new PanelRenderer(panelContent, session, {
   navigate: (state) => appState.setFocus(state),
   href: (state) => appState.hrefFor(state),
   hoverStop: (stop_id) => mapCtrl.hoverStop(stop_id),
   meUserId: () => appState.me?.user_id ?? null,
+  action: (action, arg) => void actions.run(action, arg),
 });
 panel.initialize();
 // The trail is rebuilt from the session, so a crumb whose object only just

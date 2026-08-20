@@ -12,13 +12,17 @@
  * ago. They can legitimately disagree — a load that failed leaves the server on
  * an older schedule than the one the map is drawing — and a page that merged
  * them would hide exactly that.
+ *
+ * The three actions are not equally available. Editing is open to any member,
+ * matching the API; transferring and deleting are what `can_manage` gates, and
+ * a member who cannot do them is not shown a button that would 403.
  */
 
 import { CONFIG } from '../../config';
 import type { Feed } from '../../types/api';
 import type { RenderContext } from '../render-utils';
 import { escHtml, prop, propList, section } from '../render-utils';
-import { formatIso, isoWithAge, loadStatusBadge } from '../managed-render';
+import { actionButton, formatIso, isoWithAge, loadStatusBadge } from '../managed-render';
 import { resolveRealtimeUrl } from '../feed-url-resolve';
 
 /**
@@ -151,6 +155,21 @@ function renderOpenIn(feed: Feed): string {
   );
 }
 
+/**
+ * What this reader may do to the feed.
+ *
+ * `can_manage` is the permission rather than the fact, so an admin working on
+ * somebody else's feed gets the owner-only buttons and the owner's own
+ * `is_owner` is not what decides it.
+ */
+function renderActions(feed: Feed): string {
+  return `<div class="flex flex-wrap gap-2">
+    ${actionButton('feed:edit', '', 'Edit')}
+    ${feed.can_manage ? actionButton('feed:transfer', '', 'Transfer') : ''}
+    ${feed.can_manage ? actionButton('feed:delete', '', 'Delete', 'btn-outline btn-error') : ''}
+  </div>`;
+}
+
 export function renderFeedPage(ctx: RenderContext): string {
   const feed = ctx.session.feed;
   if (!feed) return '<p class="text-sm opacity-60">No feed is selected.</p>';
@@ -165,6 +184,8 @@ export function renderFeedPage(ctx: RenderContext): string {
         <h2 class="text-lg font-semibold leading-tight">${escHtml(feed.feed_name)}</h2>
         <div class="flex items-center gap-2">${loadStatusBadge(feed.load, 'badge-xs')}</div>
       </div>
+
+      ${renderActions(feed)}
 
       ${renderLoad(feed)}
 

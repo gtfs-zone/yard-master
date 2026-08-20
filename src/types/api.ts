@@ -170,3 +170,83 @@ export interface Assignment {
   start_time: number;
   end_time: number;
 }
+
+// ─── What a write sends ───────────────────────────────────────────────────────
+// One type per request model in cafe-car's `api/schemas.py`. None of them
+// carries an `owner_id`, an `id` or a `device_key`: the server does not read
+// those from a body, and a type that offered them would suggest otherwise.
+
+/** A feed edit. An absent field is an unchanged one, which is what PATCH means. */
+export interface FeedUpdate {
+  feed_name?: string;
+  static_feed_url?: string;
+}
+
+export interface TrackerCreate {
+  nickname: string;
+  /**
+   * Settable at creation only: it is baked into the provisioned Traccar
+   * device. Left out, the server generates a pet-name one.
+   */
+  device_key?: string;
+}
+
+/** Several trackers named `{prefix}{n}`, numbered past whatever exists. */
+export interface TrackerBulkCreate {
+  prefix: string;
+  count: number;
+}
+
+/** A rename. `id` and `device_key` are immutable, so neither is here. */
+export interface TrackerUpdate {
+  nickname: string;
+}
+
+/**
+ * What a phone needs to report as this tracker. Every field derives from
+ * `device_key` and is therefore just as secret, the QR included.
+ */
+export interface Provisioning {
+  device_key: string;
+  config_url: string;
+  qr_svg: string;
+}
+
+/**
+ * The editable half of an alert. Every field is sent on every save, so an
+ * omitted one is a cleared one.
+ */
+export interface AlertWrite {
+  header_text: string;
+  description_text: string;
+  url: string | null;
+  cause: string | null;
+  effect: string | null;
+  severity_level: string | null;
+  active_period_start: string | null;
+  active_period_end: string | null;
+}
+
+/** One entity selector. At least one specifier has to be non-null. */
+export interface InformedEntityWrite {
+  agency_id?: string | null;
+  route_id?: string | null;
+  route_type?: number | null;
+  direction_id?: number | null;
+  stop_id?: string | null;
+  trip_id?: string | null;
+  trip_route_id?: string | null;
+  trip_direction_id?: number | null;
+  trip_start_time?: string | null;
+  trip_start_date?: string | null;
+}
+
+/**
+ * What sharing an address did. `kind` is `member` when the address already had
+ * a verified account and `invited` when it did not, and an invite grants
+ * nothing until somebody signs in with a verified copy of it.
+ */
+export interface ShareResult {
+  kind: string;
+  message: string;
+}
