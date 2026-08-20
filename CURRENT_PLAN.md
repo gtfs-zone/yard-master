@@ -1007,16 +1007,16 @@ If schedule-foamer only flips `pending -> running -> success/failed` today, ship
 that and treat finer progress as a follow-up in that repo. The channel is worth
 building either way, because tracker liveness rides on it in phase 8.
 
-- [ ] Redis pub/sub channel per feed, published by schedule-foamer on status change
-- [ ] `GET /api/feeds/{id}/events` SSE endpoint, current state first, heartbeat
+- [x] Redis pub/sub channel per feed, published by schedule-foamer on status change
+- [x] `GET /api/feeds/{id}/events` SSE endpoint, current state first, heartbeat
       comment every 20s so no proxy idles the connection out
-- [ ] Client `event-stream.ts`: subscribe on feed select, reconnect with backoff,
+- [x] Client `event-stream.ts`: subscribe on feed select, reconnect with backoff,
       close on feed change
-- [ ] Load status card updates live; the Reload button reflects in-flight state
-- [ ] A failed load surfaces `error_message` and the `next_retry_at` countdown
-- [ ] Position events on the channel are GTFS-RT-shaped JSON, so they land in
+- [x] Load status card updates live; the Reload button reflects in-flight state
+- [x] A failed load surfaces `error_message` and the `next_retry_at` countdown
+- [x] Position events on the channel are GTFS-RT-shaped JSON, so they land in
       `FeedSession.vehicles` as `VehiclePosition`s with no translation layer
-- [ ] Measure the built bundle: `gtfs-rt.ts` imports `transit_realtime` and
+- [x] Measure the built bundle: `gtfs-rt.ts` imports `transit_realtime` and
       calls `FeedMessage.decode`, but yard-master never polls a `.pb` and the
       only runtime import from that module anywhere is `presentNumber`. If
       protobufjs survives tree-shaking, split a types-only module and drop the
@@ -1027,6 +1027,89 @@ or events arrive in clumps at the end. The session can expire mid-stream: an
 `onerror` that reconnects forever against a 302 is an infinite loop, so cap the
 retries and fall back to a page reload. One connection per feed, and it must be
 closed when the feed changes or a long session accumulates them.
+
+### What the pass turned up
+
+**The channel name is a three-repo contract, so it went into railroad-club.**
+schedule-foamer publishes it, cafe-car subscribes to it and yard-master reads
+what comes out; a constant duplicated across two of those is the alert-enum
+problem from phase 6 again. `railroad_club/feed_events.py` holds the channel
+name, the event-type names and `load_event`, and nothing else: it opens no
+connection, because each repo already has its own client and its own settings.
+It is a pure module with no Redis import, which is what lets a models-and-
+migrations library carry it without growing a dependency.
+
+**The endpoint cannot touch the database while it streams.**
+`DBSessionMiddleware` is a `BaseHTTPMiddleware`, so its `async with` around the
+request session exits when the route *returns* — which for a streaming response
+is before a single body byte is produced. A query inside the generator would
+run on a closed session. The load status is therefore read in the route and
+handed to the generator as a value, and the generator afterwards only ever
+talks to Redis. This is not a detail phase 8 may forget: resolving a position's
+feed will be tempting to do inline.
+
+**The forwarder does not parse what it forwards.** What comes off Redis is
+written to the wire as-is. Every payload carries a `type`, so an event type
+added later is a publisher change and a client change with no server change in
+between, and a malformed publish cannot take a stream down. It also means the
+one thing the framing depends on is that a payload has no literal newline in
+it, which `json.dumps` guarantees.
+
+**`ASGITransport` cannot test a stream at all.** It awaits the application to
+completion before it builds a response, so an endless SSE body simply hangs it,
+which is what the first version of `test_events.py` did for three minutes.
+`tests/test_events.py` drives the app as a raw ASGI callable instead: it runs
+it as a task, collects `http.response.body` messages as they are sent, and
+cancels once it has the frames it asked for. That also exercises the disconnect
+path, which is how the subscription-release test works.
+
+**The browser already handles the failure that is not worth handling.**
+`EventSource` reconnects a *dropped* stream by itself; what it will not retry
+is a response that was not an event stream, which it closes for good. So
+`onerror` ignores anything but a `CLOSED` source, and the capped backoff exists
+for exactly one case: oauth2-proxy answering an expired session with a login
+page. Four tries and then `window.location.reload()`, the same recovery
+`api-client.ts` performs on a non-JSON response, and for the same reason.
+
+**A load status arrives with the feed it belongs to.** A feed switch can land
+between an event being published and being delivered, so `onLoad` is handed the
+feed id and `AppState` drops anything that is not the current selection.
+Applying the old feed's status to the new one is a lie with nothing to give it
+away. For the same reason only the *transition* is announced, not the state:
+the first frame of every stream carries the current status, which is almost
+always what the row already had, so toasting on every frame would toast on
+every connect.
+
+**The countdown was already built.** `formatRelative` reads a future timestamp
+as "in 4h 12m" and the panel's own one-second ticker refreshes every
+`data-since` element, so `next_retry_at` needed `isoWithAge` rather than
+`formatIso` and nothing else. `started_at` got the same treatment, which is why
+a running load now shows its own elapsed time without the stream saying
+anything.
+
+**Positions are shaped here and published in phase 8.** `EVENT_POSITION` and
+the `PositionEvent` type are settled — the payload is a camelCase GTFS-RT
+vehicle, which is exactly `VehiclePosition`, so there is no translation layer
+to write — but nothing publishes one yet. `ingest_position` knows a
+`tracker_id` and not a `feed_id`, so publishing costs a lookup per fix, and
+phase 8 owns that alongside the map wiring that consumes it. An unrecognised
+event type is dropped by the client rather than reported, so the two halves can
+land in either order.
+
+**protobufjs did survive tree-shaking, and it was a quarter of the bundle.**
+`FeedMessage.decode` was reachable from `gtfs-rt.ts`, so the whole generated
+decoder shipped: 1,556kB to 1,362kB raw and 412kB to 380kB gzipped once it went,
+25 modules fewer. The file is now `modified` rather than `verbatim` — the
+poller and its status types are gone, the `transit_realtime` import is a *type*
+import, and `gtfs-realtime-bindings` moved to `devDependencies`. `modified`
+rather than `adopted` on purpose: the types still have to track test-track's,
+so the staleness check is worth keeping.
+
+**Before this lands anywhere: railroad-club has to be pushed first.**
+`feed_events.py` is a new module in a git-pinned dependency, so cafe-car and
+schedule-foamer both import something their locks do not have yet. Push
+railroad-club, then `uv lock --upgrade-package railroad-club` in both. The
+suites here were run with the local checkout on `PYTHONPATH`.
 
 ---
 
