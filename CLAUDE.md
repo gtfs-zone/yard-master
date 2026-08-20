@@ -38,10 +38,11 @@ objects (feeds, trackers, rules, alerts, members) and never the schedule.
 - Never include `Co-Authored-By: Claude ...` trailers in commit messages.
 - Do NOT use Playwright or any browser automation. The user does visual
   verification themselves. Stop at `pnpm typecheck` / `pnpm build` and hand off.
-- `Tracker.id` is the Traccar provisioning credential. It must never appear in
-  the URL hash, in a log line, or in anything shareable. Address trackers by
-  nickname in navigation state; the id belongs in the properties panel and the
-  request body only.
+- `Tracker.device_key` is the Traccar provisioning credential. It must never
+  appear in the URL hash, in a log line, or in anything shareable. It is served
+  by `GET /api/trackers/{id}` alone and belongs in the properties panel only.
+  `Tracker.id` is a surrogate and carries nothing: it is the right thing to put
+  in navigation state, in the map feature key and in a request body.
 - Every write sends the `X-Yard-Master` CSRF header. A fetch helper owns this;
   never call `fetch` for a mutation directly.
 - A 302 or non-JSON response to an XHR means the oauth2-proxy session expired.
@@ -56,9 +57,10 @@ objects (feeds, trackers, rules, alerts, members) and never the schedule.
   ours. `vendor-check` strips the banner on the local side only, so deleting the
   inner one reports DRIFT.
 - A tracker with a fix is a `VehiclePosition` in `FeedSession.vehicles`, keyed by
-  nickname, on the one vehicle map layer. There is no separate tracker layer: an
-  unassigned tracker draws in `CONFIG.VEHICLE_UNMATCHED_COLOR` and is counted in
-  `issues.vehiclesUnmatched`.
+  `Tracker.id`, on the one vehicle map layer. There is no separate tracker layer:
+  an unassigned tracker draws in `CONFIG.VEHICLE_UNMATCHED_COLOR` and is counted
+  in `issues.vehiclesUnmatched`. Nickname is the label the map shows, unique
+  within a feed but never the key.
 - All magic numbers live in `src/config.ts`.
 
 ## Related Repos

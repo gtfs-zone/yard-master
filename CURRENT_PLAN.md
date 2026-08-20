@@ -36,13 +36,23 @@ held.
 | Vendoring | One upstream, test-track, plus an `adopted` tier | test-track had already ported the shell modules from coloring-book's editor model to the `GTFSStatic` model this repo shares, so re-deriving them from coloring-book would reproduce test-track's files by hand |
 | Feed picker | Purpose-built small switcher, not vendored `load-modal.ts` | The Load modal is examples, atlas, uploads and CORS proxying, none of which apply to "pick one of your own feeds" |
 | Tracker positions | Trackers are `VehiclePosition`s on the existing vehicle layer | A tracker is a superset of a vehicle, and the map already speaks that vocabulary. One with no resolvable trip renders in the unmatched colour, so every tracker with a fix is visible and diagnosable, and `layer-manager` stays verbatim |
-| Tracker ids | Never in the URL hash | `Tracker.id` is the Traccar provisioning credential; a pasted link must not leak a device secret |
+| Tracker identity | A `uuid4` surrogate `Tracker.id`; the credential moves to `device_key` | The credential was doing double duty as the primary key, which is what forced two detail routes, two response models and `nickname` into a navigation key it was never designed to be |
+| Tracker credential | Response and request bodies only, never a URL path or the hash | `device_key` is the Traccar provisioning secret, and a path is a log line in Traefik, oauth2-proxy, nginx and uvicorn |
 | `/account` | Stays server-rendered in cafe-car | Rare, security-sensitive flow with an identity-merge confirmation. Porting it buys nothing and risks the takeover primitive |
 
 ### What already exists and is reused
 
 - `cafe_car/admin/access.py::accessible_feed_ids` is the single definition of
   "may touch this feed". Every new endpoint scopes through it, unchanged.
+- `cafe_car/admin/access.py::personal_feed_ids` is the owned-or-shared query
+  with the admin bypass deliberately *not* applied, which is the question a feed
+  switcher asks. `accessible_feed_ids` is now that plus the bypass, so the
+  definition is still written once.
+- `cafe_car/admin/auth.py::resolve_request_user_id` is the one answer to "who is
+  calling" for a route SQLAdmin's `authenticate` never runs for, shared by
+  `entity_router` and the API.
+- `cafe_car/api/deps.py::OwnedFeed` is written and unused, waiting for phase 6's
+  owner-only mutations.
 - `cafe_car/admin/auth.py` resolves the caller: `request_subject` reads the
   proxy header, `verified_claims` discards any token whose `sub` disagrees with
   it, `request_is_admin` answers group membership from the token every time.
@@ -82,9 +92,9 @@ test-track's on purpose. They do not change as later phases fill them in.
 | Member | Filled by | Holds |
 |---|---|---|
 | `staticFeed`, `staticError`, `staticLoadedAt` | phase 1, done | The parsed zip, or why it could not be parsed |
-| the selected feed and its API objects | phase 3 | Trackers, alerts, members, load status |
-| `vehicles` | phases 6 and 7 | One `VehiclePosition` per tracker fix, keyed by nickname |
-| `alerts`, `tripUpdates` | phase 6 | Live payloads off the event stream |
+| the selected feed and its API objects | phase 4 | Trackers, alerts, members, load status |
+| `vehicles` | phases 7 and 8 | One `VehiclePosition` per tracker fix, keyed by tracker id |
+| `alerts`, `tripUpdates` | phase 7 | Live payloads off the event stream |
 
 Anything a phase wants to add goes on this object rather than into a parallel
 store, and anything a vendored module reads keeps the name it reads it by.
@@ -92,7 +102,15 @@ store, and anything a vendored module reads keeps the name it reads it by.
 ### API surface
 
 All paths are relative to `/api`, all responses JSON, all scoped through
-`accessible_feed_ids`.
+`accessible_feed_ids`. Trackers are addressed by the phase 3 surrogate `id`,
+which is not a secret; `device_key` appears in a response body and nowhere else.
+
+`FeedOut` carries more than the Notes column implies, because the shell needs it
+in phase 4: the owner's display name, `is_owner` (the fact) and `can_manage`
+(the permission, which an admin also has), the three public GTFS-RT URLs from
+`feed_urls.py`, and a nested `load` object mirroring `GtfsStaticFeed`. That
+nested shape is deliberate: phase 7 pushes the same object down the SSE channel,
+so a client applies an update without a second representation.
 
 | Method | Path | Notes |
 |---|---|---|
@@ -104,8 +122,8 @@ All paths are relative to `/api`, all responses JSON, all scoped through
 | POST | `/feeds/{id}/transfer` | owner-only |
 | GET | `/feeds/{id}/events` | SSE: load status, tracker liveness |
 | GET/POST | `/feeds/{id}/trackers` | never returns another feed's trackers |
-| GET/PATCH/DELETE | `/trackers/{id}` | |
-| GET | `/trackers/{id}/provisioning` | Traccar URL + QR payload |
+| GET/PATCH/DELETE | `/trackers/{id}` | by surrogate; the detail form carries `device_key` |
+| GET | `/trackers/{id}/provisioning` | Traccar URL + QR payload, built from `device_key` |
 | GET | `/feeds/{id}/tracker-positions` | private; maps tracker to current fix |
 | GET/POST | `/trackers/{id}/rules` | assignment rules |
 | GET/PATCH/DELETE | `/rules/{id}` | |
@@ -113,7 +131,7 @@ All paths are relative to `/api`, all responses JSON, all scoped through
 | GET | `/feeds/{id}/assignments?from=&to=` | expanded per-day view for the calendar |
 | GET/POST | `/feeds/{id}/alerts`, GET/PATCH/DELETE `/alerts/{id}` | |
 | GET/POST/DELETE | `/alerts/{id}/entities` | informed entities |
-| GET/POST/DELETE | `/feeds/{id}/members`, DELETE `/feeds/{id}/invites/{id}` | owner-only |
+| GET/POST/DELETE | `/feeds/{id}/members`, DELETE `/feeds/{id}/invites/{id}` | mutations owner-only; **reading is open to members** |
 
 ### Standing gotchas
 
@@ -125,9 +143,12 @@ All paths are relative to `/api`, all responses JSON, all scoped through
   be authenticated. Every mutation carries `X-Yard-Master: 1` and the server
   rejects a mutation without it. A simple cross-site request cannot set a custom
   header, and a preflighted one is blocked by the absence of CORS.
-- **The tracker credential.** `Tracker.id` is the Traccar `uniqueId`. It may
-  appear in a properties panel and a request body, never in the hash, a log, a
-  breadcrumb, or a GTFS-RT feed.
+- **The tracker credential.** After phase 3 it is `Tracker.device_key`, not
+  `Tracker.id`. It may appear in a properties panel, a response body and a
+  request body, never in a **URL path**, the hash, a log, a breadcrumb, or a
+  GTFS-RT feed. The path matters as much as the hash: it is a log line in
+  Traefik, oauth2-proxy, nginx and uvicorn alike. Losing that is what the re-key
+  buys, so do not reintroduce it by hanging a route off the credential.
 - **Feed size.** The zip is fetched before anything is browsable. Use the
   vendored `feed-download.ts` progress bar and its `AbortSignal`, and make the
   managed half of the tree usable while the zip is still downloading.
@@ -155,7 +176,7 @@ against the repo named in its `Source repo` column, and get `pnpm build` green
 with a map on screen and an empty panel beside it.
 
 Vendoring first, before any feature, is deliberate. Every later phase renders
-into this furniture, and discovering in phase 5 that the panel resizer or the
+into this furniture, and discovering in phase 6 that the panel resizer or the
 theme controller needs adapting is far more expensive than finding it now.
 
 The split this phase set out with, written down here as what was assumed rather
@@ -231,19 +252,19 @@ variant union breaks every consumer that switches on it: `page-state-manager`
 and `search-entries`. The hash codec needed rewriting anyway, because `feed`,
 `assignments` and `people` name no object and cannot be told apart by the
 presence of an object key the way test-track's four pages could; the hash now
-carries an explicit `type` param, matching the shape phase 3 assumes. The
+carries an explicit `type` param, matching the shape phase 4 assumes. The
 LayerManager target kind stays `vehicle`, which is the map layer's own
 vocabulary and unrelated to the page variant.
 
-**`feed-session.ts` had to land here rather than in phase 3.** `render-utils`,
+**`feed-session.ts` had to land here rather than in phase 4.** `render-utils`,
 `search-entries`, `alerts` and `rt-index` all `import type { FeedSession }`, so
 there is no way to vendor them and keep `pnpm typecheck` green without one. The
 phase 1 version owns the static half only: it downloads and parses the zip with
 progress and cancel, and exposes the `staticFeed` / `vehicles` / `alerts` /
 `tripUpdates` shape those four modules read. It is yard-master's own file, carried as the
 one `adopted` row so the seam is inventoried rather than invisible, and its
-surface is written down as the `FeedSession` contract above. Phase 3 adds the
-API objects and the feed switcher; phases 6 and 7 fill the live maps.
+surface is written down as the `FeedSession` contract above. Phase 4 adds the
+API objects and the feed switcher; phases 7 and 8 fill the live maps.
 
 **Two dependency notes.** `gtfs-realtime-bindings` is a real dependency of this
 repo now, pulled in by `gtfs-rt.ts`; yard-master never polls a `.pb`, but the
@@ -253,7 +274,7 @@ devDependency: test-track gets the `GeoJSON` namespace transitively through
 maplibre's dependency graph, and on a fresh install that resolved differently
 here, so `layer-manager` would not compile without it.
 
-**The search priorities were rebucketed now rather than in phase 4b**, since
+**The search priorities were rebucketed now rather than in phase 5b**, since
 `search-entries` was being modified anyway: trackers 0, stations 1, routes 2,
 plain stops 3.
 
@@ -299,17 +320,23 @@ so the endpoint does not confirm that an id exists.
 Landed on cafe-car's `feat/yard-master-api`, 29 new tests, whole suite green at
 150.
 
-**A tracker needs a second detail route, addressed by nickname.** Keeping
+**A tracker needed a second detail route, addressed by nickname.** Keeping
 `Tracker.id` out of every list response and addressing trackers by `id` are not
 compatible: a client that only ever sees nicknames can never reach
-`/trackers/{id}`. The panel navigates through
-**`GET /feeds/{id}/trackers/{nickname}`**, which returns the credential-bearing
-form; `/trackers/{id}` stays as the resource path for a caller that already
-holds the credential, and phase 5's PATCH and DELETE hang off it. Nickname is
-not unique in the schema, so the nickname route resolves a collision to the
-lowest id, which is deterministic rather than correct. **Phase 5 owes a
-uniqueness check on the tracker write path**, and until it lands two trackers
-sharing a nickname on one feed are unreachable by the panel.
+`/trackers/{id}`. So the phase shipped
+**`GET /feeds/{id}/trackers/{nickname}`** for the panel to navigate through,
+with `/trackers/{id}` kept as the resource path for a caller that already holds
+the credential. Nickname is not unique in the schema, so that route resolves a
+collision to the lowest id, which is deterministic rather than correct.
+
+**That was the symptom, and phase 3 removes the cause.** The forced choice, the
+two response models, the lowest-id tiebreak and the credential sitting in a
+logged URL path all follow from `Tracker.id` being the primary key *and* the
+Traccar credential at the same time. Rather than pay a uniqueness check on the
+write path to prop up nickname-as-key, phase 3 gives the table a non-secret
+surrogate `id`, moves the credential to `device_key`, deletes the nickname route
+and demotes nickname to a display label. Everything below this line describes
+the API as phase 2 left it; phase 3 is where the tracker half of it changes.
 
 **`accessible_feed_ids` was the wrong scope for the feed list.** It applies the
 admin bypass, so an admin's feed switcher would have listed every feed on the
@@ -326,7 +353,7 @@ was the only code that answered "who is calling" for a route SQLAdmin's
 API growing a second copy of a security-critical function.
 
 **CSRF is a router dependency, not a route one.** `require_csrf` is mounted on
-the whole `/api` router, so every mutation phase 5 adds inherits it without a
+the whole `/api` router, so every mutation phase 6 adds inherits it without a
 route having to remember. Nothing under `/api` mutates yet, so its test drives
 the dependency directly.
 
@@ -334,39 +361,264 @@ the dependency directly.
 is nothing to build server-side: oauth2-proxy answers an expired session before
 a request reaches this app. What phase 2 owes is that every answer the API
 *does* build is JSON including its errors, which is what makes "not JSON" an
-unambiguous reload signal for the client in phase 3.
+unambiguous reload signal for the client in phase 4.
 
 **Ruff's TC0xx rules are off under `api/`.** FastAPI resolves annotations at
 runtime to build dependencies and response models, so moving a type into a
 `TYPE_CHECKING` block turns it into a `NameError` at import.
 
 **`FeedOut` carries more than the plan's table implies**, because the shell
-needs it in phase 3: the owner's display name, an `is_owner` flag matching what
+needs it in phase 4: the owner's display name, an `is_owner` flag matching what
 `owned_feed` would actually permit, the three public GTFS-RT URLs from
 `feed_urls.py`, and a nested `load` object mirroring `GtfsStaticFeed`. That
-nested shape is deliberate: phase 6 pushes the same object down the SSE
+nested shape is deliberate: phase 7 pushes the same object down the SSE
 channel, so a client applies an update without a second representation.
+
+That one `is_owner` flag is the one thing here phase 3 revisits. It is
+`owner_id == user_id or is_admin()`, so an admin sees `True` on every feed, next
+to an `owner_name` that names someone else. It matches what `owned_feed`
+permits, but it conflates a fact with a permission, and the people page and the
+Transfer button need to tell them apart. Phase 3 splits it into `is_owner` and
+`can_manage` while there are still no consumers.
 
 **Reading the member list is not owner-only**, though the API table says the
 `/members` row is. It matches the SQLAdmin panel this replaces: a member needs
-to know who else is on a feed. The *mutations* are owner-only and phase 5 adds
+to know who else is on a feed. The *mutations* are owner-only and phase 6 adds
 them behind the `OwnedFeed` dependency, which is written and unused for now.
 
 ---
 
-## Phase 3: the shell, the feed switcher, and hash state
+## Phase 3: tracker identity and the recurrence model
+
+The one remaining schema change, done once. It merges what was phase 8 with a
+fix to something phase 2 exposed, because the two are the same work: one
+railroad-club model change, one Alembic revision, one `resolve_tracker_trip`
+rewrite, one cafe-car dependency bump, one coordinated vehicle-poser deploy.
+
+### Why the tracker re-key belongs here
+
+`Tracker.id` does two jobs at once: it is the table's primary key *and* the
+Traccar provisioning credential. Every awkward thing phase 2 ran into follows
+from that single fact. Two detail routes for one object, because a list that
+must not leak the credential cannot hand the client an address. Two response
+models. `nickname` promoted to a navigation key it was never designed to be,
+with no uniqueness constraint behind it, load-bearing in the URL hash, the map
+feature key, the API detail route and the public GTFS-RT vehicle label. A
+collision resolved to "lowest id", which is deterministic rather than correct.
+And `/api/trackers/{id}`, which puts the credential in a URL path that every
+proxy in the chain logs, against this repo's own standing rule.
+
+Giving the table a non-secret primary key dissolves all five at once, so it is
+worth doing before any UI addresses a tracker. The full re-key rather than a
+second added id: there are no active users, downtime costs nothing, and a table
+carrying two identities forever is a worse outcome than one migration now.
+
+### The audit, done before writing this
+
+Nothing in `vehicle-poser` or `trip-updogger` names `TrackerRule`. The only
+reader in the fleet is `railroad_club/trip_resolver.py::resolve_tracker_trip`,
+and its only caller is `vehicle_poser/main.py::_resolve_trip`, once per Traccar
+`/forward` POST. `trip-updogger` never sees a rule: it consumes the redis
+`vehicle:*` record vehicle-poser wrote and takes `trip_id` as given.
+`schedule-foamer` and `hell-gate-bridge` have no references. Writers are
+`cafe_car/admin/views.py::TrackerRuleAdmin` (the view this repo replaces),
+`cafe-car/scripts/provision_source.py`, and two cafe-car tests.
+
+The credential's blast radius is just as narrow, and narrower than it looks:
+
+- **Traccar is the only system that speaks it.** `vehicle_poser/main.py:72`
+  reads `device.uniqueId` off the forward payload and already does a DB lookup
+  per POST, so the credential can be translated to the surrogate once, at that
+  one edge, and everything downstream speaks the surrogate.
+- **hell-gate-bridge does not touch Redis.** It POSTs to cafe-car's `/ingest/*`
+  with `tracker_id` in the body, and those endpoints are already authenticated
+  by a separate shared token (`routers/ingest.py::_check_auth`). It holds the
+  credential in config (`sources/base.py:56`) for no security reason at all, so
+  the re-key removes a secret from that repo rather than moving one.
+- **The Redis keyspace is keyed by the credential today.** `vehicle:{id}:*` is
+  written by `vehicle_poser/main.py:93` and `cafe_car/routers/ingest.py:193`,
+  and read by `routers/gtfs_rt.py:78,197`, `routers/catalog.py:83` and
+  `trip_updogger/main.py:192`. Records carry a 60s TTL, so the cutover is a
+  flush and a minute of waiting.
+- **trip-updogger needs no change.** It scans `vehicle:*` and copies
+  `tracker_id` through as an opaque string.
+
+But the audit also turned up two things that widen the recurrence change itself:
+
+**A midnight-crossing rule is currently inexpressible, not merely mishandled.**
+`resolve_tracker_trip` filters `start_time <= now AND end_time > now` against a
+single weekday column, so a 23:00-01:00 rule has `start_time > end_time` and
+matches on no day at all. The columns are `datetime.time`, so >24:00 cannot be
+stored either. Adding dates does not fix this; it is a column-type change plus a
+resolver rewrite that also evaluates the previous service day.
+
+**Rule-driven vehicles carry no `start_date`, and the rest of the pipeline is
+already built around one.** vehicle-poser's redis record has no `start_date`
+key. Downstream, trip-updogger keys `trip_update:{trip_id}:{start_date}` with a
+bare-`trip_id` fallback, and cafe-car dedups vehicles and builds
+`VehicleDescriptor.id` from the `(trip_id, start_date)` pair. Both tolerate
+`None`, so nothing is broken today, but two concurrent instances of one
+overnight trip collapse onto a single key. hell-gate-bridge, the other producer
+into the same `vehicle:*` namespace, does emit `start_date`. The tracker path is
+the odd one out.
+
+### The decisions, written down once
+
+**A tracker's identity is not its credential.** `Tracker.id` becomes a
+`uuid4().hex` surrogate and the credential moves to `device_key`, unique and
+indexed. `generate_tracker_id()` keeps its petname format and becomes the
+`device_key` generator: a three-word petname is genuinely nicer than a random
+token when someone types it into the Traccar client by hand because the QR flow
+failed. After this, the credential lives in exactly two places, its own column
+and the Traccar server, and `nickname` is a display label rather than a key.
+
+**A rule's service date is the date its window *starts* in feed-local time, and
+that date is the trip's GTFS-RT `start_date`.** A rule whose window crosses
+midnight keeps the earlier date for its whole run. Weekday columns and
+`start_date`/`end_date` are therefore tested against the service date, never
+against the wall-clock date of the fix. Every consumer agrees on this.
+
+### The model
+
+```
+Tracker      ! id: str  petname credential, PK  ->  uuid4 hex surrogate, PK
+             + device_key: str  unique, indexed, petname, the Traccar uniqueId
+             + UniqueConstraint(feed_id, nickname)
+TrackerRule  ! tracker_id  FK repoints to the new id
+             + start_date: date, + end_date: date | None
+             ! start_time, end_time: time -> int (seconds since service midnight)
+TrackerRuleException   id, rule_id, date, exception_type (added | removed)
+```
+
+The `(feed_id, nickname)` constraint is free in the same migration. Nickname is
+no longer an identity key, but it is still the public GTFS-RT vehicle label, and
+unambiguous labels are worth having.
+
+- [x] railroad-club model changes and the **single** Alembic revision: the
+      tracker re-key, the rule dates, the
+      `time` -> seconds-since-service-midnight conversion (GTFS-shaped, matching
+      `trip_updogger/trip_math.py::parse_gtfs_time`), and the exception table
+- [x] Backfill in the same revision: each tracker gets a fresh uuid `id` with
+      its old id copied into `device_key`; existing rules get a start of today
+      and an open-ended end, so nothing silently stops running; existing times
+      convert as `h*3600+m*60+s`
+- [x] Rewrite `resolve_tracker_trip` to look the tracker up by `device_key` and
+      return `(tracker_id, trip_id, service_date)`: evaluate today's and
+      yesterday's service dates, apply weekday columns, the date range, and
+      exceptions, last-created rule still wins
+- [x] `vehicle-poser` translates at the edge: `device.uniqueId` to the resolver,
+      surrogate and service date back, `vehicle:{surrogate}:{slug}` as the key,
+      `start_date` (YYYYMMDD) in the record
+- [x] `cafe-car` ingest: the `tracker_id` body field carries the surrogate, so
+      `_vehicle_key` keys by it. The alerts path's `session.get(Tracker, ...)`
+      stays a PK get and is correct unchanged
+- [x] `cafe-car` Traccar call sites take `tracker.device_key`: `traccar.py`,
+      `admin/views.py:379`, `admin/entity_router.py:193`
+- [x] Update `TrackerRuleAdmin` and `scripts/provision_source.py` in the same
+      change, or they write rows with null dates
+- [x] `hell-gate-bridge`: config and publisher speak the surrogate, and the
+      comments calling it a secret come out
+- [x] API: `/trackers/{id}` becomes the one detail route, addressed by the
+      surrogate. Delete `/feeds/{id}/trackers/{nickname}`; it was the workaround.
+      `TrackerOut` gains `id` and is safe to log; `TrackerDetailOut` carries
+      `device_key` and is returned only by the detail and provisioning routes
+- [x] Split `FeedOut.is_owner` into `is_owner` (the fact) and `can_manage` (the
+      permission), in `api/schemas.py` and `api/feeds.py::_feed_out`
+- [x] Bump the railroad-club dependency in cafe-car, vehicle-poser and
+      hell-gate-bridge; run `railroad-club-migrate`; flush `vehicle:*`
+- [x] pytest: phase 2's scoping tests still pass against the new addressing, and
+      `device_key` is absent from every list response
+- [x] `GET /api/feeds/{id}/assignments?from=&to=` expanding rules over a range,
+      exceptions applied, in feed-local time
+- [x] Update this repo's `CLAUDE.md`: the tracker rule still says to address
+      trackers by nickname and to keep `Tracker.id` out of navigation state, and
+      the vehicle-layer rule still keys `FeedSession.vehicles` by nickname. Both
+      become wrong the moment the migration lands
+
+**Gotchas.** **The surrogate keeps the attribute name `id`, so grepping for
+`Tracker.id` is not a sufficient audit.** Every existing reference still
+compiles and silently changes meaning. Most of them want the surrogate and are
+correct untouched, which is exactly what makes the few that want the credential
+dangerous. Classify each site rather than pattern-matching it. Must become
+`device_key`: `trip_resolver.py`'s lookup, `admin/views.py:379`
+(`unique_id=model.id`), `admin/entity_router.py:193` (`build_config_url`), and
+`api/trackers.py`'s detail serializer. Must stay `id`: `gtfs_rt.py:78,197`,
+`catalog.py:131`, `ingest.py:293`, and every FK join.
+
+Ship the railroad-club, vehicle-poser and hell-gate-bridge changes together: an
+old vehicle-poser against the new resolver signature is a TypeError on every
+position POST, and an old hell-gate-bridge posts a credential into a field that
+now expects a surrogate. The old admin is the only admin until phase 10, so its
+tracker, tracker-rule and provisioning panels have to survive the re-key.
+
+Expansion is feed-local, from `GtfsStaticFeed.timezone`. A rule with no
+`end_date` is open-ended, not expired. `resolve_tracker_trip` returns `None`
+when the feed has no loaded `GtfsStaticFeed` or no timezone; keep that, it is
+the only safe answer. The two-service-day evaluation can match a rule on both
+days at once for a >24h window, so order by service date before rule id.
+
+### What the pass turned up
+
+**A tracker with a fix but no rule had to stop being an error.** The plan's own
+gotcha said `resolve_tracker_trip` returns `None` when the feed has no timezone,
+and that is still right about the *trip*. But once vehicle-poser keys its Redis
+record by the surrogate, "no answer" means it cannot write a record at all, and
+an unassigned tracker vanishes off the map that phase 8 is meant to draw it on.
+So the resolver returns `None` only for a device key with no tracker behind it;
+a tracker that exists but has no active rule comes back with `trip_id` and
+`service_date` both `None`. That keeps the "never guess a trip" property exactly
+and makes the unmatched-colour case reachable.
+
+**The re-key removed a credential from a URL rather than moving one.** The admin
+provisioning partial is `/tracker/{id}/provisioning-partial`, and that path now
+carries the surrogate. The credential is in the rendered body, which is the
+distinction the whole change is about.
+
+**`start_time > end_time` rows are left dead on purpose.** The backfill converts
+literally, `h*3600+m*60+s`. A rule that already had a start after its end matched
+on no day at all, so converting it as written keeps it dead; adding 86400 would
+silently start running an overnight trip nobody has run since it was entered.
+That is a decision for whoever edits the rule in the phase 9 calendar, not for a
+migration.
+
+**The migration was round-tripped against a real Postgres 16**, up and back down
+with a midnight-crossing rule and two trackers in the table, and `alembic
+revision --autogenerate` against the upgraded schema reports no column or
+constraint drift. `tracker_rule.tracker_id` gained `index=True` on the model to
+match the index the original migration had already created by hand.
+
+**Two API endpoints came out of the assignments work, not one.**
+`/feeds/{id}/assignments` is the expansion the calendar reads;
+`/feeds/{id}/rules` is the stored rules with their exceptions, which is what an
+editor needs and which the expansion deliberately does not preserve. Expansion
+itself is `railroad_club.trip_resolver.expand_rules`, a pure function sharing
+`rule_applies_on` with the resolver, so the calendar and the vehicle pipeline
+cannot disagree about which day a rule runs.
+
+**Still to do, and blocked on a push.** The three dependency bumps
+(`cafe-car`, `vehicle-poser`, `hell-gate-bridge` pin railroad-club by commit),
+`railroad-club-migrate` against the real database, and the `vehicle:*` flush all
+need the railroad-club commits pushed first. Everything was verified locally
+against an editable install instead. Ship the three services together: an old
+vehicle-poser against the new resolver signature unpacks a `NamedTuple` where it
+expected a string.
+
+---
+
+## Phase 4: the shell, the feed switcher, and hash state
 
 The app becomes navigable. A feed switcher modal lists your feeds from
 `GET /api/feeds`, selecting one downloads and parses its zip in the browser with
 a progress bar, and the hash carries both the feed and the focused object so any
 page is linkable.
 
-Hash shape: `#feed=<feed_name>&type=tracker&tracker=<nickname>`. Settled in
+Hash shape: `#feed=<feed_name>&type=tracker&tracker=<id>`. Settled in
 phase 1: the codec already carries the explicit `type` param, because `feed`,
 `assignments` and `people` name no object and cannot be told apart by the
 presence of an object key. The feed is named by `feed_name`, not by id, so a
-link stays readable. Trackers are named by nickname, never by id, per the
-standing gotcha.
+link stays readable. Trackers are named by the phase 3 surrogate `id`, which is
+not a secret and is genuinely unique; `device_key` never enters the hash, and
+neither does nickname, which is a label and may repeat.
 
 - [ ] `api-client.ts`: typed `get`/`post`/`patch`/`del`, the CSRF header on
       every mutation, and the redirect/non-JSON detection that triggers a reload
@@ -379,7 +631,7 @@ standing gotcha.
 - [ ] Selecting a feed loads the zip through `feed-download` with progress and
       cancel; the managed half of the tree is usable before it finishes
 - [ ] `POST /api/feeds` and `POST /api/feeds/{id}/reload` in cafe-car
-- [ ] Map renders the feed's stops and routes; the panel is phase 4a's, pointed
+- [ ] Map renders the feed's stops and routes; the panel is phase 5a's, pointed
       at a real feed instead of the hardcoded URL
 
 **Gotchas.** Only `PageStateManager` may write the hash, which is what keeps its
@@ -391,7 +643,7 @@ leave the managed half of the app fully usable.
 
 ---
 
-## Phase 4a: the browse tree and the GTFS pages
+## Phase 5a: the browse tree and the GTFS pages
 
 Fill the panel with the half that needs no API. One dispatcher over `PageState`,
 one module per page, exactly as test-track's `panel-renderer.ts` does it,
@@ -406,7 +658,7 @@ Doing it early derisks the whole vendored panel and map stack against a real
 feed, months before the backend is in the way.
 
 - [ ] `panel-renderer.ts` dispatcher plus shared furniture (breadcrumbs, headers)
-- [ ] `CONFIG.DEV_FEED_URL`: one hardcoded feed, loaded on boot, deleted in phase 3
+- [ ] `CONFIG.DEV_FEED_URL`: one hardcoded feed, loaded on boot, deleted in phase 4
 - [ ] `pages/route-page.ts`, `pages/stop-page.ts`, `pages/trip-page.ts` from the
       in-browser GTFS
 - [ ] Tree navigation over the GTFS half: section headers, counts, click to focus
@@ -423,9 +675,9 @@ moving the camera; rendering a trip's shape is this phase's job and the
 
 ---
 
-## Phase 4b: the managed pages
+## Phase 5b: the managed pages
 
-The other half of the panel, once phase 3 has a feed and an API to read.
+The other half of the panel, once phase 4 has a feed and an API to read.
 
 - [ ] `pages/feed-page.ts`: properties, load status, counts, deep links to viz
       and the editor
@@ -442,7 +694,7 @@ breadcrumb, a title or a link.
 
 ---
 
-## Phase 5: writes
+## Phase 6: writes
 
 Every properties page gets an explicit Save. Field-level validation errors come
 back from the API and render next to the field that caused them, which is the
@@ -457,17 +709,22 @@ main thing the old admin does well and must not be lost.
 - [ ] Destructive actions behind a typed confirmation
 - [ ] pytest for every write path, including the scoping tests from phase 2
       repeated against the mutating verbs
-- [ ] Bulk tracker create (a prefix and a count)
+- [ ] Bulk tracker create (a prefix and a count), respecting the
+      `(feed_id, nickname)` constraint phase 3 added
 
-**Gotchas.** Deleting a tracker should also retire its Traccar device; confirm
-what the current code does before copying it. `feed_name` is unique and is in
-the hash, so renaming a feed has to rewrite the hash rather than leave a link
-pointing at a name that no longer exists. Invites match on **verified** email
+**Gotchas.** Deleting a tracker should also retire its Traccar device, matched
+on `device_key`; confirm what the current code does before copying it.
+`feed_name` is unique and is in the hash, so renaming a feed has to rewrite the
+hash rather than leave a link pointing at a name that no longer exists.
+Renaming a *tracker* does not, which is a property phase 3 bought: the hash
+holds the surrogate, so a nickname is free to change under a live link. A
+rename can still collide with the `(feed_id, nickname)` constraint, so it needs
+the same field-level 422 handling as any other validated write. Invites match on **verified** email
 only; that rule is an account-takeover boundary and moves across untouched.
 
 ---
 
-## Phase 6: the SSE channel and live load status
+## Phase 7: the SSE channel and live load status
 
 `GET /api/feeds/{id}/events` streams events for one feed. First payload is the
 current state, so a client never has to poll once to bootstrap. schedule-foamer
@@ -475,7 +732,7 @@ publishes to Redis; the endpoint subscribes and forwards.
 
 If schedule-foamer only flips `pending -> running -> success/failed` today, ship
 that and treat finer progress as a follow-up in that repo. The channel is worth
-building either way, because tracker liveness rides on it in phase 7.
+building either way, because tracker liveness rides on it in phase 8.
 
 - [ ] Redis pub/sub channel per feed, published by schedule-foamer on status change
 - [ ] `GET /api/feeds/{id}/events` SSE endpoint, current state first, heartbeat
@@ -500,14 +757,15 @@ closed when the feed changes or a long session accumulates them.
 
 ---
 
-## Phase 7: trackers on the map
+## Phase 8: trackers on the map
 
 Answer "where is this thing right now" without leaving the app.
 
 `GET /api/feeds/{id}/tracker-positions` reads the `vehicle:{tracker.id}:*`
-keyspace and returns positions keyed by tracker. It is authenticated and scoped;
-the public `.pb` deliberately labels vehicles by `nickname` and must stay that
-way.
+keyspace, which phase 3 re-keyed to the surrogate, and returns positions keyed
+by tracker. It is authenticated and scoped; the public `.pb` deliberately
+*labels* vehicles by `nickname` and must stay that way, which is a display
+concern and no longer an identity one.
 
 There is no separate tracker layer. A tracker with a fix enters
 `FeedSession.vehicles` as a `VehiclePosition` and draws on the existing vehicle
@@ -522,7 +780,7 @@ idle is how you decide what to assign. `layer-manager.ts` and `issue-card.ts`
 stay `verbatim` through this phase.
 
 - [ ] The positions endpoint, scoped, with the 60s TTL meaning "present is fresh"
-- [ ] Tracker positions pushed on the phase 6 channel, into `FeedSession.vehicles`
+- [ ] Tracker positions pushed on the phase 7 channel, into `FeedSession.vehicles`
 - [ ] Reword the unmatched issue-card row: here it means "unassigned", the normal
       state of an idle tracker, not test-track's "the feed is lying to you"
 - [ ] Liveness dot in the tracker list: reporting, last seen, never seen. A
@@ -533,90 +791,16 @@ stay `verbatim` through this phase.
 - [ ] Feed page shows the whole fleet at once
 
 **Gotchas.** `VehiclePosition.key` is the map feature id, the `vehicles` map key
-and the click identity, so it must be the **nickname**, never `Tracker.id`, and
-`vehicleId` with it. A tracker can report several concurrent vehicles, one Redis
-key per `trip_id[:start_date]`; those collide on a bare nickname, so `key` is the
-nickname plus the trip discriminator, and `issues.vehiclesDuplicateKeys` will
-flag it if that is got wrong. The panel must show all of a tracker's vehicles
-rather than the first one the scan returns. Never log a position payload with
-its `tracker_id`.
-
----
-
-## Phase 8: the recurrence model in railroad-club
-
-The data change, on its own, so it can be migrated and deployed before any UI
-depends on it. `TrackerRule` becomes a `calendar.txt` row and gains an exception
-table that is `calendar_dates.txt`.
-
-```
-TrackerRule       + start_date: date, + end_date: date
-                  ! start_time, end_time: time -> int (seconds since service midnight)
-TrackerRuleException  id, rule_id, date, exception_type (added | removed)
-```
-
-### The audit, done before writing this
-
-Nothing in `vehicle-poser` or `trip-updogger` names `TrackerRule`. The only
-reader in the fleet is `railroad_club/trip_resolver.py::resolve_tracker_trip`,
-and its only caller is `vehicle_poser/main.py::_resolve_trip`, once per Traccar
-`/forward` POST. `trip-updogger` never sees a rule: it consumes the redis
-`vehicle:*` record vehicle-poser wrote and takes `trip_id` as given.
-`schedule-foamer` and `hell-gate-bridge` have no references. Writers are
-`cafe_car/admin/views.py::TrackerRuleAdmin` (the view this repo replaces),
-`cafe-car/scripts/provision_source.py`, and two cafe-car tests.
-
-So the blast radius is one resolver, one caller, one admin view, one script. But
-the audit turned up two things that widen the change itself:
-
-**A midnight-crossing rule is currently inexpressible, not merely mishandled.**
-`resolve_tracker_trip` filters `start_time <= now AND end_time > now` against a
-single weekday column, so a 23:00-01:00 rule has `start_time > end_time` and
-matches on no day at all. The columns are `datetime.time`, so >24:00 cannot be
-stored either. Adding dates does not fix this; it is a column-type change plus a
-resolver rewrite that also evaluates the previous service day.
-
-**Rule-driven vehicles carry no `start_date`, and the rest of the pipeline is
-already built around one.** vehicle-poser's redis record has no `start_date`
-key. Downstream, trip-updogger keys `trip_update:{trip_id}:{start_date}` with a
-bare-`trip_id` fallback, and cafe-car dedups vehicles and builds
-`VehicleDescriptor.id` from the `(trip_id, start_date)` pair. Both tolerate
-`None`, so nothing is broken today, but two concurrent instances of one
-overnight trip collapse onto a single key. hell-gate-bridge, the other producer
-into the same `vehicle:*` namespace, does emit `start_date`. The tracker path is
-the odd one out.
-
-### The decision, written down once
-
-**A rule's service date is the date its window *starts* in feed-local time, and
-that date is the trip's GTFS-RT `start_date`.** A rule whose window crosses
-midnight keeps the earlier date for its whole run. Weekday columns and
-`start_date`/`end_date` are therefore tested against the service date, never
-against the wall-clock date of the fix. Every consumer agrees on this.
-
-- [ ] Model change and Alembic revision in railroad-club, including the
-      `time` -> seconds-since-service-midnight conversion for `start_time` and
-      `end_time` (GTFS-shaped, matching `trip_updogger/trip_math.py::parse_gtfs_time`)
-- [ ] Backfill: existing rules get a start of today and an open-ended end, so
-      nothing silently stops running; existing times convert as `h*3600+m*60+s`
-- [ ] Rewrite `resolve_tracker_trip` to return `(trip_id, service_date)`:
-      evaluate today's and yesterday's service dates, apply weekday columns,
-      the date range, and exceptions, last-created rule still wins
-- [ ] `vehicle-poser` puts `start_date` (YYYYMMDD) in the redis record from the
-      resolver's service date
-- [ ] Update `TrackerRuleAdmin` and `scripts/provision_source.py` in the same
-      change, or they write rows with null dates
-- [ ] Bump the railroad-club dependency in cafe-car, run `railroad-club-migrate`
-- [ ] `GET /api/feeds/{id}/assignments?from=&to=` expanding rules over a range,
-      exceptions applied, in feed-local time
-
-**Gotchas.** Expansion is feed-local, from `GtfsStaticFeed.timezone`. A rule
-with no `end_date` is open-ended, not expired. `resolve_tracker_trip` returns
-`None` when the feed has no loaded `GtfsStaticFeed` or no timezone; keep that,
-it is the only safe answer. The two-service-day evaluation can match a rule on
-both days at once for a >24h window, so order by service date before rule id.
-Ship the railroad-club and vehicle-poser changes together: an old vehicle-poser
-against a new resolver signature is a TypeError on every position POST.
+and the click identity, so it must be the **surrogate `id`**, never `device_key`
+and no longer the nickname, and `vehicleId` with it. Before phase 3 this had to
+be the nickname, which was the trap: nicknames are not unique, so two trackers
+sharing one silently collapsed to a single map feature. A tracker can still
+report several concurrent vehicles, one Redis key per `trip_id[:start_date]`, so
+`key` is the tracker id plus the trip discriminator, and
+`issues.vehiclesDuplicateKeys` will flag it if that is got wrong. The panel must
+show all of a tracker's vehicles rather than the first one the scan returns.
+`nickname` remains what is *displayed* on the dot and in the public feed. Never
+log a position payload with its `device_key`.
 
 ---
 
@@ -678,7 +862,7 @@ the deletion commit, so a cutover problem is a DNS change and not a rollback.
 
 - Porting `/account` into the SPA. It stays server-rendered.
 - A position history trail. Positions carry a 60s TTL, so a trail needs new
-  storage; revisit after phase 7.
+  storage; revisit after phase 8.
 - `GtfsShape` in railroad-club. The browser parses `shapes.txt` from the zip, so
   nothing here needs it.
 - RRULE recurrence and `.ics` export. The GTFS-shaped model cannot express
