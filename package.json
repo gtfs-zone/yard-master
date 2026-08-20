@@ -1,0 +1,42 @@
+{
+  "name": "manage.rt.gtfs.zone",
+  "version": "0.0.0-development",
+  "description": "Map-first manager for gtfs.zone feeds, trackers and assignments",
+  "main": "src/index.html",
+  "type": "module",
+  "packageManager": "pnpm@11.20.0",
+  "scripts": {
+    "dev": "vite",
+    "start": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "vendor:check": "tsx scripts/vendor-check.ts"
+  },
+  "keywords": [
+    "gtfs",
+    "transit",
+    "realtime",
+    "admin"
+  ],
+  "author": "gtfs.zone contributors",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/geojson": "^7946.0.16",
+    "@types/node": "^24.12.2",
+    "@types/papaparse": "^5.5.2",
+    "autoprefixer": "^10.5.0",
+    "tailwindcss": "^4.2.4",
+    "tsx": "^4.22.3",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.2"
+  },
+  "dependencies": {
+    "@leeoniya/ufuzzy": "^1.0.14",
+    "@tailwindcss/postcss": "^4.2.4",
+    "daisyui": "^5.5.19",
+    "gtfs-realtime-bindings": "^2.2.0",
+    "jszip": "^3.10.1",
+    "maplibre-gl": "^5.7.2",
+    "papaparse": "^5.5.3"
+  }
+}
