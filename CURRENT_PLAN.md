@@ -620,19 +620,23 @@ link stays readable. Trackers are named by the phase 3 surrogate `id`, which is
 not a secret and is genuinely unique; `device_key` never enters the hash, and
 neither does nickname, which is a label and may repeat.
 
-- [ ] `api-client.ts`: typed `get`/`post`/`patch`/`del`, the CSRF header on
+- [x] `api-client.ts`: typed `get`/`post`/`patch`/`del`, the CSRF header on
       every mutation, and the redirect/non-JSON detection that triggers a reload
-- [ ] `feed-switcher.ts`: your feeds, a New feed form (name + static URL), and
+- [x] `feed-switcher.ts`: your feeds, a New feed form (name + static URL), and
       an admin-only "show all feeds" toggle, off by default
-- [ ] Extend `feed-session.ts` with the selected feed and its API objects; the
+- [x] Extend `feed-session.ts` with the selected feed and its API objects; the
       static half and the change-event dispatch landed in phase 1. Follow the
       `FeedSession` contract above rather than adding a parallel store
-- [ ] `app-state.ts` + `page-state-manager` wiring, breadcrumbs, hash sync
-- [ ] Selecting a feed loads the zip through `feed-download` with progress and
+- [x] `app-state.ts` + `page-state-manager` wiring, breadcrumbs, hash sync
+- [x] Selecting a feed loads the zip through `feed-download` with progress and
       cancel; the managed half of the tree is usable before it finishes
-- [ ] `POST /api/feeds` and `POST /api/feeds/{id}/reload` in cafe-car
-- [ ] Map renders the feed's stops and routes; the panel is phase 5a's, pointed
+- [x] `POST /api/feeds` and `POST /api/feeds/{id}/reload` in cafe-car
+- [x] Map renders the feed's stops and routes; the panel is phase 5a's, pointed
       at a real feed instead of the hardcoded URL
+- [x] Re-key the `tracker` PageState from nickname to `Tracker.id`. Phase 3
+      changed the model and this repo's `CLAUDE.md`, but `page-state.ts`,
+      `page-state-manager.ts`, `map-controller.ts` and `search-entries.ts` were
+      still addressing a tracker by a label that may repeat
 
 **Gotchas.** Only `PageStateManager` may write the hash, which is what keeps its
 `suppressHashUpdate` guard honest. Deleting `CONFIG.DEV_FEED_URL` is part of
@@ -640,6 +644,56 @@ this phase, not a later cleanup: two ways to choose a feed is one too many. A ne
 `gtfs_static_feed` row at all, so every status reader must handle null rather
 than assuming `pending`. A feed whose `static_feed_url` is unreachable must
 leave the managed half of the app fully usable.
+
+### What the pass turned up
+
+**`adoptState` had to gain a companion, because the hash is written in two
+halves.** Selecting a feed writes `feed=<feed_name>` through `setFeedParams`,
+which happens *before* a focus restored from a link has been adopted, and
+`adoptState` is deliberately silent. The link's own `type=` and object params
+were therefore erased from the address bar between boot and the first
+navigation. `PageStateManager.syncHash()` is the fix: still the only module
+that touches the hash, now with a way to say "write what I already hold".
+
+**A pending focus is a state machine, not a decision.** test-track awaits its
+load and so can rule on a linked focus once. Here the managed half arrives
+before the zip and may never be joined by it, so `route`, `stop` and `trip`
+links cannot be judged at the same moment `tracker` and `people` links can.
+`applyPendingFocus` therefore runs three times - on selection, after the
+tracker list, and on `staticloaded` - and only the last is allowed to call a
+link dead. The same asymmetry pushed `validateState` to answer *true* for a
+managed object while its list is still empty: an empty map is "not fetched yet"
+as often as it is "no such object".
+
+**An empty 202 is indistinguishable from a login page by content type alone.**
+`POST /feeds/{id}/reload` answers 202 with no body, so it carries no
+`Content-Type` either - and "not JSON" is exactly the signal the client uses to
+detect an expired oauth2-proxy session and reload the page. The reload button
+would have reloaded the browser on every successful click. The no-body case is
+now checked first, narrowed to 202/204/`Content-Length: 0`, none of which
+anything in the auth chain serves.
+
+**`CONFIG.DEV_FEED_URL` never existed.** Phase 1 stood the shell up without a
+hardcoded feed, so there was nothing to delete; the gotcha was written against
+a phase 1 that was later revised. The map's only feed is the selected one.
+
+**The reload button is two reloads and says so.** `POST /feeds/{id}/reload`
+queues schedule-foamer for the *pipeline's* copy of the schedule; the browser's
+own copy is a separate download this app does itself. Doing only the first
+would leave the map showing the old feed with no indication why, so the button
+does both and the feed row is re-read in between.
+
+**`request_feed_load` collapsed three copies of the celery dispatch into one.**
+The admin's create hook, the admin's reload route and both new API routes all
+name the same task; the helper also fixes the two of them that swallowed a
+broker failure in slightly different ways.
+
+**Still to do, and blocked on the same push as phase 3.** cafe-car's venv pins
+railroad-club by commit, so its test suite could not import `TrackerRuleException`
+until railroad-club was installed editable into it. All 172 cafe-car tests pass
+that way. `pnpm vendor:check` reports `feed-download.ts` and `gtfs-static.ts` one
+commit behind test-track (`fa12a57`, a downloader progress change): unrelated to
+this phase, and a re-vendor rather than a fix.
 
 ---
 
