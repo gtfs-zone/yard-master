@@ -3,7 +3,8 @@
    @status modified
    @changes
    - The vehicle loop became a tracker loop: the payload is a `tracker`
-     PageState keyed by nickname, since `Tracker.id` may not reach the hash.
+     PageState keyed by `Tracker.id`, the surrogate the session's vehicle map
+     is keyed by.
    - Priorities rebucketed so managed objects sort ahead of GTFS objects:
      trackers 0, stations 1, routes 2, plain stops 3. */
 /**
@@ -60,14 +61,14 @@ export function buildSearchEntries(session: FeedSession): SearchEntry<PageState>
     });
   }
 
-  // Trackers are keyed by nickname in `session.vehicles`, which is what the
-  // map paints and the only tracker identifier allowed in a URL.
+  // Trackers are keyed by `Tracker.id` in `session.vehicles`, which is what the
+  // map paints and what a link carries.
   for (const tracker of session.vehicles.values()) {
     // Same color the map paints it: the assigned trip's route, or unmatched grey.
     const routeId = tracker.routeId || (tracker.tripId ? feed?.trips.get(tracker.tripId)?.route_id : undefined);
     const color = (routeId ? feed?.routes.get(routeId)?.color : undefined) ?? CONFIG.VEHICLE_UNMATCHED_COLOR;
     entries.push({
-      payload: { type: 'tracker', nickname: tracker.key },
+      payload: { type: 'tracker', tracker_id: tracker.key },
       icon: dotMarker(color),
       primary: vehicleDisplayName(feed, tracker),
       secondary: tracker.vehicleId || tracker.key,

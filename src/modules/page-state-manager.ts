@@ -6,8 +6,12 @@
      The hash now carries an explicit `type` param, because `feed`,
      `assignments` and `people` name no object and cannot be told apart by the
      presence of an object key the way test-track's four pages could.
-   - A tracker appears in the hash as `tracker=<nickname>`. `Tracker.id` is the
-     Traccar provisioning credential and must never reach a shareable URL. */
+   - A tracker appears in the hash as `tracker=<Tracker.id>`. The surrogate is
+     not a secret and is unique; `device_key` is the credential and never
+     reaches a URL, and nickname is a label that may repeat.
+   - Added `syncHash()`. `adoptState` is deliberately silent, but a focus
+     restored from a link still has to survive the feed params being written
+     around it, and this module is the only thing allowed to touch the hash. */
 /* @vendored-from coloring-book:src/modules/page-state-manager.ts
    @sha a4b5ee1
    @status modified
@@ -188,6 +192,11 @@ export class PageStateManager {
     this.currentState = { ...state };
   }
 
+  /** Write the current state to the hash without dispatching anything. */
+  syncHash(): void {
+    this.writeHash(this.currentState);
+  }
+
   /** Focus params only; the feed half is merged in by `writeHash`. */
   pageStateToURL(pageState: PageState): string {
     const params = new URLSearchParams();
@@ -204,8 +213,8 @@ export class PageStateManager {
         params.set('stop', pageState.stop_id);
         break;
       case 'tracker':
-        // Nickname, never `Tracker.id`.
-        params.set('tracker', pageState.nickname);
+        // The surrogate, never `device_key`.
+        params.set('tracker', pageState.tracker_id);
         break;
       case 'assignments':
         if (pageState.date) params.set('date', pageState.date);
@@ -245,8 +254,8 @@ export class PageStateManager {
         return { type: 'assignments', ...(date !== undefined && { date }) };
       }
       case 'tracker': {
-        const nickname = get('tracker');
-        return nickname === undefined ? { type: 'home' } : { type: 'tracker', nickname };
+        const tracker_id = get('tracker');
+        return tracker_id === undefined ? { type: 'home' } : { type: 'tracker', tracker_id };
       }
       case 'alert': {
         const alert_id = get('alert');

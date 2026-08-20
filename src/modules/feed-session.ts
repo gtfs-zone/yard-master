@@ -12,19 +12,32 @@
  * Every module that takes a `FeedSession` reads it through that surface, which
  * is what lets them stay verbatim.
  *
- * Phase 1 carries the static half. Phase 3 adds the selected feed and its API
- * objects; phases 6 and 7 fill `vehicles` from the event stream and the
- * positions endpoint. Those names do not change: a tracker with a fix is a
- * `VehiclePosition` here, keyed by nickname.
+ * The selected feed and its managed objects live here alongside the static
+ * half, and the two are deliberately independent: `feed` and `trackers` are
+ * populated the moment a feed is chosen, while `staticFeed` arrives whenever
+ * the zip finishes downloading, or never, if `static_feed_url` is unreachable.
+ * Every reader has to cope with one without the other.
+ *
+ * Phase 7 fills `vehicles` from the event stream. That name does not change: a
+ * tracker with a fix is a `VehiclePosition` here, keyed by `Tracker.id`, and
+ * an unassigned one is drawn in `CONFIG.VEHICLE_UNMATCHED_COLOR` rather than on
+ * a layer of its own.
  */
 import { GTFSStatic } from '../gtfs-static';
 import type { AlertRecord, TripUpdate } from '../gtfs-rt';
+import type { Feed, Tracker } from '../types/api';
 import type { VehiclePosition } from '../map-controller';
 import { adoptFeedTimezone } from './feed-time';
 import { feedProgressIndicator } from './feed-progress-indicator';
 import { downloadPercent, formatBytes, LoadCancelledError } from './feed-download';
 
 export class FeedSession extends EventTarget {
+  /** The selected feed's API row, or null when nothing is selected. */
+  feed: Feed | null = null;
+
+  /** This feed's trackers, keyed by `Tracker.id`. No `device_key` in here. */
+  trackers = new Map<string, Tracker>();
+
   staticFeed: GTFSStatic | null = null;
   staticError: string | null = null;
   staticLoadedAt: number | null = null;
@@ -36,6 +49,32 @@ export class FeedSession extends EventTarget {
   tripUpdates: TripUpdate[] = [];
 
   private controller: AbortController | null = null;
+
+  /**
+   * Select a feed, discarding everything belonging to the previous one.
+   *
+   * The static half is not started here: the caller decides whether to
+   * download the zip, because the managed half of the app is usable without it
+   * and a slow feed must not gate the tree.
+   */
+  selectFeed(feed: Feed): void {
+    this.cancelLoad();
+    this.clearData();
+    this.feed = feed;
+    this.dispatchEvent(new CustomEvent('change'));
+  }
+
+  /** Replace the selected feed's row in place, keeping everything loaded. */
+  updateFeed(feed: Feed): void {
+    this.feed = feed;
+    this.dispatchEvent(new CustomEvent('change'));
+  }
+
+  /** Replace the tracker list. Wholesale, so a deleted tracker disappears. */
+  setTrackers(trackers: Tracker[]): void {
+    this.trackers = new Map(trackers.map((t) => [t.id, t]));
+    this.dispatchEvent(new CustomEvent('change'));
+  }
 
   /**
    * Download and parse a feed's zip in the browser.
@@ -90,6 +129,9 @@ export class FeedSession extends EventTarget {
       adoptFeedTimezone(feed);
       this.staticError = null;
       this.staticLoadedAt = Date.now();
+      // Separate from `change` because the map has to reload its sources on
+      // this and on nothing else; `change` fires for every tracker update too.
+      this.dispatchEvent(new CustomEvent<GTFSStatic>('staticloaded', { detail: feed }));
     } catch (err) {
       // A cancel is not a feed error: the previously loaded feed stays live.
       if (!(err instanceof LoadCancelledError)) {
@@ -108,15 +150,21 @@ export class FeedSession extends EventTarget {
     this.controller = null;
   }
 
-  /** Drop everything. Called when the selected feed changes. */
+  /** Drop everything, including the selection. */
   clear(): void {
     this.cancelLoad();
+    this.feed = null;
+    this.clearData();
+    this.dispatchEvent(new CustomEvent('change'));
+  }
+
+  private clearData(): void {
+    this.trackers = new Map();
     this.staticFeed = null;
     this.staticError = null;
     this.staticLoadedAt = null;
     this.vehicles = new Map();
     this.alerts = new Map();
     this.tripUpdates = [];
-    this.dispatchEvent(new CustomEvent('change'));
   }
 }

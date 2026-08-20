@@ -2,7 +2,7 @@
    @sha 56f120a
    @status modified
    @changes
-   - The `vehicle` PageState variant became `tracker`, keyed by nickname. The
+   - The `vehicle` PageState variant became `tracker`, keyed by `Tracker.id`. The
      LayerManager target kind stays `vehicle`: that is the map layer's own
      vocabulary and is unchanged.
    - `applyFocus` handles yard-master's managed variants (`feed`,
@@ -169,8 +169,8 @@ export class MapController {
           this.onSelect?.({ type: 'route', route_id: target.id });
           break;
         case 'vehicle':
-          // The map's moving dots are trackers, addressed by nickname.
-          this.onSelect?.({ type: 'tracker', nickname: target.id });
+          // The map's moving dots are trackers, addressed by their surrogate.
+          this.onSelect?.({ type: 'tracker', tracker_id: target.id });
           break;
       }
     };
@@ -375,10 +375,10 @@ export class MapController {
       }
 
       case 'tracker': {
-        this.layers.setFocus({ kind: 'vehicle', id: state.nickname });
+        this.layers.setFocus({ kind: 'vehicle', id: state.tracker_id });
         // Re-arm follow on this tracker (a different one replaces the old).
-        this.following = state.nickname;
-        this.easeToPoint(this.layers.vehiclePosition(state.nickname));
+        this.following = state.tracker_id;
+        this.easeToPoint(this.layers.vehiclePosition(state.tracker_id));
         return;
       }
     }

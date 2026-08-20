@@ -7,8 +7,9 @@
      objects from the API, `route`, `stop` and `trip` come from the in-browser
      GTFS. Dropped `vehicle`; kept `alert`, which here is a managed object
      rather than a decoded GTFS-RT entity.
-   - `tracker` is keyed by `nickname`, never by `Tracker.id`: the id is the
-     Traccar provisioning credential and must not reach a shareable URL.
+   - `tracker` is keyed by `Tracker.id`, the surrogate. It is not the Traccar
+     credential (that is `device_key`, which never leaves the properties panel)
+     and it is genuinely unique, which nickname is not.
    - `assignments` carries an optional `date` (YYYYMMDD, feed-local service
      date) so a day in the calendar is linkable.
    - `trip` added, with `route_id` alongside `trip_id` so a trip page can render
@@ -27,7 +28,7 @@
 export type PageState =
   | { type: 'home' }
   | { type: 'feed' }
-  | { type: 'tracker'; nickname: string }
+  | { type: 'tracker'; tracker_id: string }
   | { type: 'assignments'; date?: string }
   | { type: 'people' }
   | { type: 'alert'; alert_id: string }
@@ -61,7 +62,7 @@ export function isPageState(value: unknown): value is PageState {
       return true;
 
     case 'tracker':
-      return typeof state.nickname === 'string';
+      return typeof state.tracker_id === 'string';
 
     case 'assignments':
       return isOptionalString(state.date);
