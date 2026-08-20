@@ -1239,14 +1239,17 @@ Creating an assignment: pick a trip (a picker over the in-browser GTFS, not free
 text), pick a tracker, pick days and a date range. Editing one day of a
 recurring rule writes an exception rather than splitting the rule.
 
-- [ ] `pages/assignments-page.ts`: month grid, prev/next, today
-- [ ] Day agenda: add, edit, delete an assignment
-- [ ] Rule editor: trip picker, tracker picker, weekday checkboxes, date range,
+- [x] The rule writes phase 3 left unbuilt: `POST /trackers/{id}/rules`,
+      `GET/PATCH/DELETE /rules/{id}`, and the two exception routes
+- [x] `pages/assignments-page.ts`: month grid, prev/next, today
+- [x] Day agenda: add, edit, delete an assignment
+- [x] Rule editor: trip picker, tracker picker, weekday checkboxes, date range,
       time window
-- [ ] Exceptions: skip this day, add just this day
-- [ ] Conflict warning when two trackers hold one trip on one day
-- [ ] Selecting a day drives the map, showing that day's assigned trips
-- [ ] Trip page shows its assignments and can add one in place
+- [x] Exceptions: skip this day, add just this day
+- [x] Conflict warning when two trackers hold one trip on one day
+- [x] Selecting a day drives the map, showing that day's assigned trips
+- [x] Trip page shows its assignments and can add one in place
+- [x] Tracker page shows what it is assigned to run
 
 **Gotchas.** The trip picker must handle a feed with tens of thousands of trips;
 use the fuzzy search that is already vendored rather than a `<select>`. "This
@@ -1254,6 +1257,88 @@ day only" versus "all future days" is the classic recurrence-editing trap: only
 offer what the model can express, which is an exception or an edit to the rule.
 Assignments for a trip the loaded GTFS does not contain must still render, since
 the feed can be reloaded out from under a rule.
+
+### What the pass turned up
+
+**Phase 3 shipped the two read endpoints and none of the writes.**
+`/feeds/{id}/rules` and `/feeds/{id}/assignments` existed; nothing could create
+a rule outside SQLAdmin. So the phase started in cafe-car: `TrackerRuleWrite`
+and `RuleExceptionWrite`, five routes, and `_accessible_rule`, which is the
+piece worth naming — a rule has no feed column, so every route scopes through
+the join to its tracker rather than trusting a small integer in a path. There
+is a stranger-cannot test per route for exactly that reason.
+
+**A one-off assignment is a rule with no weekday plus one `added` exception.**
+That is the model's own way of saying "just this day", so the write is two
+calls the client makes rather than a mode the server infers, and a one-off and
+a skipped recurrence stay the same kind of object. It is why the create
+endpoint deliberately does not require a weekday to be set: a rule that matches
+no day on its own is not a broken rule.
+
+**Skip and un-skip are one call.** `POST /rules/{id}/exceptions` upserts on
+`(rule_id, date)`, because `(rule_id, date)` is unique and a date can only be
+added or removed. A 409 there would force a calendar to delete before it could
+change its mind, which is a round trip and a race for no gain.
+
+**A PATCH cannot move a rule to another tracker.** `tracker_id` is not in the
+write model at all, so a body carrying one is ignored rather than obeyed —
+tested, because that field is the only way a rule could cross a feed boundary.
+
+**The prefilled create form could not be submitted.** `entity-form` disables
+Save until something is dirty, which is right for an edit and wrong for a form
+whose every field is already the answer: the rule editor opens with the
+tracker, the day, the trip and its window filled in, and the common case is
+pressing Assign immediately. Hence `allowPristine`, opted into by that one
+form.
+
+**The window defaults to the trip's own schedule.** First departure to last
+arrival, straight out of `stop_times` with `parseGtfsClock`, so an overnight
+trip prefills as 23:00 to 25:10 and needs no thought. The times are typed and
+displayed in service-day hours throughout; there is no "next day" checkbox,
+because that would be a second representation of a number the column already
+holds.
+
+**The picker runs before the form on a create, and not at all on an edit.** A
+modal that opens a modal to change one field is worse than a text input, and an
+edit is nearly always about the days or the times. So creation goes
+picker-then-form, and the form's `trip_id` stays a plain field for the rare
+repoint.
+
+**Service dates are strings end to end.** `service-date.ts` does the
+arithmetic on `YYYY-MM-DD` and only ever builds a `Date` at **UTC noon**: a
+date built at UTC midnight is the previous day everywhere west of Greenwich the
+moment anything reads it locally, which is how a calendar grid ends up a day
+out for half the world. `today()` is the only function that asks what time it
+is, and it asks in the feed's zone.
+
+**The map needed a list, not a shape.** `MapController.tripShape` became
+`tripShapes`, and `showTrips` draws a whole day's assigned trips on the source
+the trip page already uses. It refits the camera only when the *set* of trip
+ids changes, because the calendar re-reads its window after every write and a
+refit on each one would fight whoever is looking at the map. It runs after
+`focus`, which is what clears the previous page's geometry.
+
+**Phase 8 left a dead link on the trip page.** "Trackers on this trip" built a
+`tracker` PageState from `VehiclePosition.key`, which stopped being the tracker
+id when `key` became tracker-plus-trip-instance. Every one of those links
+opened a "not found" tracker page. It is `trackerId` now, and the section is
+retitled "Reporting this trip" so it reads as the opposite of the assignments
+section below it.
+
+**Rules are fetched lazily and feed-wide.** Not on selection like the trackers:
+only the calendar, a trip page and a tracker page want them, and `rules: null`
+is deliberately distinguishable from an empty map, so a trip page never says
+"no tracker is assigned to this" while the request is still out. The expansion
+is fetched per visible grid, padding days included, and re-fetched only when
+the grid moves outside the window already held, so stepping between days in one
+month costs nothing.
+
+**`GET /trackers/{id}/rules` is built and unused.** The client reads the
+feed-wide list everywhere, because the calendar, the trip page and the tracker
+page all want the same rows and the session holds one copy. The per-tracker
+route stays: it is in the planned API surface, it is the natural read next to
+the create route it shares a path with, and it is scoped and tested like the
+rest.
 
 ---
 
