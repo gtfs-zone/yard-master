@@ -13,7 +13,7 @@ pnpm install
 pnpm dev          # :8090, proxies /api to a local cafe-car admin app on :8001
 pnpm typecheck    # the gate before any commit
 pnpm build
-pnpm vendor:check # diff vendored files against coloring-book / test-track
+pnpm vendor:check # diff vendored files against test-track
 ```
 
 ## Architecture
@@ -47,9 +47,18 @@ objects (feeds, trackers, rules, alerts, members) and never the schedule.
 - A 302 or non-JSON response to an XHR means the oauth2-proxy session expired.
   Do a full page reload so the browser can follow the redirect chain. Never
   parse it as an error payload.
-- Vendored files carry their banner and a `VENDORED.md` row. Do not edit a
-  `verbatim` file: change it upstream and re-vendor, or promote it to `modified`
-  with an `@changes` list.
+- Vendored files carry their banner and a `VENDORED.md` row. test-track is the
+  upstream; `modal-utils.ts` is the one exception and names coloring-book. Do not
+  edit a `verbatim` file: change it upstream and re-vendor, promote it to
+  `modified` with an `@changes` list, or promote it to `adopted` if this repo has
+  taken it over for good.
+- A file taken out of test-track's tree keeps test-track's own banner underneath
+  ours. `vendor-check` strips the banner on the local side only, so deleting the
+  inner one reports DRIFT.
+- A tracker with a fix is a `VehiclePosition` in `FeedSession.vehicles`, keyed by
+  nickname, on the one vehicle map layer. There is no separate tracker layer: an
+  unassigned tracker draws in `CONFIG.VEHICLE_UNMATCHED_COLOR` and is counted in
+  `issues.vehiclesUnmatched`.
 - All magic numbers live in `src/config.ts`.
 
 ## Related Repos
@@ -63,8 +72,8 @@ objects (feeds, trackers, rules, alerts, members) and never the schedule.
 | railroad-club | Shared Python library for GTFS types and utilities | https://git.kcfam.us/gtfs.zone/railroad-club |
 | music-student | Orchestration repo for deployments and infra | https://git.kcfam.us/gtfs.zone/music-student |
 | landing-zone | Static marketing/status site | https://git.kcfam.us/gtfs.zone/landing-zone |
-| test-track | GTFS-RT visualizer, vendor source for realtime modules | https://git.kcfam.us/gtfs.zone/test-track |
-| coloring-book | GTFS editor, vendor source for map and shell modules | https://git.kcfam.us/gtfs.zone/coloring-book |
+| test-track | GTFS-RT visualizer, and this repo's vendor upstream | https://git.kcfam.us/gtfs.zone/test-track |
+| coloring-book | GTFS editor, where most vendored modules were born; reached through test-track, not vendored from directly | https://git.kcfam.us/gtfs.zone/coloring-book |
 
 ## Forgejo Workflow
 

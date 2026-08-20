@@ -33,8 +33,9 @@ held.
 | Recurrence | GTFS-shaped: `start_date`/`end_date` on `TrackerRule` plus a `TrackerRuleException` table | It is `calendar.txt` + `calendar_dates.txt`; queryable in SQL, no new dependency, matches how every worker already thinks |
 | Saving | Explicit Save per properties page | Validation errors need somewhere to land, and this admin controls a public feed |
 | Live status | SSE, one channel per feed | Plain HTTP through oauth2-proxy, browser reconnect is free, extends to live tracker dots |
-| Vendoring | Two upstreams, `Source repo` column in `VENDORED.md` | The realtime modules only exist in test-track; waiting to push them into coloring-book would stall this repo on unrelated work |
+| Vendoring | One upstream, test-track, plus an `adopted` tier | test-track had already ported the shell modules from coloring-book's editor model to the `GTFSStatic` model this repo shares, so re-deriving them from coloring-book would reproduce test-track's files by hand |
 | Feed picker | Purpose-built small switcher, not vendored `load-modal.ts` | The Load modal is examples, atlas, uploads and CORS proxying, none of which apply to "pick one of your own feeds" |
+| Tracker positions | Trackers are `VehiclePosition`s on the existing vehicle layer | A tracker is a superset of a vehicle, and the map already speaks that vocabulary. One with no resolvable trip renders in the unmatched colour, so every tracker with a fix is visible and diagnosable, and `layer-manager` stays verbatim |
 | Tracker ids | Never in the URL hash | `Tracker.id` is the Traccar provisioning credential; a pasted link must not leak a device secret |
 | `/account` | Stays server-rendered in cafe-car | Rare, security-sensitive flow with an identity-merge confirmation. Porting it buys nothing and risks the takeover primitive |
 
@@ -69,6 +70,24 @@ Feed (name, static URL, load status, owner)
 Managed objects sit above a divider, GTFS objects below it. The GTFS half comes
 from the in-browser feed, the managed half from the API, and a Trip page shows
 both: its schedule from the zip, its tracker assignments from the API.
+
+### The `FeedSession` contract
+
+`src/modules/feed-session.ts` turned out to be the seam the whole frontend hangs
+on: `render-utils`, `search-entries`, `alerts` and `rt-index` all take a
+`FeedSession`, so its surface is what lets those modules stay verbatim. It is
+yard-master's own file, `adopted` rather than vendored, and the names below are
+test-track's on purpose. They do not change as later phases fill them in.
+
+| Member | Filled by | Holds |
+|---|---|---|
+| `staticFeed`, `staticError`, `staticLoadedAt` | phase 1, done | The parsed zip, or why it could not be parsed |
+| the selected feed and its API objects | phase 3 | Trackers, alerts, members, load status |
+| `vehicles` | phases 6 and 7 | One `VehiclePosition` per tracker fix, keyed by nickname |
+| `alerts`, `tripUpdates` | phase 6 | Live payloads off the event stream |
+
+Anything a phase wants to add goes on this object rather than into a parallel
+store, and anything a vendored module reads keeps the name it reads it by.
 
 ### API surface
 
@@ -118,6 +137,13 @@ All paths are relative to `/api`, all responses JSON, all scoped through
 - **`Feed` relationships.** The old SQLAdmin rule about `form_excluded_columns`
   dies with SQLAdmin, but the underlying trap does not: serializers must select
   explicitly rather than walking relationships on a detached instance.
+- **The `verbatim` set shrinks, by design.** Every phase takes another vendored
+  file over. `vendor:check` is a contract on the files nobody has claimed yet,
+  not a number to preserve: promote a file to `adopted` rather than contorting
+  feature work to keep a row green.
+- **Two banners, not one.** `vendor-check` strips the banner on the local side
+  only, so a file taken out of test-track's tree has to *keep* test-track's own
+  banner underneath yard-master's. Deleting it is what makes a row report DRIFT.
 
 ---
 
@@ -132,15 +158,17 @@ Vendoring first, before any feature, is deliberate. Every later phase renders
 into this furniture, and discovering in phase 5 that the panel resizer or the
 theme controller needs adapting is far more expensive than finding it now.
 
-From **coloring-book**: `styles/main.css`, `notification-system`,
-`feed-progress-indicator`, `theme-controller`, `panel-resizer`, `bottom-sheet`,
-`basemap-styles`, `basemap-control`, `layer-manager`, `stop-layer-style`,
-`route-sort`, `utils/route-colors`, `utils/theme-color`, `types/page-state`,
-`page-state-manager`, `search-controller`, `render-utils`, `modal-utils`,
-`utils/issue-card`, `about-links`.
-
-From **test-track**: `gtfs-static.ts`, `feed-download`, `feed-time`,
-`map-controller`, `gtfs-rt`, `rt-index`, `alerts`, `search-entries`.
+The split this phase set out with, written down here as what was assumed rather
+than what happened. **From coloring-book**: `styles/main.css`,
+`notification-system`, `feed-progress-indicator`, `theme-controller`,
+`panel-resizer`, `bottom-sheet`, `basemap-styles`, `basemap-control`,
+`layer-manager`, `stop-layer-style`, `route-sort`, `utils/route-colors`,
+`utils/theme-color`, `types/page-state`, `page-state-manager`,
+`search-controller`, `render-utils`, `modal-utils`, `utils/issue-card`,
+`about-links`. **From test-track**: `gtfs-static.ts`, `feed-download`,
+`feed-time`, `map-controller`, `gtfs-rt`, `rt-index`, `alerts`,
+`search-entries`. Both lists are right about *which* files; see below for where
+they actually came from.
 
 `page-state.ts` is `modified` from the start: the variants here are
 `home | feed | tracker | assignments | alert | route | stop | trip | people`,
@@ -175,16 +203,27 @@ for the realtime modules, does not survive contact with the import graph.
 test-track already records as `modified` from coloring-book, and every one of
 those modifications is the adaptation from coloring-book's editor model to the
 `GTFSStatic` model yard-master shares. Vendoring coloring-book's copy would
-mean re-deriving test-track's file by hand. Those rows therefore name
-`test-track` at its HEAD. Where test-track records a file as `verbatim` the
-bytes are identical either way, so those rows name `coloring-book` and carry
-test-track's recorded SHA, which is what keeps the two-upstream story real:
-twelve rows genuinely resolve against coloring-book. `vendor:check` passes on
-all 26 verbatim entries with no staleness warnings.
+mean re-deriving test-track's file by hand.
 
-A file taken out of test-track's tree carries test-track's own vendor banner.
-`stripBanner` removes one leading banner, so the second one has to be deleted
-by hand or every such row reports DRIFT.
+The pass first kept the two-upstream story by pointing those eight rows at
+test-track and leaving the other twelve on coloring-book. That was retired
+immediately after: twelve of the thirteen were verified byte-identical in
+test-track at `56f120a`, so the `Source repo` column was a constant dressed as
+a variable.
+**test-track is now the one upstream**, with `modal-utils.ts` the single
+exception, since coloring-book's copy is a superset of test-track's older one
+and `notification-system.ts` imports `renderCloseIcon` from the newer form. The
+coloring-book origin of a file is recorded in its note rather than in the
+column. `VENDORED.md` gained a third status, `adopted`, for files yard-master
+owns outright, so `verbatim` stays a contract that is enforced instead of a set
+that drains as the phases land.
+
+A file taken out of test-track's tree carries test-track's own vendor banner,
+and that banner has to be **kept**, not deleted. `vendor-check` strips the
+banner on the local side only, so the local file is yard-master's banner plus
+test-track's file entire. Deleting the inner banner is what makes a row report
+DRIFT. It also keeps the provenance chain in the file: ours names test-track,
+test-track's names coloring-book.
 
 **Three more files had to be modified, not just `page-state.ts`.** Changing the
 variant union breaks every consumer that switches on it: `page-state-manager`
@@ -201,9 +240,10 @@ vocabulary and unrelated to the page variant.
 there is no way to vendor them and keep `pnpm typecheck` green without one. The
 phase 1 version owns the static half only: it downloads and parses the zip with
 progress and cancel, and exposes the `staticFeed` / `vehicles` / `alerts` /
-`tripUpdates` shape those four modules read. It is yard-master's own file, not
-vendored. Phase 3 adds the API objects and the feed switcher; phase 6 fills the
-live maps from the event stream.
+`tripUpdates` shape those four modules read. It is yard-master's own file, carried as the
+one `adopted` row so the seam is inventoried rather than invisible, and its
+surface is written down as the `FeedSession` contract above. Phase 3 adds the
+API objects and the feed switcher; phases 6 and 7 fill the live maps.
 
 **Two dependency notes.** `gtfs-realtime-bindings` is a real dependency of this
 repo now, pulled in by `gtfs-rt.ts`; yard-master never polls a `.pb`, but the
@@ -213,7 +253,7 @@ devDependency: test-track gets the `GeoJSON` namespace transitively through
 maplibre's dependency graph, and on a fresh install that resolved differently
 here, so `layer-manager` would not compile without it.
 
-**The search priorities were rebucketed now rather than in phase 4**, since
+**The search priorities were rebucketed now rather than in phase 4b**, since
 `search-entries` was being modified anyway: trackers 0, stations 1, routes 2,
 plain stops 3.
 
@@ -263,52 +303,84 @@ The app becomes navigable. A feed switcher modal lists your feeds from
 a progress bar, and the hash carries both the feed and the focused object so any
 page is linkable.
 
-Hash shape: `#feed=<feed_name>&type=tracker&tracker=<nickname>`. The feed is
-named by `feed_name`, not by id, so a link stays readable and survives nothing.
-Trackers are named by nickname, never by id, per the standing gotcha.
+Hash shape: `#feed=<feed_name>&type=tracker&tracker=<nickname>`. Settled in
+phase 1: the codec already carries the explicit `type` param, because `feed`,
+`assignments` and `people` name no object and cannot be told apart by the
+presence of an object key. The feed is named by `feed_name`, not by id, so a
+link stays readable. Trackers are named by nickname, never by id, per the
+standing gotcha.
 
 - [ ] `api-client.ts`: typed `get`/`post`/`patch`/`del`, the CSRF header on
       every mutation, and the redirect/non-JSON detection that triggers a reload
 - [ ] `feed-switcher.ts`: your feeds, a New feed form (name + static URL), and
       an admin-only "show all feeds" toggle, off by default
-- [ ] `feed-session.ts`: owns the selected feed, its API objects and its parsed
-      GTFS; re-dispatches change events the way test-track's does
+- [ ] Extend `feed-session.ts` with the selected feed and its API objects; the
+      static half and the change-event dispatch landed in phase 1. Follow the
+      `FeedSession` contract above rather than adding a parallel store
 - [ ] `app-state.ts` + `page-state-manager` wiring, breadcrumbs, hash sync
 - [ ] Selecting a feed loads the zip through `feed-download` with progress and
       cancel; the managed half of the tree is usable before it finishes
 - [ ] `POST /api/feeds` and `POST /api/feeds/{id}/reload` in cafe-car
-- [ ] Map renders the feed's stops and routes; empty panel still
+- [ ] Map renders the feed's stops and routes; the panel is phase 4a's, pointed
+      at a real feed instead of the hardcoded URL
 
 **Gotchas.** Only `PageStateManager` may write the hash, which is what keeps its
-`suppressHashUpdate` guard honest. A newly created feed has no
+`suppressHashUpdate` guard honest. Deleting `CONFIG.DEV_FEED_URL` is part of
+this phase, not a later cleanup: two ways to choose a feed is one too many. A newly created feed has no
 `gtfs_static_feed` row at all, so every status reader must handle null rather
 than assuming `pending`. A feed whose `static_feed_url` is unreachable must
 leave the managed half of the app fully usable.
 
 ---
 
-## Phase 4: the browse tree and read-only properties pages
+## Phase 4a: the browse tree and the GTFS pages
 
-Fill the panel. One dispatcher over `PageState`, one module per page, exactly as
-test-track's `panel-renderer.ts` does it, including the scroll-restore and open
-`<details>` tracking that make a re-render survivable.
+Fill the panel with the half that needs no API. One dispatcher over `PageState`,
+one module per page, exactly as test-track's `panel-renderer.ts` does it,
+including the scroll-restore and open `<details>` tracking that make a re-render
+survivable.
+
+`panel-renderer.ts` is the largest unvendored piece left: phase 1 vendored
+`render-utils.ts`, which is the shared furniture, but not the dispatcher above
+it. Nothing here talks to cafe-car, so this phase runs against a hardcoded
+`static_feed_url` in `config.ts` and can proceed before or alongside phase 2.
+Doing it early derisks the whole vendored panel and map stack against a real
+feed, months before the backend is in the way.
 
 - [ ] `panel-renderer.ts` dispatcher plus shared furniture (breadcrumbs, headers)
+- [ ] `CONFIG.DEV_FEED_URL`: one hardcoded feed, loaded on boot, deleted in phase 3
+- [ ] `pages/route-page.ts`, `pages/stop-page.ts`, `pages/trip-page.ts` from the
+      in-browser GTFS
+- [ ] Tree navigation over the GTFS half: section headers, counts, click to focus
+- [ ] Map and panel stay in sync: focusing an object moves the camera, clicking
+      the map focuses the object
+- [ ] Search box via `search-entries`, GTFS entries only
+
+**Gotchas.** The panel re-renders on every live event, so nothing may hold state
+in the DOM that is not also in the model. Escape everything: `trip_id`,
+`stop_name` and `route_long_name` are all free text from a stranger's zip.
+`map-controller` currently treats `trip` as a variant that clears focus without
+moving the camera; rendering a trip's shape is this phase's job and the
+`@changes` list has to be updated when it changes.
+
+---
+
+## Phase 4b: the managed pages
+
+The other half of the panel, once phase 3 has a feed and an API to read.
+
 - [ ] `pages/feed-page.ts`: properties, load status, counts, deep links to viz
       and the editor
 - [ ] `pages/tracker-page.ts`, `pages/alert-page.ts`, `pages/people-page.ts`
-- [ ] `pages/route-page.ts`, `pages/stop-page.ts`, `pages/trip-page.ts` from the
-      in-browser GTFS
-- [ ] Tree navigation: section headers, counts, click to focus
-- [ ] Map and panel stay in sync: focusing an object moves the camera, clicking
-      the map focuses the object
-- [ ] Search box over both halves via `search-entries`, with managed objects
-      bucketed ahead of GTFS objects by `priority`
+- [ ] The managed/GTFS divider in the tree, managed objects above it
+- [ ] Search covers both halves, managed objects bucketed ahead of GTFS objects
+      by `priority` (already rebucketed in `search-entries` in phase 1)
 
-**Gotchas.** The panel re-renders on every live event, so nothing may hold state
-in the DOM that is not also in the model. Escape everything: `nickname`,
-`header_text` and `trip_id` are all free text, and the old admin has a rule
-about this because it was a real stored-XSS vector.
+**Gotchas.** Escape everything here too, and for a sharper reason: `nickname`
+and `header_text` are typed by a person with write access to the feed, and the
+old admin has a rule about this because it was a real stored-XSS vector.
+`Tracker.id` renders on the tracker page and nowhere else, never in a
+breadcrumb, a title or a link.
 
 ---
 
@@ -354,6 +426,13 @@ building either way, because tracker liveness rides on it in phase 7.
       close on feed change
 - [ ] Load status card updates live; the Reload button reflects in-flight state
 - [ ] A failed load surfaces `error_message` and the `next_retry_at` countdown
+- [ ] Position events on the channel are GTFS-RT-shaped JSON, so they land in
+      `FeedSession.vehicles` as `VehiclePosition`s with no translation layer
+- [ ] Measure the built bundle: `gtfs-rt.ts` imports `transit_realtime` and
+      calls `FeedMessage.decode`, but yard-master never polls a `.pb` and the
+      only runtime import from that module anywhere is `presentNumber`. If
+      protobufjs survives tree-shaking, split a types-only module and drop the
+      `gtfs-realtime-bindings` dependency
 
 **Gotchas.** SSE through oauth2-proxy and Traefik needs response buffering off,
 or events arrive in clumps at the end. The session can expire mid-stream: an
@@ -372,18 +451,37 @@ keyspace and returns positions keyed by tracker. It is authenticated and scoped;
 the public `.pb` deliberately labels vehicles by `nickname` and must stay that
 way.
 
+There is no separate tracker layer. A tracker with a fix enters
+`FeedSession.vehicles` as a `VehiclePosition` and draws on the existing vehicle
+layer, whether or not it resolves to a trip. `LayerManager.buildVehicles` already
+falls back to `CONFIG.VEHICLE_UNMATCHED_COLOR` when neither `routeId` nor
+`tripId` resolves, and `vehicles-dot` paints `['get', 'color']`, so an
+unassigned tracker is already a visually distinct dot. It already counts those
+into `issues.vehiclesUnmatched`, which the vendored `issue-card` renders, so
+"three trackers are not assigned to anything" is a warning card for free. Every
+tracker is on the map all the time, which is the point: seeing which ones are
+idle is how you decide what to assign. `layer-manager.ts` and `issue-card.ts`
+stay `verbatim` through this phase.
+
 - [ ] The positions endpoint, scoped, with the 60s TTL meaning "present is fresh"
-- [ ] Tracker positions pushed on the phase 6 channel
-- [ ] A distinct map layer for trackers, separate from RT vehicles, so a tracker
-      with no fix is still listed and visibly absent from the map
-- [ ] Liveness dot in the tracker list: reporting, last seen, never seen
+- [ ] Tracker positions pushed on the phase 6 channel, into `FeedSession.vehicles`
+- [ ] Reword the unmatched issue-card row: here it means "unassigned", the normal
+      state of an idle tracker, not test-track's "the feed is lying to you"
+- [ ] Liveness dot in the tracker list: reporting, last seen, never seen. A
+      tracker with no fix has no coordinates and so is panel-only, listed and
+      correctly absent from the map
 - [ ] Tracker page: current position, assigned trip, a Google Maps link, camera
       follow while focused
 - [ ] Feed page shows the whole fleet at once
 
-**Gotchas.** A tracker can report several concurrent vehicles, one Redis key per
-`trip_id[:start_date]`; the panel must show all of them rather than the first
-one the scan returns. Never log a position payload with its `tracker_id`.
+**Gotchas.** `VehiclePosition.key` is the map feature id, the `vehicles` map key
+and the click identity, so it must be the **nickname**, never `Tracker.id`, and
+`vehicleId` with it. A tracker can report several concurrent vehicles, one Redis
+key per `trip_id[:start_date]`; those collide on a bare nickname, so `key` is the
+nickname plus the trip discriminator, and `issues.vehiclesDuplicateKeys` will
+flag it if that is got wrong. The panel must show all of a tracker's vehicles
+rather than the first one the scan returns. Never log a position payload with
+its `tracker_id`.
 
 ---
 
