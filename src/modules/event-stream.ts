@@ -27,11 +27,18 @@
  */
 
 import { CONFIG } from '../config';
-import type { FeedEvent, LoadStatus } from '../types/api';
+import type { FeedEvent, LoadEvent, LoadStatus, PositionEvent } from '../types/api';
+import type { VehiclePosition } from '../map-controller';
 
 export interface FeedEventHandlers {
   /** The feed's load status, current state first and then every change. */
   onLoad: (feedId: number, load: LoadStatus | null) => void;
+  /**
+   * One tracker's new fix. Pushed as it lands, one event per fix, so a fleet
+   * of fifty reporting every ten seconds is five events a second and each one
+   * replaces exactly one vehicle rather than the whole map.
+   */
+  onPosition: (feedId: number, vehicle: VehiclePosition) => void;
 }
 
 export class FeedEventStream {
@@ -103,7 +110,9 @@ export class FeedEventStream {
     // An event type this build does not know about is dropped rather than
     // reported: the channel is deliberately open-ended.
     if (event.type === 'load') {
-      this.handlers.onLoad(feedId, (event as { load: LoadStatus | null }).load);
+      this.handlers.onLoad(feedId, (event as LoadEvent).load);
+    } else if (event.type === 'position') {
+      this.handlers.onPosition(feedId, (event as PositionEvent).vehicle);
     }
   }
 

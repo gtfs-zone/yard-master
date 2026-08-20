@@ -20,10 +20,12 @@
 
 import { CONFIG } from '../../config';
 import type { Feed } from '../../types/api';
+import type { MapDataIssues } from '../layer-manager';
 import type { RenderContext } from '../render-utils';
 import { escHtml, prop, propList, section } from '../render-utils';
-import { actionButton, isoWithAge, loadStatusBadge } from '../managed-render';
+import { actionButton, isoWithAge, loadStatusBadge, trackerLiveness } from '../managed-render';
 import { resolveRealtimeUrl } from '../feed-url-resolve';
+import { renderIssueCard } from '../../utils/issue-card';
 
 /**
  * An external link, shown as the URL itself so it can be read and copied.
@@ -114,6 +116,91 @@ function renderContents(ctx: RenderContext): string {
   );
 }
 
+/**
+ * The whole fleet at once: how many trackers are reporting, how many have gone
+ * quiet, and how many have said nothing.
+ *
+ * This is the feed-wide version of the badge on each tracker row, and the
+ * reason it is on this page: "three of my eleven trackers are not reporting" is
+ * a question about the feed, and answering it by scrolling a list is how it
+ * goes unnoticed.
+ */
+function renderFleet(ctx: RenderContext): string {
+  const session = ctx.session;
+  if (session.trackers.size === 0) return '';
+
+  let reporting = 0;
+  let quiet = 0;
+  let silent = 0;
+  for (const tracker of session.trackers.values()) {
+    const liveness = trackerLiveness(session, tracker.id);
+    if (liveness.state === 'reporting') reporting += 1;
+    else if (liveness.state === 'quiet') quiet += 1;
+    else silent += 1;
+  }
+
+  return section(
+    'Fleet',
+    `${propList([
+      prop('Reporting', String(reporting)),
+      // Only shown once it has happened: before then it is always zero, and a
+      // permanent zero reads like a claim that nothing ever goes quiet.
+      quiet ? prop('Went quiet', String(quiet)) : '',
+      prop('No fix', String(silent)),
+      // Not the same as the tracker count: one tracker can be carrying several.
+      reporting && session.vehicles.size !== reporting
+        ? prop('Vehicles', String(session.vehicles.size))
+        : '',
+    ])}
+    <p class="text-xs opacity-50">A position expires ${Math.round(
+      CONFIG.TRACKER_STALE_MS / 1000
+    )} seconds after it is posted, so "reporting" means a fix arrived within the last
+    minute. Nothing here is remembered across a reload.</p>`
+  );
+}
+
+/**
+ * What the map could not draw, as the vendored warning card.
+ *
+ * The unmatched row is reworded rather than reused as upstream words it. In
+ * test-track an unmatched vehicle means somebody else's feed is lying to you:
+ * it claims a route the schedule does not contain. Here it is usually the
+ * ordinary state of an idle tracker, which is reporting a position and is not
+ * assigned to anything, so the wording has to lead with that and mention the
+ * feed problem second.
+ */
+function renderIssues(ctx: RenderContext, issues: MapDataIssues): string {
+  // Only meaningful once the map has something to have drawn: before the zip
+  // parses every vehicle is unmatched by definition.
+  if (!ctx.session.staticFeed) return '';
+
+  return renderIssueCard('Not drawn', [
+    {
+      label: 'Vehicles not on a known trip',
+      count: issues.vehiclesUnmatched,
+      note: `Reporting a position, but not running a trip this schedule describes. That is the
+             normal state of an idle tracker; it also covers a tracker assigned to a trip the
+             loaded feed no longer has. They draw in grey on the map.`,
+    },
+    {
+      label: 'Stops with no stop_id',
+      count: issues.stopsMissingId,
+      note: 'Unaddressable, so they cannot be drawn, linked to or focused.',
+    },
+    {
+      label: 'Stops with no coordinates',
+      count: issues.stopsMissingCoords,
+      note: 'A blank or unparseable stop_lat/stop_lon. They are in the feed but not on the map.',
+    },
+    {
+      label: 'Vehicles sharing a map feature',
+      count: issues.vehiclesDuplicateKeys,
+      note: `Must be zero. A non-zero count means two vehicles collapsed onto one dot, which is
+             a bug in how cafe-car derives a vehicle key, not a problem with this feed.`,
+    },
+  ]);
+}
+
 /** The managed objects hanging off the feed, as counts with a way in. */
 function renderManaged(ctx: RenderContext): string {
   const session = ctx.session;
@@ -174,7 +261,7 @@ function renderActions(feed: Feed): string {
   </div>`;
 }
 
-export function renderFeedPage(ctx: RenderContext): string {
+export function renderFeedPage(ctx: RenderContext, issues: MapDataIssues): string {
   const feed = ctx.session.feed;
   if (!feed) return '<p class="text-sm opacity-60">No feed is selected.</p>';
 
@@ -208,7 +295,9 @@ export function renderFeedPage(ctx: RenderContext): string {
       )}
 
       ${renderManaged(ctx)}
+      ${renderFleet(ctx)}
       ${renderContents(ctx)}
+      ${renderIssues(ctx, issues)}
       ${renderOpenIn(feed)}
     </div>`;
 }

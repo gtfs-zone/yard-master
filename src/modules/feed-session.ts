@@ -18,11 +18,22 @@
  * the zip finishes downloading, or never, if `static_feed_url` is unreachable.
  * Every reader has to cope with one without the other.
  *
- * Phase 8 fills `vehicles` from the event stream. That name does not change: a
- * tracker with a fix is a `VehiclePosition` here, keyed by `Tracker.id`, and
- * an unassigned one is drawn in `CONFIG.VEHICLE_UNMATCHED_COLOR` rather than on
- * a layer of its own.
+ * `vehicles` is filled from two places that must be indistinguishable: the
+ * whole live fleet, fetched once on selection, and every fix after that,
+ * pushed one at a time down the event channel. cafe-car builds both with one
+ * function, so neither this class nor anything reading it needs to know which
+ * a vehicle came through.
+ *
+ * **Nothing tells this app a vehicle has gone away.** A position record expires
+ * out of Redis after 60s and an expiry is not an event, so a vehicle that is
+ * only ever added would sit on the map forever, in the last place it was seen,
+ * looking exactly like one that is still reporting. `pruneVehicles` is what
+ * makes presence mean the same thing here as it does on the server, and it
+ * counts from the moment a fix *arrived* rather than from the timestamp inside
+ * it: the timestamp is the producer's clock, and a phone with a skewed one
+ * would otherwise be either immortal or invisible.
  */
+import { CONFIG } from '../config';
 import { GTFSStatic } from '../gtfs-static';
 import type { AlertRecord, TripUpdate } from '../gtfs-rt';
 import type {
@@ -75,9 +86,29 @@ export class FeedSession extends EventTarget {
   staticError: string | null = null;
   staticLoadedAt: number | null = null;
 
-  // Live payloads, keyed for lookup by a focused object without waiting for
-  // the next push. Replaced wholesale, never mutated in place.
+  /**
+   * Every vehicle currently reporting, keyed by `VehiclePosition.key` — the
+   * surrogate `Tracker.id` plus the trip instance, which is what the map
+   * feature is keyed by too.
+   *
+   * Not keyed by tracker: one tracker can be running several concurrent
+   * vehicles, and keying by tracker would silently keep only the last one to
+   * arrive. `vehiclesFor` is how a tracker's vehicles are asked for.
+   */
   vehicles = new Map<string, VehiclePosition>();
+
+  /** When each vehicle's latest fix reached this browser, by the same key. */
+  private vehicleArrivals = new Map<string, number>();
+
+  /**
+   * When each tracker was last reporting, by `Tracker.id`, and kept after its
+   * vehicles expire. This is the whole "last seen 4m ago" the list shows: the
+   * server has no such record, because a fix that has expired is simply gone
+   * from Redis, so a tracker's history only exists for as long as this session
+   * has been watching it.
+   */
+  private trackerArrivals = new Map<string, number>();
+
   alerts = new Map<string, AlertRecord>();
   tripUpdates: TripUpdate[] = [];
 
@@ -115,6 +146,84 @@ export class FeedSession extends EventTarget {
     if (!this.feed) return;
     this.feed = { ...this.feed, load };
     this.dispatchEvent(new CustomEvent('change'));
+  }
+
+  /**
+   * Replace the whole live fleet, from `GET /feeds/{id}/tracker-positions`.
+   *
+   * Wholesale, so a vehicle that stopped reporting between two calls is gone
+   * rather than lingering. Arrival times are stamped now: the fetch is what
+   * proved these are live, whatever the producer's clock says.
+   */
+  setVehicles(positions: VehiclePosition[]): void {
+    const now = Date.now();
+    this.vehicles = new Map(positions.map((v) => [v.key, v]));
+    this.vehicleArrivals = new Map(positions.map((v) => [v.key, now]));
+    for (const v of positions) this.trackerArrivals.set(v.trackerId, now);
+    this.dispatchEvent(new CustomEvent('vehicles'));
+  }
+
+  /**
+   * Apply one pushed fix, replacing that vehicle and leaving the rest alone.
+   *
+   * A `Map` set rather than a rebuilt map: a fleet of fifty reporting every
+   * ten seconds is five of these a second, and the map layer diffs by feature
+   * id, so replacing one entry is the whole update.
+   */
+  applyVehicle(vehicle: VehiclePosition): void {
+    const now = Date.now();
+    this.vehicles.set(vehicle.key, vehicle);
+    this.vehicleArrivals.set(vehicle.key, now);
+    this.trackerArrivals.set(vehicle.trackerId, now);
+    this.dispatchEvent(new CustomEvent('vehicles'));
+  }
+
+  /**
+   * Drop vehicles whose last fix is older than the server's own TTL, and say
+   * whether anything went.
+   *
+   * The caller decides how often to ask; nothing here holds a timer, so a
+   * session that is not being ticked simply stops expiring rather than keeping
+   * one alive against a feed nobody is looking at.
+   */
+  pruneVehicles(): boolean {
+    const cutoff = Date.now() - CONFIG.TRACKER_STALE_MS;
+    let dropped = false;
+    for (const [key, at] of this.vehicleArrivals) {
+      if (at > cutoff) continue;
+      this.vehicles.delete(key);
+      this.vehicleArrivals.delete(key);
+      dropped = true;
+    }
+    if (dropped) this.dispatchEvent(new CustomEvent('vehicles'));
+    return dropped;
+  }
+
+  /**
+   * One tracker's vehicles, newest fix first.
+   *
+   * Usually zero or one. A producer running many vehicles under a single
+   * credential (a whole fleet on one Traccar device) returns all of them, and
+   * the tracker page lists all of them, because showing the first one the scan
+   * happened to return would silently hide the rest.
+   */
+  vehiclesFor(trackerId: string): VehiclePosition[] {
+    const mine: VehiclePosition[] = [];
+    for (const v of this.vehicles.values()) {
+      if (v.trackerId === trackerId) mine.push(v);
+    }
+    return mine.sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
+  }
+
+  /**
+   * When this tracker last had a fix, in epoch milliseconds, or null if it has
+   * not had one while this session was watching. Not "never reported": a
+   * tracker that went quiet before the app was opened is indistinguishable
+   * from one that has never reported at all, and claiming otherwise would be
+   * inventing a history the server does not keep.
+   */
+  lastSeen(trackerId: string): number | null {
+    return this.trackerArrivals.get(trackerId) ?? null;
   }
 
   /** Replace the tracker list. Wholesale, so a deleted tracker disappears. */
@@ -255,6 +364,8 @@ export class FeedSession extends EventTarget {
     this.staticError = null;
     this.staticLoadedAt = null;
     this.vehicles = new Map();
+    this.vehicleArrivals = new Map();
+    this.trackerArrivals = new Map();
     this.alerts = new Map();
     this.tripUpdates = [];
   }

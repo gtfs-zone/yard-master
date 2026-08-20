@@ -18,6 +18,8 @@
  * typed as `string` rather than silently revived into `Date`.
  */
 
+import type { VehiclePosition } from '../map-controller';
+
 export interface Me {
   user_id: number;
   email: string | null;
@@ -268,12 +270,15 @@ export interface LoadEvent {
 
 /**
  * One vehicle's current fix, already in the camelCase shape the map reads, so
- * it goes into `FeedSession.vehicles` without a translation layer. Published
- * from phase 8 onwards; the client tolerates one before then by ignoring it.
+ * it goes into `FeedSession.vehicles` without a translation layer.
+ *
+ * The same object `GET /feeds/{id}/tracker-positions` returns, built by one
+ * function in cafe-car's `vehicle_payload.py`. Which of the two a vehicle
+ * arrived through is not something anything downstream may be able to tell.
  */
 export interface PositionEvent {
   type: 'position';
-  vehicle: unknown;
+  vehicle: VehiclePosition;
 }
 
 /**

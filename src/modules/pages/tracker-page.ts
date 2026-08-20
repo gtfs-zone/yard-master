@@ -1,6 +1,6 @@
 /**
  * The tracker page: what a tracker is called, what provisions it, and where it
- * last reported from.
+ * is reporting from right now.
  *
  * yard-master's own page. test-track's vehicle page is the nearest thing, but
  * it describes an entity in somebody else's feed; a tracker is a row this app
@@ -21,7 +21,7 @@ import type { Tracker } from '../../types/api';
 import type { PageState } from '../../types/page-state';
 import type { VehiclePosition } from '../../map-controller';
 import type { RenderContext } from '../render-utils';
-import { actionButton } from '../managed-render';
+import { actionButton, livenessBadge, trackerLiveness } from '../managed-render';
 import {
   VEHICLE_STATUS_LABELS,
   entityLink,
@@ -56,64 +56,102 @@ function renderDeviceKey(ctx: RenderContext, tracker: Tracker): string {
     </details>`;
 }
 
-/** Where the tracker last reported from, if it has ever reported. */
-function renderPosition(ctx: RenderContext, position: VehiclePosition | undefined): string {
-  if (!position) {
+/**
+ * A vehicle's location, as somewhere you can actually go.
+ *
+ * Google rather than a map link back into this app: this is the row somebody
+ * reads when a bus is not where it should be and they are about to drive to it.
+ */
+function mapsLink(position: VehiclePosition): string {
+  const query = `${position.lat.toFixed(6)},${position.lon.toFixed(6)}`;
+  return `<a class="link break-all font-mono"
+    href="${escHtml(`https://www.google.com/maps/search/?api=1&query=${query}`)}"
+    target="_blank" rel="noopener">${escHtml(
+      `${position.lat.toFixed(5)}, ${position.lon.toFixed(5)}`
+    )}</a>`;
+}
+
+/** One of the tracker's vehicles: where it is, and what it is running. */
+function renderVehicle(ctx: RenderContext, position: VehiclePosition): string {
+  const feed = ctx.session.staticFeed;
+  const routeId = position.routeId ?? (position.tripId ? feed?.trips.get(position.tripId)?.route_id : undefined);
+  const route = routeId ? feed?.routes.get(routeId) : undefined;
+  const stop = position.stopId ? feed?.stops.get(position.stopId) : undefined;
+
+  return propList([
+    prop('Reported', timestampWithAge(position.timestamp)),
+    prop('Coordinates', mapsLink(position)),
+    position.bearing === undefined ? '' : prop('Bearing', `${escHtml(String(Math.round(position.bearing)))}°`),
+    position.speed === undefined
+      ? ''
+      : prop('Speed', `${escHtml((position.speed * 3.6).toFixed(1))} km/h`),
+    position.tripId
+      ? prop(
+          'Trip',
+          entityLink(
+            ctx,
+            { type: 'trip', trip_id: position.tripId, ...(routeId ? { route_id: routeId } : {}) },
+            feed?.trips.get(position.tripId)?.headsign || position.tripId
+          )
+        )
+      : prop('Trip', '<span class="opacity-40">unassigned</span>'),
+    route
+      ? prop(
+          'Route',
+          entityLink(
+            ctx,
+            { type: 'route', route_id: route.id },
+            route.short_name || route.long_name || route.id
+          )
+        )
+      : '',
+    stop
+      ? prop(
+          `${VEHICLE_STATUS_LABELS[position.currentStatus ?? 2] ?? 'at'}`,
+          entityLink(ctx, { type: 'stop', stop_id: stop.id }, stop.name || stop.id)
+        )
+      : '',
+    // Only worth a row when there is more than one: it is what tells the two
+    // apart, and on a single-vehicle tracker it is just the nickname again.
+    position.startDate ? prop('Service date', escHtml(position.startDate)) : '',
+  ]);
+}
+
+/**
+ * Where the tracker is reporting from.
+ *
+ * *Every* vehicle it is reporting, not the first one found. One credential can
+ * be carrying a whole fleet — a producer running fifty trains under one tracker
+ * is the case this exists for — and a page that showed one of them would be
+ * silently hiding the other forty-nine.
+ */
+function renderPosition(ctx: RenderContext, positions: VehiclePosition[]): string {
+  if (positions.length === 0) {
     return section(
       'Position',
-      `<p class="text-xs opacity-60">No position reported. A tracker appears on the map once it
+      `<p class="text-xs opacity-60">Not reporting. A tracker appears on the map once it
        has posted a fix, and drops off again after ${Math.round(
          CONFIG.TRACKER_STALE_MS / 1000
        )} seconds without one.</p>`
     );
   }
 
-  const feed = ctx.session.staticFeed;
-  const routeId = position.routeId ?? (position.tripId ? feed?.trips.get(position.tripId)?.route_id : undefined);
-  const route = routeId ? feed?.routes.get(routeId) : undefined;
-  const stop = position.stopId ? feed?.stops.get(position.stopId) : undefined;
+  if (positions.length === 1) {
+    return section('Position', renderVehicle(ctx, positions[0]));
+  }
 
   return section(
-    'Position',
-    propList([
-      prop('Reported', timestampWithAge(position.timestamp)),
-      prop(
-        'Coordinates',
-        `<span class="font-mono">${escHtml(position.lat.toFixed(5))}, ${escHtml(
-          position.lon.toFixed(5)
-        )}</span>`
-      ),
-      position.bearing === undefined ? '' : prop('Bearing', `${escHtml(String(Math.round(position.bearing)))}°`),
-      position.speed === undefined
-        ? ''
-        : prop('Speed', `${escHtml((position.speed * 3.6).toFixed(1))} km/h`),
-      position.tripId
-        ? prop(
-            'Trip',
-            entityLink(
-              ctx,
-              { type: 'trip', trip_id: position.tripId, ...(routeId ? { route_id: routeId } : {}) },
-              feed?.trips.get(position.tripId)?.headsign || position.tripId
-            )
-          )
-        : prop('Trip', '<span class="opacity-40">unassigned</span>'),
-      route
-        ? prop(
-            'Route',
-            entityLink(
-              ctx,
-              { type: 'route', route_id: route.id },
-              route.short_name || route.long_name || route.id
-            )
-          )
-        : '',
-      stop
-        ? prop(
-            `${VEHICLE_STATUS_LABELS[position.currentStatus ?? 2] ?? 'at'}`,
-            entityLink(ctx, { type: 'stop', stop_id: stop.id }, stop.name || stop.id)
-          )
-        : '',
-    ])
+    'Positions',
+    `<div class="space-y-3">
+      ${positions
+        .map(
+          (position) => `<div class="rounded-lg border border-base-300 p-2 space-y-1">
+            <p class="text-xs font-medium">${escHtml(position.label || position.vehicleId)}</p>
+            ${renderVehicle(ctx, position)}
+          </div>`
+        )
+        .join('')}
+    </div>`
   );
 }
 
@@ -128,15 +166,15 @@ export function renderTrackerPage(
     return missing(`Tracker ${state.tracker_id}`);
   }
 
-  const position = ctx.session.vehicles.get(tracker.id);
+  const positions = ctx.session.vehiclesFor(tracker.id);
 
   return `
     <div class="space-y-4">
       <div class="space-y-1">
         <h2 class="text-lg font-semibold leading-tight">${escHtml(tracker.nickname)}</h2>
-        <p class="text-xs opacity-60">
-          ${position ? 'Reporting' : 'No fix'} ·
-          ${entityLink(ctx, { type: 'assignments' }, 'Assignments')}
+        <p class="text-xs opacity-60 flex items-center gap-2">
+          ${livenessBadge(trackerLiveness(ctx.session, tracker.id))}
+          <span>${entityLink(ctx, { type: 'assignments' }, 'Assignments')}</span>
         </p>
       </div>
 
@@ -145,7 +183,7 @@ export function renderTrackerPage(
         ${actionButton('tracker:delete', tracker.id, 'Delete', 'btn-outline btn-error')}
       </div>
 
-      ${renderPosition(ctx, position)}
+      ${renderPosition(ctx, positions)}
       ${section(
         'Provisioning',
         `<div class="space-y-2">

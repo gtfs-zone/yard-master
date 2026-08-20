@@ -23,6 +23,7 @@
  */
 
 import { CONFIG } from '../config';
+import type { VehiclePosition } from '../map-controller';
 import type {
   Alert,
   AlertDetail,
@@ -213,6 +214,18 @@ export const listTrackers = (feedId: number) =>
 /** The only endpoint that serves `device_key`. */
 export const getTracker = (trackerId: string) =>
   api.get<TrackerDetail>(`/trackers/${encodeURIComponent(trackerId)}`);
+
+/**
+ * The feed's whole live fleet, in one request.
+ *
+ * The bootstrap for the map: the event channel pushes each fix as it lands, so
+ * a client that has just selected a feed would otherwise show an empty map
+ * until every tracker had reported once. Presence is freshness — a position
+ * record carries a 60s TTL — so a tracker missing from this list has not
+ * reported in the last minute, not "has never reported".
+ */
+export const listTrackerPositions = (feedId: number) =>
+  api.get<VehiclePosition[]>(`/feeds/${feedId}/tracker-positions`);
 
 export const listAlerts = (feedId: number) => api.get<Alert[]>(`/feeds/${feedId}/alerts`);
 

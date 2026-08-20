@@ -2,10 +2,10 @@
  * Shared furniture for the managed pages, the way `render-utils.ts` is shared
  * furniture for the GTFS ones.
  *
- * It exists because three things have to agree across the panel and the feed
+ * It exists because four things have to agree across the panel and the feed
  * switcher: how an ISO timestamp from the API is shown, how a load status is
- * badged, and how a person is named when they have signed in under an address
- * but never set a display name.
+ * badged, how a tracker's liveness is worded, and how a person is named when
+ * they have signed in under an address but never set a display name.
  *
  * Everything here takes API types, never GTFS ones. The times are instants the
  * server sent as ISO strings, so a `Date` round-trip is safe on them — unlike a
@@ -14,7 +14,8 @@
  */
 
 import type { LoadStatus, Member } from '../types/api';
-import { escHtml, formatAbsolute, timestampWithAge } from './render-utils';
+import type { FeedSession } from './feed-session';
+import { escHtml, formatAbsolute, formatRelative, timestampWithAge } from './render-utils';
 
 /** Epoch seconds from an ISO string, or undefined for a null/unparseable one. */
 function epochSeconds(iso: string | null | undefined): number | undefined {
@@ -151,4 +152,56 @@ export function fromLocalInput(value: string): string | null {
   // what the input meant. Sending the resulting instant with its offset is
   // what keeps the server from stamping UTC onto a wall-clock time.
   return Number.isNaN(ms) ? null : new Date(ms).toISOString();
+}
+
+// ─── Tracker liveness ─────────────────────────────────────────────────────────
+
+/**
+ * Whether a tracker is reporting, has gone quiet, or has said nothing at all.
+ *
+ * The three states are not symmetrical, and conflating them is the trap here.
+ * A position record expires out of Redis after a minute, so the server can only
+ * ever answer "reporting" or "not reporting" — there is no last-seen column
+ * anywhere. `quiet` is therefore something only *this session* knows: a tracker
+ * this browser has watched report and then stop. A tracker that went quiet
+ * before the app was opened is indistinguishable from one that has never
+ * reported, and both are `silent`, which is why that state is worded as a
+ * question about right now rather than as a claim about the past.
+ */
+export type TrackerLiveness =
+  | { state: 'reporting'; vehicles: number }
+  | { state: 'quiet'; since: number }
+  | { state: 'silent' };
+
+export function trackerLiveness(session: FeedSession, trackerId: string): TrackerLiveness {
+  const vehicles = session.vehiclesFor(trackerId).length;
+  if (vehicles > 0) return { state: 'reporting', vehicles };
+  const since = session.lastSeen(trackerId);
+  return since === null ? { state: 'silent' } : { state: 'quiet', since };
+}
+
+const LIVENESS_BADGE_CLASS: Record<TrackerLiveness['state'], string> = {
+  reporting: 'badge-success',
+  quiet: 'badge-warning',
+  silent: 'badge-ghost',
+};
+
+/**
+ * The liveness badge. `quiet` carries a `data-since`, so the panel's own ticker
+ * counts it up without anything re-rendering the row.
+ */
+export function livenessBadge(liveness: TrackerLiveness, size = 'badge-xs'): string {
+  const cls = `badge ${size} ${LIVENESS_BADGE_CLASS[liveness.state]}`;
+  if (liveness.state === 'reporting') {
+    // The count is only worth showing when it is surprising: one vehicle is
+    // what a tracker normally is, and several is the thing worth noticing.
+    const label = liveness.vehicles > 1 ? `${liveness.vehicles} vehicles` : 'reporting';
+    return `<span class="${cls}">${escHtml(label)}</span>`;
+  }
+  if (liveness.state === 'quiet') {
+    return `<span class="${cls}" data-since="${liveness.since}">${escHtml(
+      formatRelative(liveness.since)
+    )}</span>`;
+  }
+  return `<span class="${cls}">no fix</span>`;
 }

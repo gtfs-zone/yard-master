@@ -87,6 +87,13 @@ export const CONFIG = {
   // than that is not "stale", it is gone.
   TRACKER_STALE_MS: 60_000,
 
+  // How often the client checks for vehicles that have aged past that. An
+  // expiry is not an event, so nothing pushes one; without this sweep a
+  // tracker that stopped reporting would sit on the map forever, in its last
+  // known place, looking exactly like one that is still moving. Well under the
+  // TTL, so the dot goes within a few seconds of the fix being gone server-side.
+  TRACKER_PRUNE_MS: 5_000,
+
   // The feed event stream. A browser reconnects a *dropped* stream by itself;
   // these govern the case it will not retry, which is a response that was not
   // an event stream at all. That is almost always an expired oauth2-proxy

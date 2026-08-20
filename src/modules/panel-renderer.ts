@@ -2,8 +2,8 @@
    @sha fa12a57
    @status modified
    @changes
-   - The session events are yard-master's: `change` and `staticloaded` replace
-     test-track's `vehicles` / `tripUpdates` / `alerts`.
+   - The session events are yard-master's: `change`, `vehicles` and
+     `staticloaded` replace test-track's `vehicles` / `tripUpdates` / `alerts`.
    - No `active` flag and no `hide()`. test-track hands the panel back to a
      status page when nothing is focused; here `home` is the browse tree, so
      the panel always has something to render.
@@ -19,7 +19,10 @@
    - `action` added to the hooks, and `data-action` delegated alongside
      `data-nav`. test-track's panel is read-only and needs neither; here a page
      emits a button and `actions.ts` owns what it does, which is what keeps the
-     pages pure string renderers. */
+     pages pure string renderers.
+   - `mapIssues` added to the hooks. The counts belong to `LayerManager`, which
+     is verbatim and knows nothing about the panel; upstream reads them off its
+     own status page, which this repo does not have. */
 /**
  * The right panel's object pages: one dispatcher over `PageState`, plus the
  * furniture every page shares.
@@ -32,6 +35,7 @@
  */
 
 import type { BreadcrumbItem, PageState } from '../types/page-state';
+import type { MapDataIssues } from './layer-manager';
 import type { FeedSession } from './feed-session';
 import { RtIndex } from './rt-index';
 import type { RenderContext } from './render-utils';
@@ -56,6 +60,8 @@ export interface PanelRendererHooks {
   meUserId: () => number | null;
   /** Run a write, named by the button that asked for it. */
   action: (action: string, arg: string) => void;
+  /** What the map could not draw, for the feed page's warning card. */
+  mapIssues: () => MapDataIssues;
 }
 
 function renderBreadcrumbs(ctx: RenderContext, items: BreadcrumbItem[]): string {
@@ -96,10 +102,12 @@ export class PanelRenderer {
   }
 
   initialize(): void {
-    // yard-master's session has two events, not test-track's three: `change`
-    // covers every managed and live update, `staticloaded` the parsed zip. Both
-    // invalidate the index, since either can change what a page can resolve.
-    for (const event of ['change', 'staticloaded'] as const) {
+    // `change` covers every managed update, `vehicles` the live fleet and
+    // `staticloaded` the parsed zip. All three invalidate the index, since any
+    // of them can change what a page can resolve. `vehicles` is separate from
+    // `change` because it fires per pushed fix, which the map wants and most
+    // of the rest of the app does not.
+    for (const event of ['change', 'vehicles', 'staticloaded'] as const) {
       this.session.addEventListener(event, () => {
         this.index = null;
         this.queueRender();
@@ -257,7 +265,7 @@ export class PanelRenderer {
       case 'alert':
         return renderAlertPage(ctx, this.state);
       case 'feed':
-        return renderFeedPage(ctx);
+        return renderFeedPage(ctx, this.hooks.mapIssues());
       case 'tracker':
         return renderTrackerPage(ctx, this.state);
       case 'people':

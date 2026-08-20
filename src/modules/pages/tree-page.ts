@@ -19,7 +19,7 @@ import type { Stop } from '../../gtfs-static';
 import type { PageState } from '../../types/page-state';
 import type { RenderContext } from '../render-utils';
 import { entityLink, escHtml, routeBadge } from '../render-utils';
-import { actionButton } from '../managed-render';
+import { actionButton, livenessBadge, trackerLiveness } from '../managed-render';
 import { routeSortKey } from '../route-sort';
 
 /** A collapsible section: a header with a count, and a list under it. */
@@ -135,18 +135,19 @@ function renderTrackers(ctx: RenderContext): string {
   const shown = trackers.slice(0, CONFIG.TREE_LIST_MAX);
   const rows = shown
     .map((tracker) => {
-      // A tracker with a fix is in `vehicles`, keyed by the same id the map
-      // paints it under; one without has simply never reported.
-      const live = ctx.session.vehicles.has(tracker.id);
+      // Every tracker is listed, reporting or not. A tracker with no fix has
+      // no coordinates and so is not on the map at all, which makes this list
+      // the only place it exists — and seeing which ones are idle is how you
+      // decide what to assign.
       return `<li class="flex items-center gap-2 min-w-0">
         <span class="min-w-0 truncate">${entityLink(
           ctx,
           { type: 'tracker', tracker_id: tracker.id },
           tracker.nickname
         )}</span>
-        <span class="ml-auto shrink-0 badge badge-xs ${
-          live ? 'badge-success' : 'badge-ghost'
-        }">${escHtml(live ? 'reporting' : 'no fix')}</span>
+        <span class="ml-auto shrink-0">${livenessBadge(
+          trackerLiveness(ctx.session, tracker.id)
+        )}</span>
       </li>`;
     })
     .join('');

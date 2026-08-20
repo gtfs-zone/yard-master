@@ -10,7 +10,14 @@
      without moving the camera.
    - `trip` draws the trip's own geometry on a source this file owns, spotlights
      its route and frames it. LayerManager has no `trip` focus kind and stays
-     verbatim, so the shape lives here instead. */
+     verbatim, so the shape lives here instead.
+   - `VehiclePosition` grows a `trackerId`. A tracker can carry several
+     concurrent vehicles, so `key` is the tracker *plus* the trip instance and
+     something else has to say which tracker they belong to; upstream's feeds
+     have no such object.
+   - The last pushed positions are kept here so a `tracker` focus can resolve
+     the tracker's vehicles. LayerManager is keyed by `key` and stays verbatim,
+     so it cannot answer "which of these is this tracker's". */
 import maplibregl from 'maplibre-gl';
 import { CONFIG } from './config';
 import type { GTFSStatic } from './gtfs-static';
@@ -24,12 +31,18 @@ import { resolveThemeColor } from './utils/theme-color';
 
 export interface VehiclePosition {
   /**
-   * test-track's own internal instance handle: the map feature id, the key in
-   * `FeedSession.vehicles`, and the `vehicle_id` URL param. Derived to be unique
-   * per vehicle even when the feed's `vehicle.id` is not (Plan 06 Root cause D).
-   * When the feed's ids are already unique, `key === vehicleId`.
+   * The internal instance handle: the map feature id, the key in
+   * `FeedSession.vehicles`, and the click identity. Built by cafe-car as the
+   * surrogate `Tracker.id` plus the trip instance, which is the `vehicle:*`
+   * Redis key without its prefix, so it is unique even when one tracker is
+   * carrying several concurrent vehicles.
    */
   key: string;
+  /**
+   * The surrogate `Tracker.id` this vehicle is reporting under. Several
+   * vehicles can share one, which is the whole reason `key` is not it.
+   */
+  trackerId: string;
   /**
    * The feed's `vehicle.id`, **verbatim** — duplicated, empty, whatever the feed
    * said. This is reportage, never plumbing: it is what the vehicle page shows
@@ -166,13 +179,24 @@ export class MapController {
   private pending: Array<() => void> = [];
 
   /**
-   * The vehicle key currently being followed, or null. Focusing a vehicle
-   * enters follow mode; each `vehicles` payload re-centres on its new position
-   * until the user takes the camera back (see the gesture listeners in
+   * The `Tracker.id` currently being followed, or null. Focusing a tracker
+   * enters follow mode; each positions push re-centres on its newest fix until
+   * the user takes the camera back (see the gesture listeners in
    * `initialize`). Focusing anything else — including home and alert — leaves
    * follow mode.
+   *
+   * A tracker rather than a vehicle key, because a tracker running several
+   * trips would otherwise stop being followed the moment the instance the
+   * camera latched onto ended.
    */
   private following: string | null = null;
+
+  /**
+   * The last positions handed to `showVehicles`. LayerManager holds these too
+   * but is keyed by `key` alone, and this file needs to ask which of them
+   * belong to one tracker.
+   */
+  private positions: VehiclePosition[] = [];
 
   /**
    * The focused trip's geometry, held so it can be re-added after a `setStyle`.
@@ -300,13 +324,16 @@ export class MapController {
   }
 
   showVehicles(positions: VehiclePosition[]): void {
+    // Held outside `whenLoaded` so a focus that lands before the style is up
+    // can still resolve a tracker's vehicles.
+    this.positions = positions;
     this.whenLoaded(() => {
       this.layers.setVehicles(positions);
-      // Follow: re-centre on the followed vehicle's new position. If it has
-      // left the feed, leave the camera where it is — the vehicle page keeps a
-      // lastSeen fallback.
+      // Follow: re-centre on the followed tracker's new position. If it has
+      // stopped reporting, leave the camera where it is — the tracker page
+      // says so in words rather than the map lying with a stale dot.
       if (this.following) {
-        const v = positions.find(p => p.key === this.following);
+        const v = this.trackerVehicle(this.following);
         if (v) {
           this.map.easeTo({
             center: [v.lon, v.lat],
@@ -319,7 +346,24 @@ export class MapController {
   }
 
   clearVehicles(): void {
+    this.positions = [];
     this.whenLoaded(() => this.layers.setVehicles([]));
+  }
+
+  /**
+   * A tracker's most recently reported vehicle, or undefined when it has none.
+   *
+   * Most recent rather than first: scan order is not the fleet's order, and a
+   * tracker running several trips should be followed on the one that just
+   * moved.
+   */
+  private trackerVehicle(trackerId: string): VehiclePosition | undefined {
+    let best: VehiclePosition | undefined;
+    for (const p of this.positions) {
+      if (p.trackerId !== trackerId) continue;
+      if (!best || (p.timestamp ?? 0) > (best.timestamp ?? 0)) best = p;
+    }
+    return best;
   }
 
   /**
@@ -455,10 +499,13 @@ export class MapController {
 
       case 'tracker': {
         this.clearTrip();
-        this.layers.setFocus({ kind: 'vehicle', id: state.tracker_id });
+        // The layer is keyed by `key`, so a tracker running several vehicles
+        // spotlights its most recent one; the panel lists all of them.
+        const vehicle = this.trackerVehicle(state.tracker_id);
+        this.layers.setFocus(vehicle ? { kind: 'vehicle', id: vehicle.key } : null);
         // Re-arm follow on this tracker (a different one replaces the old).
         this.following = state.tracker_id;
-        this.easeToPoint(this.layers.vehiclePosition(state.tracker_id));
+        if (vehicle) this.easeToPoint([vehicle.lon, vehicle.lat]);
         return;
       }
     }

@@ -55,10 +55,21 @@ session.addEventListener('staticloaded', (e) => {
   // `loadStaticFeed` replaces the previous feed's data in place; an explicit
   // clear would only cost an extra empty repaint.
   mapCtrl.loadStaticFeed((e as CustomEvent<GTFSStatic>).detail);
-  // The previous feed's trackers are not this feed's, and phase 8 is what
-  // repopulates them from the event stream.
-  mapCtrl.clearVehicles();
+  // The vehicles are pushed back rather than cleared: a fleet can arrive long
+  // before a slow zip does, and clearing here would blank a map that was
+  // already right. Repainting also re-colors every dot, since which route a
+  // vehicle is on only becomes knowable once the schedule has parsed.
+  showVehicles();
 });
+
+// The live fleet, from the bootstrap fetch and from every fix pushed after it.
+// Its own event rather than `change`, which fires for each managed list and
+// each detail fetch as well; the map only ever cares about this one.
+function showVehicles(): void {
+  mapCtrl.showVehicles([...session.vehicles.values()]);
+}
+
+session.addEventListener('vehicles', showVehicles);
 
 // ─── Focus and selection ──────────────────────────────────────────────────────
 const panelContent = document.getElementById('panel-content')!;
@@ -92,7 +103,10 @@ const appState = new AppState(session, {
   onFeedChange: (feed) => {
     feedSwitcherBtn.textContent = feed ? feed.feed_name : 'Select feed';
     syncReloadButton();
-    if (!feed) mapCtrl.clearStaticFeed();
+    if (!feed) {
+      mapCtrl.clearStaticFeed();
+      mapCtrl.clearVehicles();
+    }
     // Selecting a feed is what gives the sheet something to show; dropping one
     // takes it away again.
     if (feed) bottomSheet.open('half');
@@ -121,6 +135,7 @@ panel = new PanelRenderer(panelContent, session, {
   hoverStop: (stop_id) => mapCtrl.hoverStop(stop_id),
   meUserId: () => appState.me?.user_id ?? null,
   action: (action, arg) => void actions.run(action, arg),
+  mapIssues: () => mapCtrl.issues,
 });
 panel.initialize();
 // The trail is rebuilt from the session, so a crumb whose object only just

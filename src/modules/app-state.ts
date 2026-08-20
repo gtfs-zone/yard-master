@@ -24,7 +24,10 @@
      show a row the server did not confirm. `adoptFeedRow` is the same idea for
      the feed itself, and owns the hash rewrite a rename needs.
    - The feed's event stream is owned here, because this is the one module that
-     knows when a feed starts and stops being the selected one. */
+     knows when a feed starts and stops being the selected one.
+   - The live fleet with it: the bootstrap fetch on selection, the pushed
+     fixes, and the sweep that expires a vehicle whose fix has aged out. Only
+     this module knows a feed is selected *and* holds a timer. */
 /**
  * The single entry point for selecting a feed and for changing focus.
  *
@@ -49,6 +52,7 @@ import { CONFIG } from '../config';
 import type { PageState } from '../types/page-state';
 import { pageStatesEqual } from '../types/page-state';
 import type { Feed, LoadStatus, Me } from '../types/api';
+import type { VehiclePosition } from '../map-controller';
 import { buildBreadcrumbs, validateState } from './breadcrumbs';
 import type { FeedSession } from './feed-session';
 import {
@@ -58,6 +62,7 @@ import {
   getTracker,
   listAlerts,
   listFeeds,
+  listTrackerPositions,
   listTrackers,
   SessionExpiredError,
 } from './api-client';
@@ -102,7 +107,22 @@ export class AppState {
    */
   private stream = new FeedEventStream({
     onLoad: (feedId, load) => this.applyLoadStatus(feedId, load),
+    onPosition: (feedId, vehicle) => this.applyPosition(feedId, vehicle),
   });
+
+  /**
+   * The sweep that expires vehicles nobody has heard from. Runs only while a
+   * feed is selected: an app sitting on the switcher has no fleet to age.
+   */
+  private pruneTimer: ReturnType<typeof setInterval> | null = null;
+
+  /**
+   * Tracker ids a pushed fix named that the list did not have, and which have
+   * already cost one re-read. Without it a tracker that stays unknown — because
+   * it belongs to a feed the caller cannot see, or was deleted mid-flight —
+   * would fire a list request per fix.
+   */
+  private chasedTrackers = new Set<string>();
 
   constructor(session: FeedSession, hooks: AppStateHooks) {
     this.session = session;
@@ -213,6 +233,8 @@ export class AppState {
     // current load status, so a feed whose download is already running says so
     // without waiting for three list responses first.
     this.stream.connect(feed.id);
+    this.startPruning();
+    this.chasedTrackers.clear();
 
     this.pendingFocus = restore.type === 'home' ? null : restore;
     this.applyPendingFocus({ reportMiss: false });
@@ -268,9 +290,20 @@ export class AppState {
     );
   }
 
+  /** Re-read the whole live fleet. The pushed fixes keep it current after. */
+  async refreshPositions(): Promise<void> {
+    const feed = this.session.feed;
+    if (!feed) return;
+    await this.fetchInto('tracker positions', () => listTrackerPositions(feed.id), (rows) =>
+      this.session.setVehicles(rows)
+    );
+  }
+
   /** Drop the selection entirely and return to the empty state. */
   clearFeed(): void {
     this.stream.close();
+    this.stopPruning();
+    this.chasedTrackers.clear();
     this.session.clear();
     localStorage.removeItem(CONFIG.SELECTED_FEED_KEY);
     this.pendingFocus = null;
@@ -300,6 +333,12 @@ export class AppState {
       ),
       this.fetchInto('members', () => getPeople(feed.id), (people) =>
         this.session.setPeople(people)
+      ),
+      // The fleet as it stands, so the map is populated before the first fix
+      // is pushed. A tracker reporting once a minute would otherwise leave the
+      // map empty for most of that minute.
+      this.fetchInto('tracker positions', () => listTrackerPositions(feed.id), (rows) =>
+        this.session.setVehicles(rows)
       ),
     ]);
   }
@@ -397,6 +436,42 @@ export class AppState {
     } else if (after === 'failed') {
       notify.error(`${feed.feed_name}: the server could not load the schedule.`);
     }
+  }
+
+  /**
+   * Apply a fix pushed down the channel.
+   *
+   * Scoped to the current feed for the same reason a load status is: a switch
+   * can land between the publish and the delivery, and another feed's tracker
+   * appearing on this feed's map is a lie with nothing to give it away.
+   */
+  private applyPosition(feedId: number, vehicle: VehiclePosition): void {
+    const feed = this.session.feed;
+    if (!feed || feed.id !== feedId) return;
+    this.session.applyVehicle(vehicle);
+
+    // A fix from a tracker this app has not listed means the list is out of
+    // date: somebody created a tracker in another session, or in another tab.
+    // The vehicle is drawn either way — it is a real thing in a real place —
+    // but without the row it has no nickname and no page to click into, so the
+    // list is re-read once per unknown id rather than left to be noticed.
+    if (this.session.trackers.has(vehicle.trackerId)) return;
+    if (this.chasedTrackers.has(vehicle.trackerId)) return;
+    this.chasedTrackers.add(vehicle.trackerId);
+    void this.refreshTrackers();
+  }
+
+  private startPruning(): void {
+    this.stopPruning();
+    this.pruneTimer = setInterval(
+      () => this.session.pruneVehicles(),
+      CONFIG.TRACKER_PRUNE_MS
+    );
+  }
+
+  private stopPruning(): void {
+    if (this.pruneTimer !== null) clearInterval(this.pruneTimer);
+    this.pruneTimer = null;
   }
 
   /** Re-read the selected feed's row, e.g. after asking for a reload. */

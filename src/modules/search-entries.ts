@@ -4,7 +4,8 @@
    @changes
    - The vehicle loop became a tracker loop over the API's tracker list rather
      than the live vehicle map, so a tracker that has never reported a fix is
-     still findable. The payload is a `tracker` PageState keyed by `Tracker.id`,
+     still findable, and a tracker running several vehicles is one entry rather
+     than one per vehicle. The payload is a `tracker` PageState keyed by `Tracker.id`,
      which is the key both maps use.
    - A managed service alert loop added, keyed by `String(Alert.id)`.
    - Priorities rebucketed so managed objects sort ahead of GTFS objects:
@@ -69,10 +70,12 @@ export function buildSearchEntries(session: FeedSession): SearchEntry<PageState>
     });
   }
 
-  // Trackers are keyed by `Tracker.id` in both `session.trackers` and
-  // `session.vehicles`, which is what a link carries and what the map paints.
+  // A tracker is searched for as itself, whether or not it is reporting: the
+  // list is the API's, not the live map's. Its newest fix is what colors and
+  // describes the row, and a tracker running several vehicles is still one
+  // entry, since one tracker is one page.
   for (const tracker of session.trackers.values()) {
-    const position = session.vehicles.get(tracker.id);
+    const [position] = session.vehiclesFor(tracker.id);
     // Same color the map paints it: the assigned trip's route, or unmatched grey.
     const routeId =
       position?.routeId || (position?.tripId ? feed?.trips.get(position.tripId)?.route_id : undefined);
