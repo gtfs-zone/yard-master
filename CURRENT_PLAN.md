@@ -1135,16 +1135,16 @@ tracker is on the map all the time, which is the point: seeing which ones are
 idle is how you decide what to assign. `layer-manager.ts` and `issue-card.ts`
 stay `verbatim` through this phase.
 
-- [ ] The positions endpoint, scoped, with the 60s TTL meaning "present is fresh"
-- [ ] Tracker positions pushed on the phase 7 channel, into `FeedSession.vehicles`
-- [ ] Reword the unmatched issue-card row: here it means "unassigned", the normal
+- [x] The positions endpoint, scoped, with the 60s TTL meaning "present is fresh"
+- [x] Tracker positions pushed on the phase 7 channel, into `FeedSession.vehicles`
+- [x] Reword the unmatched issue-card row: here it means "unassigned", the normal
       state of an idle tracker, not test-track's "the feed is lying to you"
-- [ ] Liveness dot in the tracker list: reporting, last seen, never seen. A
+- [x] Liveness dot in the tracker list: reporting, last seen, never seen. A
       tracker with no fix has no coordinates and so is panel-only, listed and
       correctly absent from the map
-- [ ] Tracker page: current position, assigned trip, a Google Maps link, camera
+- [x] Tracker page: current position, assigned trip, a Google Maps link, camera
       follow while focused
-- [ ] Feed page shows the whole fleet at once
+- [x] Feed page shows the whole fleet at once
 
 **Gotchas.** `VehiclePosition.key` is the map feature id, the `vehicles` map key
 and the click identity, so it must be the **surrogate `id`**, never `device_key`
@@ -1157,6 +1157,75 @@ report several concurrent vehicles, one Redis key per `trip_id[:start_date]`, so
 show all of a tracker's vehicles rather than the first one the scan returns.
 `nickname` remains what is *displayed* on the dot and in the public feed. Never
 log a position payload with its `device_key`.
+
+### What the pass turned up
+
+**The bump from phase 7 landed first.** railroad-club is pushed,
+`uv lock --upgrade-package railroad-club` ran in cafe-car and schedule-foamer,
+and both lock bumps are committed. cafe-car's 243 tests pass against the locked
+version rather than against a `PYTHONPATH` checkout. schedule-foamer has no
+suite at all, so what was verified there is that `schedule_foamer.events`
+imports and resolves `feed_channel` off the locked dependency.
+
+**One function builds the payload, and that is the whole design.**
+`cafe_car/vehicle_payload.py` owns the `vehicle:*` key derivation, the public
+vehicle id, the keyspace walk and `vehicle_view`. The endpoint and the pushed
+event both go through `vehicle_view`, so a client cannot tell which route a
+vehicle arrived by, and `test_positions.py` asserts exactly that by comparing
+the published payload against the endpoint's response. Two of those pieces
+already existed in two places: `_public_vehicle_id` was private to `gtfs_rt.py`
+and `_live_vehicle_keys` private to `catalog.py`, and both moved here.
+
+**`key` could not be the tracker id, because `layer-manager.ts` had to stay
+verbatim.** The layer is keyed by `VehiclePosition.key`, and a tracker running
+several concurrent vehicles needs one key each, so `key` is the Redis key
+without its prefix — tracker plus trip instance. That leaves nothing saying
+*which tracker*, so `VehiclePosition` grew a `trackerId`, and every panel
+lookup that was `vehicles.get(tracker.id)` became `session.vehiclesFor(id)`.
+Focus and follow moved with it: `MapController` keeps the last positions array
+so a `tracker` focus can resolve the tracker's newest fix, and `following`
+holds a tracker id rather than a vehicle key, so a tracker whose trip instance
+ends is still followed onto the next one.
+
+**Nothing tells a client a vehicle went away.** A record expires out of Redis
+after 60s and an expiry is not an event, so a vehicle that is only ever added
+sits on the map forever, in its last known place, looking exactly like one that
+is still moving. `FeedSession.pruneVehicles` is what makes presence mean the
+same thing in the browser as on the server, swept every
+`CONFIG.TRACKER_PRUNE_MS` by `AppState` — which is the one module that knows a
+feed is selected *and* can hold a timer. It counts from when a fix *arrived*,
+not from the timestamp inside it: that is the producer's clock, and a phone
+with a skewed one would otherwise be immortal or invisible.
+
+**Liveness has three states and they are not symmetrical.** The server can only
+answer "reporting" or "not reporting"; there is no last-seen column anywhere,
+because an expired fix is simply gone. So "went quiet" is something only the
+open session knows — a tracker this browser watched report and then stop — and
+a tracker that went quiet before the app was opened is indistinguishable from
+one that has never reported. Both are "no fix", worded as a statement about
+right now rather than a claim about the past. `trackerLiveness` and
+`livenessBadge` live in `managed-render.ts` so the tree, the tracker page and
+the feed page's fleet counts cannot disagree.
+
+**The panel needed a third session event.** A fix per tracker per poll is a
+lot of `change` events, and `change` is what every managed list and every
+detail fetch already fires. `vehicles` is separate: the map listens to it
+alone, and `panel-renderer.ts` listens to all three. `renderIssueCard` needed
+no change at all — every label and note is the caller's, so the feed page
+rewords the unmatched row itself.
+
+**A pushed fix can name a tracker the list has not got.** Somebody creating a
+tracker in another tab is enough. Dropping the fix would make it invisible
+until something happened to re-read the list, so the vehicle is drawn and the
+tracker list is re-read once per unknown id, guarded by a set so a tracker that
+stays unknown cannot fire a request per fix.
+
+**`ingest_position` costs a lookup per fix now, as phase 7 predicted.** It
+needed a DB session it did not have. A `tracker_id` that resolves to nothing is
+stored and not published rather than rejected: the token is what authorises
+ingest, the serving side only ever scans trackers it knows, and a producer
+configured with a stale id has always been allowed to write into a namespace
+nobody reads.
 
 ---
 
