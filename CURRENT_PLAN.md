@@ -147,16 +147,16 @@ From **test-track**: `gtfs-static.ts`, `feed-download`, `feed-time`,
 which is a different set from either upstream. Write the `@changes` list as the
 file is created, not afterwards.
 
-- [ ] `pnpm install`, confirm the scaffold builds and typechecks
-- [ ] Port `scripts/vendor-check.ts` with per-row source-repo resolution, keeping
+- [x] `pnpm install`, confirm the scaffold builds and typechecks
+- [x] Port `scripts/vendor-check.ts` with per-row source-repo resolution, keeping
       the drift and staleness passes and the skip-if-absent exit 0
-- [ ] Vendor the coloring-book set, each with a banner and a `VENDORED.md` row
-- [ ] Vendor the test-track set the same way
-- [ ] Adapt `types/page-state.ts` to yard-master's variants, `@status modified`
-- [ ] Wire `map-controller`, `panel-resizer`, `bottom-sheet`, `theme-controller`
+- [x] Vendor the coloring-book set, each with a banner and a `VENDORED.md` row
+- [x] Vendor the test-track set the same way
+- [x] Adapt `types/page-state.ts` to yard-master's variants, `@status modified`
+- [x] Wire `map-controller`, `panel-resizer`, `bottom-sheet`, `theme-controller`
       into `index.ts` so the shell renders with an empty panel
-- [ ] Add a logo to `public/`, port `nginx.conf` health probe expectations
-- [ ] `pnpm typecheck` and `pnpm build` green
+- [x] Add a logo to `public/`, port `nginx.conf` health probe expectations
+- [x] `pnpm typecheck` and `pnpm build` green
 
 **Gotchas.** `feed-progress-indicator` touches `document.body` at import time, so
 it cannot be imported before the DOM exists. `notification-system`'s `notify`
@@ -164,6 +164,58 @@ singleton needs an explicit `.initialize()`. `theme-color.ts` caches per token,
 so `clearThemeColorCache()` has to run on every theme change or MapLibre keeps
 painting the old accent. The basemaps in `basemap-styles.ts` are glyph-less: no
 `symbol` layer with text can render over them.
+
+### What the vendor pass turned up
+
+**A row names the sibling whose bytes were taken, not the repo the file was
+born in.** The split assumed here, coloring-book for the shell and test-track
+for the realtime modules, does not survive contact with the import graph.
+`layer-manager`, `basemap-control`, `panel-resizer`, `bottom-sheet`,
+`route-colors`, `issue-card`, `page-state-manager` and `main.css` are all files
+test-track already records as `modified` from coloring-book, and every one of
+those modifications is the adaptation from coloring-book's editor model to the
+`GTFSStatic` model yard-master shares. Vendoring coloring-book's copy would
+mean re-deriving test-track's file by hand. Those rows therefore name
+`test-track` at its HEAD. Where test-track records a file as `verbatim` the
+bytes are identical either way, so those rows name `coloring-book` and carry
+test-track's recorded SHA, which is what keeps the two-upstream story real:
+twelve rows genuinely resolve against coloring-book. `vendor:check` passes on
+all 26 verbatim entries with no staleness warnings.
+
+A file taken out of test-track's tree carries test-track's own vendor banner.
+`stripBanner` removes one leading banner, so the second one has to be deleted
+by hand or every such row reports DRIFT.
+
+**Three more files had to be modified, not just `page-state.ts`.** Changing the
+variant union breaks every consumer that switches on it: `page-state-manager`
+(the hash codec), `map-controller` (`applyFocus` and the layer select handler)
+and `search-entries`. The hash codec needed rewriting anyway, because `feed`,
+`assignments` and `people` name no object and cannot be told apart by the
+presence of an object key the way test-track's four pages could; the hash now
+carries an explicit `type` param, matching the shape phase 3 assumes. The
+LayerManager target kind stays `vehicle`, which is the map layer's own
+vocabulary and unrelated to the page variant.
+
+**`feed-session.ts` had to land here rather than in phase 3.** `render-utils`,
+`search-entries`, `alerts` and `rt-index` all `import type { FeedSession }`, so
+there is no way to vendor them and keep `pnpm typecheck` green without one. The
+phase 1 version owns the static half only: it downloads and parses the zip with
+progress and cancel, and exposes the `staticFeed` / `vehicles` / `alerts` /
+`tripUpdates` shape those four modules read. It is yard-master's own file, not
+vendored. Phase 3 adds the API objects and the feed switcher; phase 6 fills the
+live maps from the event stream.
+
+**Two dependency notes.** `gtfs-realtime-bindings` is a real dependency of this
+repo now, pulled in by `gtfs-rt.ts`; yard-master never polls a `.pb`, but the
+`VehiclePosition` / `TripUpdate` / `AlertRecord` types are what the vendored
+panel and map modules are written against. `@types/geojson` is an explicit
+devDependency: test-track gets the `GeoJSON` namespace transitively through
+maplibre's dependency graph, and on a fresh install that resolved differently
+here, so `layer-manager` would not compile without it.
+
+**The search priorities were rebucketed now rather than in phase 4**, since
+`search-entries` was being modified anyway: trackers 0, stations 1, routes 2,
+plain stops 3.
 
 ---
 
