@@ -272,20 +272,20 @@ explicit Pydantic model, never by dumping an ORM object, which is what keeps
 `Tracker.id` out of a response that should not carry it. The CSRF check and the
 session-expiry contract are established here even though nothing mutates yet.
 
-- [ ] `cafe_car/api/__init__.py`, `deps.py` (current user, feed access dependency)
-- [ ] `schemas.py`: explicit response models, with `TrackerOut` split into a
+- [x] `cafe_car/api/__init__.py`, `deps.py` (current user, feed access dependency)
+- [x] `schemas.py`: explicit response models, with `TrackerOut` split into a
       public form and a credential-bearing form used only by the tracker detail
       and provisioning endpoints
-- [ ] `GET /api/me`, `GET /api/feeds`, `GET /api/feeds/{id}`
-- [ ] `GET /api/feeds/{id}/trackers`, `GET /api/trackers/{id}`
-- [ ] `GET /api/feeds/{id}/alerts`, `GET /api/alerts/{id}`, entities
-- [ ] `GET /api/feeds/{id}/members`
-- [ ] CSRF dependency: reject any unsafe method lacking `X-Yard-Master`
-- [ ] Register the router before the `Admin` mount; confirm the old admin still works
-- [ ] pytest: a user cannot read another user's feed, tracker, alert, entity or
+- [x] `GET /api/me`, `GET /api/feeds`, `GET /api/feeds/{id}`
+- [x] `GET /api/feeds/{id}/trackers`, `GET /api/trackers/{id}`
+- [x] `GET /api/feeds/{id}/alerts`, `GET /api/alerts/{id}`, entities
+- [x] `GET /api/feeds/{id}/members`
+- [x] CSRF dependency: reject any unsafe method lacking `X-Yard-Master`
+- [x] Register the router before the `Admin` mount; confirm the old admin still works
+- [x] pytest: a user cannot read another user's feed, tracker, alert, entity or
       member list through any endpoint. One test per endpoint, no exceptions
-- [ ] pytest: an admin (`gtfs-admins`) can, and a forged `groups` claim cannot
-- [ ] pytest: `Tracker.id` is absent from every list response
+- [x] pytest: an admin (`gtfs-admins`) can, and a forged `groups` claim cannot
+- [x] pytest: `Tracker.id` is absent from every list response
 
 **Gotchas.** `accessible_feed_ids` reads `current_user_is_admin_var`, which
 `SubjectMiddleware` sets per request; a test that calls a query function outside
@@ -293,6 +293,64 @@ a request has to set the ContextVar itself or it silently gets the non-admin
 path. Do not scope by the raw proxy header anywhere, only by resolved `user_id`.
 The 404-versus-403 choice matters: return 404 for a feed the caller cannot see,
 so the endpoint does not confirm that an id exists.
+
+### What building it turned up
+
+Landed on cafe-car's `feat/yard-master-api`, 29 new tests, whole suite green at
+150.
+
+**A tracker needs a second detail route, addressed by nickname.** Keeping
+`Tracker.id` out of every list response and addressing trackers by `id` are not
+compatible: a client that only ever sees nicknames can never reach
+`/trackers/{id}`. The panel navigates through
+**`GET /feeds/{id}/trackers/{nickname}`**, which returns the credential-bearing
+form; `/trackers/{id}` stays as the resource path for a caller that already
+holds the credential, and phase 5's PATCH and DELETE hang off it. Nickname is
+not unique in the schema, so the nickname route resolves a collision to the
+lowest id, which is deterministic rather than correct. **Phase 5 owes a
+uniqueness check on the tracker write path**, and until it lands two trackers
+sharing a nickname on one feed are unreachable by the panel.
+
+**`accessible_feed_ids` was the wrong scope for the feed list.** It applies the
+admin bypass, so an admin's feed switcher would have listed every feed on the
+server and buried their own. Split out `access.py::personal_feed_ids`, the
+owned-or-shared query with the bypass deliberately not applied;
+`accessible_feed_ids` is now that plus the bypass, so the definition is still
+written once. `GET /feeds` uses the personal one and `?all=1` opts an admin in;
+`GET /feeds/{id}` keeps the bypass, so an admin following a link still lands.
+
+**Caller resolution now has one definition.** `entity_router._current_user_id`
+was the only code that answered "who is calling" for a route SQLAdmin's
+`authenticate` never ran for, and the API needed exactly that. It moved to
+`auth.py::resolve_request_user_id` and both routers call it, rather than the
+API growing a second copy of a security-critical function.
+
+**CSRF is a router dependency, not a route one.** `require_csrf` is mounted on
+the whole `/api` router, so every mutation phase 5 adds inherits it without a
+route having to remember. Nothing under `/api` mutates yet, so its test drives
+the dependency directly.
+
+**The session-expiry contract is the API's half of a frontend promise.** There
+is nothing to build server-side: oauth2-proxy answers an expired session before
+a request reaches this app. What phase 2 owes is that every answer the API
+*does* build is JSON including its errors, which is what makes "not JSON" an
+unambiguous reload signal for the client in phase 3.
+
+**Ruff's TC0xx rules are off under `api/`.** FastAPI resolves annotations at
+runtime to build dependencies and response models, so moving a type into a
+`TYPE_CHECKING` block turns it into a `NameError` at import.
+
+**`FeedOut` carries more than the plan's table implies**, because the shell
+needs it in phase 3: the owner's display name, an `is_owner` flag matching what
+`owned_feed` would actually permit, the three public GTFS-RT URLs from
+`feed_urls.py`, and a nested `load` object mirroring `GtfsStaticFeed`. That
+nested shape is deliberate: phase 6 pushes the same object down the SSE
+channel, so a client applies an update without a second representation.
+
+**Reading the member list is not owner-only**, though the API table says the
+`/members` row is. It matches the SQLAdmin panel this replaces: a member needs
+to know who else is on a feed. The *mutations* are owner-only and phase 5 adds
+them behind the `OwnedFeed` dependency, which is written and unused for now.
 
 ---
 
