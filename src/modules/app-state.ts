@@ -419,8 +419,22 @@ export class AppState {
     const session = this.session;
     let load: (() => Promise<void>) | null = null;
 
-    if (state.type === 'tracker' && !session.trackerDetails.has(state.tracker_id)) {
-      load = async () => session.setTrackerDetail(await getTracker(state.tracker_id));
+    if (state.type === 'tracker') {
+      // The credential, and the rules the page lists. The feed's whole rule set
+      // rather than this tracker's: it is one small request, the calendar and
+      // the trip pages want the same rows, and the session holds one copy.
+      const needsDetail = !session.trackerDetails.has(state.tracker_id);
+      const needsRules = !session.rules;
+      if (needsDetail || needsRules) {
+        load = async () => {
+          await Promise.all([
+            needsDetail
+              ? getTracker(state.tracker_id).then((d) => session.setTrackerDetail(d))
+              : Promise.resolve(),
+            needsRules ? this.refreshRules() : Promise.resolve(),
+          ]);
+        };
+      }
     } else if (state.type === 'assignments') {
       // Both halves: the rules an editor reads, and the month the grid draws.
       // The expansion is re-fetched only when the visible grid runs outside the

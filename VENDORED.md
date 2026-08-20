@@ -39,13 +39,15 @@ from the newer form, so that one row still names coloring-book.
 
 `src/modules/pages/trip-page.ts`, `src/modules/pages/tree-page.ts`,
 `src/modules/pages/feed-page.ts`, `src/modules/pages/tracker-page.ts`,
-`src/modules/pages/people-page.ts` and `src/modules/managed-render.ts` are in
-neither tier and deliberately absent from the table: they are yard-master's own
-files with no upstream at all. test-track browses route, stop, vehicle and
-alert, and shows a feed status page when nothing is focused; this repo's
-hierarchy runs Route -> Trips -> Trip, its no-focus page is a browse tree, and
-the managed half of that tree — feeds, trackers, alerts and people — has no
-counterpart upstream at all, because test-track owns none of those objects.
+`src/modules/pages/people-page.ts`, `src/modules/pages/assignments-page.ts`,
+`src/modules/managed-render.ts`, `src/modules/service-date.ts` and
+`src/modules/trip-picker.ts` are in neither tier and deliberately absent from
+the table: they are yard-master's own files with no upstream at all. test-track
+browses route, stop, vehicle and alert, and shows a feed status page when
+nothing is focused; this repo's hierarchy runs Route -> Trips -> Trip, its
+no-focus page is a browse tree, and the managed half of that tree — feeds,
+trackers, assignments, alerts and people — has no counterpart upstream at all,
+because test-track owns none of those objects.
 
 Run `pnpm vendor:check` to diff every `verbatim` entry against its recorded SHA
 in the repo its `Source repo` column names (rows whose sibling is not checked out

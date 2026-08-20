@@ -245,10 +245,6 @@ export const listAssignments = (feedId: number, from: string, to: string) =>
     `/feeds/${feedId}/assignments?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
   );
 
-/** One tracker's rules, which is what a tracker page asks for. */
-export const listTrackerRules = (trackerId: string) =>
-  api.get<TrackerRule[]>(`/trackers/${encodeURIComponent(trackerId)}/rules`);
-
 /** The tracker is fixed at creation, so it is in the path and not the body. */
 export const createRule = (trackerId: string, body: RuleWrite) =>
   api.post<TrackerRule>(`/trackers/${encodeURIComponent(trackerId)}/rules`, body);

@@ -21,7 +21,13 @@ import type { Tracker } from '../../types/api';
 import type { PageState } from '../../types/page-state';
 import type { VehiclePosition } from '../../map-controller';
 import type { RenderContext } from '../render-utils';
-import { actionButton, livenessBadge, trackerLiveness } from '../managed-render';
+import {
+  actionButton,
+  describeRecurrence,
+  formatWindow,
+  livenessBadge,
+  trackerLiveness,
+} from '../managed-render';
 import {
   VEHICLE_STATUS_LABELS,
   entityLink,
@@ -155,6 +161,60 @@ function renderPosition(ctx: RenderContext, positions: VehiclePosition[]): strin
   );
 }
 
+/**
+ * What this tracker is scheduled to run, as rules rather than as days.
+ *
+ * The standing arrangement is the tracker's own property; which dates it covers
+ * is the calendar's question, and the link goes there. A trip the loaded
+ * schedule has lost still lists, as its bare id: a feed can be reloaded out
+ * from under a rule, and that is exactly when somebody needs to see it.
+ */
+function renderAssignments(ctx: RenderContext, trackerId: string): string {
+  const session = ctx.session;
+  if (!session.rules) {
+    return section('Assignments', '<p class="text-xs opacity-60">Loading…</p>');
+  }
+
+  const rules = [...session.rules.values()].filter((r) => r.tracker_id === trackerId);
+  const rows = rules
+    .map((rule) => {
+      const trip = session.staticFeed?.trips.get(rule.trip_id);
+      return `<li class="space-y-0.5 py-1">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="min-w-0 truncate">${
+            trip
+              ? entityLink(
+                  ctx,
+                  { type: 'trip', trip_id: rule.trip_id, route_id: trip.route_id },
+                  trip.raw.trip_short_name?.trim() || trip.headsign || rule.trip_id
+                )
+              : `<span class="font-mono opacity-70">${escHtml(rule.trip_id)}</span>`
+          }</span>
+          <span class="ml-auto shrink-0 tabular-nums opacity-70">${escHtml(
+            formatWindow(rule.start_time, rule.end_time)
+          )}</span>
+        </div>
+        <p class="opacity-50">${escHtml(describeRecurrence(rule))}</p>
+      </li>`;
+    })
+    .join('');
+
+  return section(
+    'Assignments',
+    `${
+      rules.length
+        ? `<ul class="text-xs">${rows}</ul>`
+        : '<p class="text-xs opacity-60">This tracker is not assigned to anything.</p>'
+    }
+     <div class="mt-2 text-xs">${entityLink(
+       ctx,
+       { type: 'assignments' },
+       'Open the calendar',
+       'link link-hover'
+     )}</div>`
+  );
+}
+
 export function renderTrackerPage(
   ctx: RenderContext,
   state: Extract<PageState, { type: 'tracker' }>
@@ -184,6 +244,7 @@ export function renderTrackerPage(
       </div>
 
       ${renderPosition(ctx, positions)}
+      ${renderAssignments(ctx, tracker.id)}
       ${section(
         'Provisioning',
         `<div class="space-y-2">
