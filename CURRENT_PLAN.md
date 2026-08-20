@@ -804,11 +804,11 @@ a re-vendor rather than a fix. Every new row this phase added resolves clean at
 
 The other half of the panel, once phase 4 has a feed and an API to read.
 
-- [ ] `pages/feed-page.ts`: properties, load status, counts, deep links to viz
+- [x] `pages/feed-page.ts`: properties, load status, counts, deep links to viz
       and the editor
-- [ ] `pages/tracker-page.ts`, `pages/alert-page.ts`, `pages/people-page.ts`
-- [ ] The managed/GTFS divider in the tree, managed objects above it
-- [ ] Search covers both halves, managed objects bucketed ahead of GTFS objects
+- [x] `pages/tracker-page.ts`, `pages/alert-page.ts`, `pages/people-page.ts`
+- [x] The managed/GTFS divider in the tree, managed objects above it
+- [x] Search covers both halves, managed objects bucketed ahead of GTFS objects
       by `priority` (already rebucketed in `search-entries` in phase 1)
 
 **Gotchas.** Escape everything here too, and for a sharper reason: `nickname`
@@ -816,6 +816,70 @@ and `header_text` are typed by a person with write access to the feed, and the
 old admin has a rule about this because it was a real stored-XSS vector.
 `Tracker.id` renders on the tracker page and nowhere else, never in a
 breadcrumb, a title or a link.
+
+### What the pass turned up
+
+**A published alert's entity id is not its row id.** cafe-car numbers the
+entities in the GTFS-RT alert feed positionally — `entity.id = str(i)` over the
+alerts active at that moment — so an `AlertRecord.id` and an `Alert.id` are two
+id spaces that both look like small integers. The `alert` PageState is the
+managed row (`String(Alert.id)`), which is what `page-state.ts` said it was from
+phase 1, and `alert-page.ts` renders that, keeping test-track's decoded-entity
+page underneath as the fallback for an id only the live payload knows. Nothing
+fills `session.alerts` yet, so nothing is wrong today: whatever fills it in
+phase 7 has to key it by the managed id, or the alert links the route and stop
+pages emit will open the wrong alert. Written into the file's header, not just
+here.
+
+**`session.alerts` could not be the managed list.** Four vendored modules read
+`alerts` as a map of decoded `AlertRecord`s — `alerts.ts`, `rt-index.ts` and the
+route and stop pages — so the managed rows went next to it as `serviceAlerts`
+rather than into it. The `FeedSession` contract holds: a name a vendored module
+reads keeps the meaning that module expects, and yard-master's own objects get
+their own names.
+
+**Only the detail endpoints carry the halves that matter.** `GET /feeds/{id}/
+alerts` returns `entity_count` and no entities, and `GET /feeds/{id}/trackers`
+returns no `device_key`, both deliberately. Pages are synchronous string
+renderers re-run on every session event, so they cannot fetch; `AppState`
+grew `loadPageData`, which runs on every focus change, asks for exactly what the
+opened page is missing, and writes it into the session. The in-flight set that
+guards it is not optional: a focus is announced more than once while a feed is
+being adopted, and the panel re-renders on the `change` each response causes.
+
+**The tree's counts forced the lists to be eager.** Trackers, alerts and people
+are all fetched in parallel the moment a feed is selected, rather than by the
+page that shows them. A count that appears one page visit later is worse than
+three small requests, and each is reported by name on failure, so a member who
+may read a feed but not its people still gets their trackers.
+
+**The credential lives behind a `<details>`.** `device_key` is fetched only when
+its tracker's page opens and is shown only inside a closed disclosure, which
+means opening a tracker in front of somebody does not hand them the credential.
+`<details>` rather than a toggle button because `PanelRenderer` restores open
+disclosures by key across a re-render and a hand-rolled toggle would snap shut
+on the next tracker update. The key is per-tracker, so opening one does not open
+the next one navigated to. A detail is also dropped when its tracker leaves the
+list, so a deleted tracker's credential does not linger in memory.
+
+**The viz and editor links are built from the feed's own URLs.** test-track
+reads `static` / `rt_vp` / `rt_tu` / `rt_al` out of its hash and coloring-book
+takes a `load=<url>` command, so both deep links are shareable to somebody who
+has never opened this app. The realtime three resolve against `RT_BASE` first,
+because they are stored as bare paths; the static URL is passed exactly as its
+author typed it.
+
+**The feed page reports the two schedules separately.** `Feed.load` is what
+cafe-car last made of the zip and is what the published feed is built from; the
+counts under it are what this browser parsed a minute ago. They can legitimately
+disagree — a failed load leaves the server on an older schedule than the map is
+drawing — and that disagreement is the most useful thing the page can show, so
+the two are never merged into one status.
+
+**`loadStatusBadge` had already been written twice.** The feed switcher's badge
+and the feed page's are the same three-way distinction, including the rule that
+a null `load` is "never loaded" and emphatically not "pending", so it moved into
+`managed-render.ts` and the switcher now imports it.
 
 ---
 
