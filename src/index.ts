@@ -55,7 +55,7 @@ session.addEventListener('staticloaded', (e) => {
   // `loadStaticFeed` replaces the previous feed's data in place; an explicit
   // clear would only cost an extra empty repaint.
   mapCtrl.loadStaticFeed((e as CustomEvent<GTFSStatic>).detail);
-  // The previous feed's trackers are not this feed's, and phase 7 is what
+  // The previous feed's trackers are not this feed's, and phase 8 is what
   // repopulates them from the event stream.
   mapCtrl.clearVehicles();
 });
@@ -70,10 +70,28 @@ const accountLink = document.getElementById('account-link') as HTMLAnchorElement
 // sides are only ever called after this block has run.
 let panel: PanelRenderer;
 
+/**
+ * The reload button's two states.
+ *
+ * Hidden without a feed, and disabled while cafe-car's own load is running,
+ * which the event stream reports as it happens. Queueing a second load on top
+ * of one already in flight does nothing — schedule-foamer's task is a singleton
+ * per feed — so a button that offered it would be lying about what it does.
+ */
+function syncReloadButton(): void {
+  const feed = session.feed;
+  reloadBtn.classList.toggle('hidden', !feed);
+  const running = feed?.load?.status === 'running';
+  reloadBtn.disabled = running;
+  reloadBtn.textContent = running ? 'Reloading…' : 'Reload';
+}
+
+session.addEventListener('change', syncReloadButton);
+
 const appState = new AppState(session, {
   onFeedChange: (feed) => {
     feedSwitcherBtn.textContent = feed ? feed.feed_name : 'Select feed';
-    reloadBtn.classList.toggle('hidden', !feed);
+    syncReloadButton();
     if (!feed) mapCtrl.clearStaticFeed();
     // Selecting a feed is what gives the sheet something to show; dropping one
     // takes it away again.
@@ -144,6 +162,9 @@ reloadBtn.addEventListener('click', async () => {
   try {
     await reloadFeed(feed.id);
     notify.info(`Queued a reload of ${feed.feed_name}`);
+    // The stream reports the load moving to `running` a moment from now, but
+    // only once schedule-foamer picks the task up; re-reading the row keeps the
+    // gap from looking like nothing happened.
     await appState.refreshFeed();
     void session.loadStatic(feed.static_feed_url, feed.feed_name);
   } catch (err) {
@@ -153,7 +174,9 @@ reloadBtn.addEventListener('click', async () => {
       );
     }
   } finally {
-    reloadBtn.disabled = false;
+    // Not unconditionally re-enabled: the load this just queued may already be
+    // running, and that is what decides the button now.
+    syncReloadButton();
   }
 });
 

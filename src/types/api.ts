@@ -250,3 +250,35 @@ export interface ShareResult {
   kind: string;
   message: string;
 }
+
+// ─── The event channel ────────────────────────────────────────────────────────
+// `GET /feeds/{id}/events` frames, mirroring railroad-club's `feed_events.py`.
+// cafe-car forwards these unparsed, so the shape is agreed between whoever
+// published it and this file, with no server-side schema in between.
+
+/**
+ * Where the feed's static load has got to. The first frame of every stream is
+ * one of these carrying the current state, so a client never polls to bootstrap.
+ */
+export interface LoadEvent {
+  type: 'load';
+  /** Null for a feed the loader has never touched. Not `pending`. */
+  load: LoadStatus | null;
+}
+
+/**
+ * One vehicle's current fix, already in the camelCase shape the map reads, so
+ * it goes into `FeedSession.vehicles` without a translation layer. Published
+ * from phase 8 onwards; the client tolerates one before then by ignoring it.
+ */
+export interface PositionEvent {
+  type: 'position';
+  vehicle: unknown;
+}
+
+/**
+ * A frame off the channel. The union is open on purpose: an event type added
+ * upstream reaches an older client as an unrecognised `type`, which it drops
+ * rather than treating as an error.
+ */
+export type FeedEvent = LoadEvent | PositionEvent | { type: string };

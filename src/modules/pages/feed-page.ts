@@ -22,7 +22,7 @@ import { CONFIG } from '../../config';
 import type { Feed } from '../../types/api';
 import type { RenderContext } from '../render-utils';
 import { escHtml, prop, propList, section } from '../render-utils';
-import { actionButton, formatIso, isoWithAge, loadStatusBadge } from '../managed-render';
+import { actionButton, isoWithAge, loadStatusBadge } from '../managed-render';
 import { resolveRealtimeUrl } from '../feed-url-resolve';
 
 /**
@@ -72,8 +72,12 @@ function renderLoad(feed: Feed): string {
       }
       ${propList([
         prop('Last loaded', isoWithAge(load.last_loaded_at)),
-        prop('Started', formatIso(load.started_at)),
-        load.next_retry_at ? prop('Next retry', formatIso(load.next_retry_at)) : '',
+        // `isoWithAge` counts in both directions, so a start in the past reads
+        // as an elapsed time while a retry in the future reads as a countdown.
+        // Both are driven by the panel's own ticker, so a running load shows
+        // itself running without the stream having to say anything.
+        prop('Started', isoWithAge(load.started_at)),
+        load.next_retry_at ? prop('Next retry', isoWithAge(load.next_retry_at)) : '',
         prop('Feed timezone', escHtml(load.timezone ?? '—')),
       ])}
     </div>`

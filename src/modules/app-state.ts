@@ -22,7 +22,9 @@
    - The refreshers are public: a write in `actions.ts` re-reads the list it
      changed rather than patching the session by hand, so the panel can never
      show a row the server did not confirm. `adoptFeedRow` is the same idea for
-     the feed itself, and owns the hash rewrite a rename needs. */
+     the feed itself, and owns the hash rewrite a rename needs.
+   - The feed's event stream is owned here, because this is the one module that
+     knows when a feed starts and stops being the selected one. */
 /**
  * The single entry point for selecting a feed and for changing focus.
  *
@@ -46,7 +48,7 @@
 import { CONFIG } from '../config';
 import type { PageState } from '../types/page-state';
 import { pageStatesEqual } from '../types/page-state';
-import type { Feed, Me } from '../types/api';
+import type { Feed, LoadStatus, Me } from '../types/api';
 import { buildBreadcrumbs, validateState } from './breadcrumbs';
 import type { FeedSession } from './feed-session';
 import {
@@ -62,6 +64,7 @@ import {
 import { getMe } from './api-client';
 import { notify } from './notification-system';
 import { PageStateManager } from './page-state-manager';
+import { FeedEventStream } from './event-stream';
 
 export interface AppStateHooks {
   /** Called on every focus change, including the boot restore. */
@@ -92,6 +95,14 @@ export class AppState {
    * fired again on each pass.
    */
   private loadingPages = new Set<string>();
+
+  /**
+   * The selected feed's live channel. One instance for the app's lifetime; it
+   * holds at most one connection and re-points it on every selection.
+   */
+  private stream = new FeedEventStream({
+    onLoad: (feedId, load) => this.applyLoadStatus(feedId, load),
+  });
 
   constructor(session: FeedSession, hooks: AppStateHooks) {
     this.session = session;
@@ -198,6 +209,11 @@ export class AppState {
     this.pages.setFeedParams({ feed: feed.feed_name });
     this.hooks.onFeedChange(feed);
 
+    // Before the list requests rather than after: the first frame is the
+    // current load status, so a feed whose download is already running says so
+    // without waiting for three list responses first.
+    this.stream.connect(feed.id);
+
     this.pendingFocus = restore.type === 'home' ? null : restore;
     this.applyPendingFocus({ reportMiss: false });
 
@@ -254,6 +270,7 @@ export class AppState {
 
   /** Drop the selection entirely and return to the empty state. */
   clearFeed(): void {
+    this.stream.close();
     this.session.clear();
     localStorage.removeItem(CONFIG.SELECTED_FEED_KEY);
     this.pendingFocus = null;
@@ -351,6 +368,35 @@ export class AppState {
   private emitFocus(state: PageState): void {
     void this.loadPageData(state);
     this.hooks.onFocusChange(state);
+  }
+
+  /**
+   * Apply a load status pushed down the channel.
+   *
+   * `feedId` is checked rather than trusted: a feed switch can land between an
+   * event being published and being delivered, and writing the old feed's
+   * status onto the new one is a lie with nothing to give it away.
+   *
+   * The transition is reported, not the state. The first frame of every stream
+   * carries the current status, which is almost always the one the feed row
+   * already had, so announcing every frame would toast on each connect. Only
+   * `success` and `failed` are announced at all: they are where a load stops,
+   * and the badge is already saying `running` in the meantime.
+   */
+  private applyLoadStatus(feedId: number, load: LoadStatus | null): void {
+    const feed = this.session.feed;
+    if (!feed || feed.id !== feedId) return;
+
+    const before = feed.load?.status ?? null;
+    this.session.setLoadStatus(load);
+    const after = load?.status ?? null;
+    if (after === before) return;
+
+    if (after === 'success') {
+      notify.success(`${feed.feed_name}: the server finished loading the schedule.`);
+    } else if (after === 'failed') {
+      notify.error(`${feed.feed_name}: the server could not load the schedule.`);
+    }
   }
 
   /** Re-read the selected feed's row, e.g. after asking for a reload. */

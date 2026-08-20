@@ -87,6 +87,15 @@ export const CONFIG = {
   // than that is not "stale", it is gone.
   TRACKER_STALE_MS: 60_000,
 
+  // The feed event stream. A browser reconnects a *dropped* stream by itself;
+  // these govern the case it will not retry, which is a response that was not
+  // an event stream at all. That is almost always an expired oauth2-proxy
+  // session answering with a login page, and the only fix for one is a full
+  // page load, so the retries are capped rather than endless.
+  SSE_RETRY_BASE_MS: 1000,
+  SSE_RETRY_MAX_MS: 15_000,
+  SSE_MAX_RETRIES: 4,
+
   // Where a path-only feed URL resolves to. Dev is the music-student stack's
   // cafe-car (`docker-compose.yml`, service `api`); prod is the deployed feed
   // server. Read by the vendored `feed-url-resolve.ts`, which is shared with

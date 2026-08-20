@@ -18,14 +18,22 @@
  * the zip finishes downloading, or never, if `static_feed_url` is unreachable.
  * Every reader has to cope with one without the other.
  *
- * Phase 7 fills `vehicles` from the event stream. That name does not change: a
+ * Phase 8 fills `vehicles` from the event stream. That name does not change: a
  * tracker with a fix is a `VehiclePosition` here, keyed by `Tracker.id`, and
  * an unassigned one is drawn in `CONFIG.VEHICLE_UNMATCHED_COLOR` rather than on
  * a layer of its own.
  */
 import { GTFSStatic } from '../gtfs-static';
 import type { AlertRecord, TripUpdate } from '../gtfs-rt';
-import type { Alert, AlertDetail, Feed, People, Tracker, TrackerDetail } from '../types/api';
+import type {
+  Alert,
+  AlertDetail,
+  Feed,
+  LoadStatus as LoadStatusRow,
+  People,
+  Tracker,
+  TrackerDetail,
+} from '../types/api';
 import type { VehiclePosition } from '../map-controller';
 import { adoptFeedTimezone } from './feed-time';
 import { feedProgressIndicator } from './feed-progress-indicator';
@@ -92,6 +100,20 @@ export class FeedSession extends EventTarget {
   /** Replace the selected feed's row in place, keeping everything loaded. */
   updateFeed(feed: Feed): void {
     this.feed = feed;
+    this.dispatchEvent(new CustomEvent('change'));
+  }
+
+  /**
+   * Replace just the load half of the selected feed, from the event stream.
+   *
+   * A new object rather than a mutation of `feed.load`, so a renderer that
+   * held the old row still sees the state it rendered. Nothing else on the
+   * feed is touched: the stream reports on the loader, and a rename or a
+   * repointed URL arrives through `updateFeed` instead.
+   */
+  setLoadStatus(load: LoadStatusRow | null): void {
+    if (!this.feed) return;
+    this.feed = { ...this.feed, load };
     this.dispatchEvent(new CustomEvent('change'));
   }
 
