@@ -2,9 +2,8 @@
  * Shell boot: the furniture, the feed session, and the wiring between the map,
  * the panel and the address bar.
  *
- * The panel's contents are phase 5a's (see CURRENT_PLAN.md); until then the
- * panel shows the breadcrumb trail and names the page, which is enough to prove
- * that navigation, hash state and the map focus all agree.
+ * The panel itself is `PanelRenderer`, which owns its own re-rendering off the
+ * session's events. Everything here does is tell it which page to show.
  */
 import { MapController } from './map-controller';
 import type { GTFSStatic } from './gtfs-static';
@@ -19,7 +18,7 @@ import { showFeedSwitcher } from './modules/feed-switcher';
 import { reloadFeed, SessionExpiredError } from './modules/api-client';
 import { SearchController } from './modules/search-controller';
 import { buildSearchEntries } from './modules/search-entries';
-import { escHtml } from './modules/render-utils';
+import { PanelRenderer } from './modules/panel-renderer';
 
 // ─── Shell ────────────────────────────────────────────────────────────────────
 const version = document.getElementById('app-version');
@@ -66,62 +65,44 @@ const feedSwitcherBtn = document.getElementById('feed-switcher-btn') as HTMLButt
 const reloadBtn = document.getElementById('reload-feed-btn') as HTMLButtonElement;
 const accountLink = document.getElementById('account-link') as HTMLAnchorElement;
 
+// Declared before AppState so the focus hook can name it; the hooks on both
+// sides are only ever called after this block has run.
+let panel: PanelRenderer;
+
 const appState = new AppState(session, {
   onFeedChange: (feed) => {
     feedSwitcherBtn.textContent = feed ? feed.feed_name : 'Select feed';
     reloadBtn.classList.toggle('hidden', !feed);
     if (!feed) mapCtrl.clearStaticFeed();
+    // Selecting a feed is what gives the sheet something to show; dropping one
+    // takes it away again.
+    if (feed) bottomSheet.open('half');
+    else bottomSheet.close();
   },
   onFocusChange: (state) => {
-    renderPanel(state);
-    if (state.type === 'home') {
-      bottomSheet.close();
-    } else {
-      bottomSheet.open('half');
-    }
+    panel.show(state, appState.breadcrumbs);
+    // The sheet stays open on `home`, because `home` is the browse tree and it
+    // is the only way into an object with no map feature to tap. A closed
+    // sheet hides its own drag handle, so closing it here would strand a phone
+    // with no way back to the tree.
+    if (session.feed) bottomSheet.open('half');
+    else bottomSheet.close();
     // After the sheet moves, so the camera knows how much of the map is covered.
     mapCtrl.focus(state);
   },
 });
 
-// The panel re-renders on any session change so a page that names an object
-// which has only just arrived stops showing its bare id.
-session.addEventListener('change', () => renderPanel(appState.focus));
-
-/**
- * The placeholder panel. Phase 5a replaces this with the real dispatcher, so it
- * deliberately does no more than prove the trail and the page agree.
- */
-function renderPanel(state: PageState): void {
-  if (!session.feed) {
-    panelContent.innerHTML =
-      '<p class="text-base-content/50 text-sm text-center py-8">No feed selected</p>';
-    return;
-  }
-
-  const trail = appState.breadcrumbs
-    .map(
-      (crumb) =>
-        `<a class="link link-hover" href="${escHtml(appState.hrefFor(crumb.pageState))}">${escHtml(
-          crumb.label
-        )}</a>`
-    )
-    .join('<span class="opacity-40 mx-1">/</span>');
-
-  const status = session.staticError
-    ? `<p class="text-sm text-error">Static feed did not load: ${escHtml(session.staticError)}</p>`
-    : session.staticFeed
-      ? `<p class="text-sm opacity-60">${session.staticFeed.stops.size} stops, ${session.staticFeed.routes.size} routes, ${session.trackers.size} trackers.</p>`
-      : `<p class="text-sm opacity-60">Downloading the static feed… ${session.trackers.size} trackers.</p>`;
-
-  panelContent.innerHTML = `
-    <div class="space-y-3">
-      <div class="text-xs opacity-70">${trail || escHtml(session.feed.feed_name)}</div>
-      <h2 class="text-lg font-semibold">${escHtml(state.type)}</h2>
-      ${status}
-      <p class="text-xs opacity-40">This page arrives in phase 5a.</p>
-    </div>`;
-}
+panel = new PanelRenderer(panelContent, session, {
+  navigate: (state) => appState.setFocus(state),
+  href: (state) => appState.hrefFor(state),
+  hoverStop: (stop_id) => mapCtrl.hoverStop(stop_id),
+});
+panel.initialize();
+// The trail is rebuilt from the session, so a crumb whose object only just
+// arrived stops showing its bare id. The page itself re-renders on the same
+// event, inside the renderer.
+session.addEventListener('change', () => panel.setBreadcrumbs(appState.breadcrumbs));
+panel.show(appState.focus, appState.breadcrumbs);
 
 // Clicking a stop, route or tracker on the map focuses it in the panel; the
 // reverse direction runs through onFocusChange above.

@@ -37,6 +37,12 @@ The exception is `modal-utils.ts`. coloring-book's copy is a superset of
 test-track's older one, and `notification-system.ts` imports `renderCloseIcon`
 from the newer form, so that one row still names coloring-book.
 
+`src/modules/pages/trip-page.ts` and `src/modules/pages/tree-page.ts` are in
+neither tier and deliberately absent from the table: they are yard-master's own
+files with no upstream at all. test-track browses route, stop, vehicle and
+alert, and shows a feed status page when nothing is focused; this repo's
+hierarchy runs Route -> Trips -> Trip and its no-focus page is a browse tree.
+
 Run `pnpm vendor:check` to diff every `verbatim` entry against its recorded SHA
 in the repo its `Source repo` column names (rows whose sibling is not checked out
 are skipped, so CI is never blocked by it). `adopted` rows are listed and then
@@ -45,7 +51,7 @@ left alone.
 | Local path | Source repo | Source path | SHA | Status | Note |
 |---|---|---|---|---|---|
 | `src/styles/main.css` | `test-track` | `src/styles/main.css` | 56f120a | verbatim | The whole stylesheet: daisyUI theme block, the panel/map grid and its 768px collapse, the bottom-sheet transforms, and the MapLibre control overrides. test-track's copy is already the no-editor form of coloring-book's, so it is taken from there rather than re-stripped |
-| `src/modules/modal-utils.ts` | `coloring-book` | `src/modules/modal-utils.ts` | 52baec7 | verbatim | `showModal` plus the shared icon builders. Taken from coloring-book, which is a superset of test-track's older copy; `notification-system.ts` imports `renderCloseIcon` from here |
+| `src/modules/modal-utils.ts` | `coloring-book` | `src/modules/modal-utils.ts` | 52baec7 | modified | `showModal` plus the shared icon builders. Taken from coloring-book, which is a superset of test-track's older copy everywhere except `renderWarningIcon`; see the banner's `@changes`. `notification-system.ts` imports `renderCloseIcon` from here |
 | `src/modules/notification-system.ts` | `test-track` | `src/modules/notification-system.ts` | 56f120a | verbatim | Toast system; the `notify` singleton needs an explicit `.initialize()`. Born in coloring-book; test-track carries it verbatim |
 | `src/modules/feed-progress-indicator.ts` | `test-track` | `src/modules/feed-progress-indicator.ts` | 56f120a | verbatim | Top loading bar, keyed by operation name. The singleton touches `document.body` at import time, so it cannot be imported before the DOM exists. Born in coloring-book; test-track carries it verbatim |
 | `src/modules/theme-controller.ts` | `test-track` | `src/modules/theme-controller.ts` | 56f120a | verbatim | Applies `data-theme` and persists the choice. Every theme change has to be followed by `clearThemeColorCache()` or MapLibre keeps painting the old accent. Born in coloring-book; test-track carries it verbatim |
@@ -76,4 +82,15 @@ left alone.
 | `src/modules/page-state-manager.ts` | `test-track` | `src/modules/page-state-manager.ts` | 56f120a | modified | Owns the current focus, the navigation history and the hash. See the banner's `@changes`: the hash codec is rewritten around an explicit `type` param |
 | `src/modules/breadcrumbs.ts` | `test-track` | `src/modules/breadcrumbs.ts` | fa12a57 | modified | The breadcrumb trail and `validateState`. See the banner's `@changes`: the variant set is yard-master's, trackers resolve against the API list, and a managed object is accepted while its list is still empty |
 | `src/modules/app-state.ts` | `test-track` | `src/modules/app-state.ts` | fa12a57 | modified | Focus changes and feed selection. See the banner's `@changes`: a feed is an API row rather than a `FeedSelection` of URLs, and a linked focus is held pending until the zip it names has parsed |
+| `src/types/gtfs-flex.ts` | `test-track` | `src/types/gtfs-flex.ts` | fa12a57 | verbatim | `StopTimeRef`, the one-of behind a stop_time's stop / location group / zone. Pulled in as `route-source.ts`'s vocabulary; this repo ingests no flex tables, so every ref it ever sees is `kind: 'stop'`. Born in coloring-book |
+| `src/modules/route-source.ts` | `test-track` | `src/modules/route-source.ts` | fa12a57 | verbatim | The storage-agnostic interface `route-sequence.ts` and `route-graph.ts` read, so the same engine runs over `GTFSStatic` here and the editor's tables in coloring-book. Born in coloring-book |
+| `src/modules/gtfs-static-route-source.ts` | `test-track` | `src/modules/gtfs-static-route-source.ts` | fa12a57 | verbatim | `RouteSource` over `GTFSStatic`. The feed is parsed once and never mutated, so it needs no invalidation |
+| `src/modules/scs.ts` | `test-track` | `src/modules/scs.ts` | fa12a57 | verbatim | Shortest common supersequence over stop patterns. The engine behind one strip that shows every pattern on a route. Born in coloring-book |
+| `src/modules/route-sequence.ts` | `test-track` | `src/modules/route-sequence.ts` | fa12a57 | verbatim | Merges a route's trips into one ordered stop list per direction, with per-stop trip counts and repeat-visit handling. Born in coloring-book |
+| `src/modules/route-graph.ts` | `test-track` | `src/modules/route-graph.ts` | fa12a57 | verbatim | Assigns the strip's rows to lanes so branches and merges can be drawn. Born in coloring-book |
+| `src/modules/route-strip.ts` | `test-track` | `src/modules/route-strip.ts` | fa12a57 | verbatim | The strip's SVG rail: lane geometry, row paths, dots and the endpoint heuristics. `STRIP_ROW_CLASS` is what `panel-renderer.ts` delegates stop hovering off. Born in coloring-book |
+| `src/modules/pages/alert-page.ts` | `test-track` | `src/modules/pages/alert-page.ts` | fa12a57 | verbatim | The GTFS-RT alert page and `renderAlertList`, which the route, stop and trip pages all embed. Phase 5b takes this file over for the managed `Alert` object and it moves to `modified` or `adopted` then |
+| `src/modules/pages/route-page.ts` | `test-track` | `src/modules/pages/route-page.ts` | fa12a57 | modified | The route strip. See the banner's `@changes`: `vehicle` links became `tracker` links, the wording follows, and a Trips section lists the direction's trips |
+| `src/modules/pages/stop-page.ts` | `test-track` | `src/modules/pages/stop-page.ts` | fa12a57 | modified | The stop and station page. See the banner's `@changes`: `vehicle` links became `tracker` links and a departure's headsign links to its trip page |
+| `src/modules/panel-renderer.ts` | `test-track` | `src/modules/panel-renderer.ts` | fa12a57 | modified | The panel dispatcher, its scroll/`<details>` restore and the shared ticker. See the banner's `@changes`: yard-master's session events, no status page to hand back to, and the nine-variant switch |
 | `src/modules/feed-session.ts` | `test-track` | `src/feed-session.ts` | 56f120a | adopted | Not a copy: written here, and deliberately shaped so the vendored modules that read a `FeedSession` compile against it unchanged. test-track's owns a GTFS-RT poller; here the managed objects come from the API and the live half arrives on the SSE channel, so only the `staticFeed` / `vehicles` / `alerts` / `tripUpdates` surface is held in common. Listed so the seam is inventoried rather than invisible |

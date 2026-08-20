@@ -1,6 +1,10 @@
 /* @vendored-from coloring-book:src/modules/modal-utils.ts
    @sha 52baec7
-   @status verbatim */
+   @status modified
+   @changes
+   - `renderWarningIcon` appended, taken verbatim from test-track's copy. The
+     "coloring-book is a superset" rule holds for everything else, but not for
+     this one icon, and the route and stop pages' alert pips need it. */
 export function renderTrashIcon(sizeClass = 'h-4 w-4'): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" class="${sizeClass}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>`;
 }
@@ -58,6 +62,10 @@ export function renderTriangleIcon(sizeClass = 'h-4 w-4'): string {
  * stay reachable (an upload/add button) belongs after the returned markup, not
  * inside it.
  */
+export function renderWarningIcon(sizeClass = 'h-4 w-4'): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="${sizeClass}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>`;
+}
+
 export function renderScrollableTable(
   headers: string[],
   rowsHtml: string,

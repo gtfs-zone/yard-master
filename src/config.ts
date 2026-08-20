@@ -64,6 +64,15 @@ export const CONFIG = {
   // route. Far above any natural key (max ~90999).
   SPOTLIGHT_SORT_KEY: 1_000_000,
 
+  // Trips listed on a route page before the list is capped. A busy route has
+  // thousands; the page says how many it left out.
+  ROUTE_TRIP_LIST_MAX: 200,
+
+  // Stops listed in the tree's Stops section before it is capped, and the
+  // routes/stops/trips a tree section shows a count for. A large feed has tens
+  // of thousands of stops and the panel is not the place to page through them.
+  TREE_LIST_MAX: 200,
+
   // Neutral fill for a vehicle whose trip/route cannot be resolved against the
   // static feed.
   VEHICLE_UNMATCHED_COLOR: '#94a3b8',

@@ -7,8 +7,10 @@
      vocabulary and is unchanged.
    - `applyFocus` handles yard-master's managed variants (`feed`,
      `assignments`, `people`) alongside `alert`, all of which clear the focus
-     without moving the camera. `trip` joins them until phase 4 renders a
-     trip's shape. */
+     without moving the camera.
+   - `trip` draws the trip's own geometry on a source this file owns, spotlights
+     its route and frames it. LayerManager has no `trip` focus kind and stays
+     verbatim, so the shape lives here instead. */
 import maplibregl from 'maplibre-gl';
 import { CONFIG } from './config';
 import type { GTFSStatic } from './gtfs-static';
@@ -17,6 +19,8 @@ import { BasemapControl, initialMapStyle } from './modules/basemap-control';
 import type { MapAppearance } from './modules/basemap-control';
 import { LayerManager } from './modules/layer-manager';
 import type { MapDataIssues } from './modules/layer-manager';
+import { STOP_FOCUS_HALO_LAYER } from './modules/stop-layer-style';
+import { resolveThemeColor } from './utils/theme-color';
 
 export interface VehiclePosition {
   /**
@@ -110,6 +114,36 @@ function restoreView(): MapView {
   };
 }
 
+/** The trip overlay's own source and layers, owned here rather than by LayerManager. */
+const TRIP_SOURCE = 'ym-trip-shape';
+const TRIP_CASING_LAYER = 'ym-trip-shape-casing';
+const TRIP_LINE_LAYER = 'ym-trip-shape-line';
+const TRIP_LINE_WIDTH = 4;
+
+/** Same token LayerManager paints selection in, resolved the same way. */
+function tripAccent(): string {
+  return resolveThemeColor('--color-primary', '#3b82f6');
+}
+
+/** Bounding box of a path, or null when there is nothing to frame. */
+function boundsOf(path: [number, number][] | null): [[number, number], [number, number]] | null {
+  if (!path || path.length === 0) return null;
+  let west = Infinity;
+  let south = Infinity;
+  let east = -Infinity;
+  let north = -Infinity;
+  for (const [lon, lat] of path) {
+    if (lon < west) west = lon;
+    if (lon > east) east = lon;
+    if (lat < south) south = lat;
+    if (lat > north) north = lat;
+  }
+  return [
+    [west, south],
+    [east, north],
+  ];
+}
+
 export class MapController {
   private map!: maplibregl.Map;
   private layers!: LayerManager;
@@ -118,6 +152,9 @@ export class MapController {
   private viewSaveTimeout: ReturnType<typeof setTimeout> | null = null;
   /** Height of the mobile bottom sheet, kept out of the camera's way. */
   private bottomPadding = 0;
+
+  /** The parsed feed, for the geometry LayerManager does not hold: trip paths. */
+  private feed: GTFSStatic | null = null;
 
   /**
    * Flips true exactly once, on the first `load`, and never back. Work issued
@@ -136,6 +173,12 @@ export class MapController {
    * follow mode.
    */
   private following: string | null = null;
+
+  /**
+   * The focused trip's geometry, held so it can be re-added after a `setStyle`.
+   * Null when nothing is focused or the trip has no drawable path.
+   */
+  private tripShape: [number, number][] | null = null;
 
   /** Called when the user clicks a stop, route, or vehicle on the map. */
   onSelect: ((state: PageState) => void) | null = null;
@@ -195,7 +238,12 @@ export class MapController {
     // setStyle drops every source and layer we own, so each basemap or
     // projection change has to re-add them. This is the single highest-risk
     // path in the map: without it, switching basemaps blanks all GTFS data.
-    this.map.on('basemap:changed', () => this.layers.rebuild());
+    this.map.on('basemap:changed', () => {
+      this.layers.rebuild();
+      // setStyle dropped the trip source along with LayerManager's, so it has
+      // to be re-added and re-filled here too.
+      this.drawTripShape();
+    });
 
     this.map.on('moveend', () => this.queueViewSave());
 
@@ -235,6 +283,7 @@ export class MapController {
   }
 
   loadStaticFeed(feed: GTFSStatic): void {
+    this.feed = feed;
     this.whenLoaded(() => {
       this.layers.setStaticFeed(feed);
       this.fitFeed();
@@ -242,7 +291,12 @@ export class MapController {
   }
 
   clearStaticFeed(): void {
-    this.whenLoaded(() => this.layers.setStaticFeed(null));
+    this.feed = null;
+    this.tripShape = null;
+    this.whenLoaded(() => {
+      this.layers.setStaticFeed(null);
+      this.drawTripShape();
+    });
   }
 
   showVehicles(positions: VehiclePosition[]): void {
@@ -321,6 +375,9 @@ export class MapController {
    */
   refreshAccentColor(): void {
     this.layers?.refreshAccentColor();
+    if (this.map?.getLayer(TRIP_LINE_LAYER)) {
+      this.map.setPaintProperty(TRIP_LINE_LAYER, 'line-color', tripAccent());
+    }
   }
 
   private applyFocus(state: PageState): void {
@@ -329,6 +386,7 @@ export class MapController {
 
     switch (state.type) {
       case 'home': {
+        this.clearTrip();
         this.layers.setFocus(null);
         // Unfocusing frames the whole feed again, mirroring how focusing a
         // route frames that route.
@@ -347,14 +405,34 @@ export class MapController {
       case 'assignments':
       case 'people':
       case 'alert':
-      case 'trip':
-        // Managed pages with no geometry of their own, plus `trip`, whose
-        // shape rendering lands with the trip page in phase 4. Nothing to
-        // highlight or fly to; the camera stays where the reader left it.
+        // Managed pages with no geometry of their own. Nothing to highlight or
+        // fly to; the camera stays where the reader left it.
+        this.clearTrip();
         this.layers.setFocus(null);
         return;
 
+      case 'trip': {
+        const path = this.tripPath(state.trip_id);
+        this.tripShape = path;
+        this.drawTripShape();
+        // Spotlight the parent route so the trip reads as one pattern within
+        // it. A trip whose route is unknown still draws its own path.
+        const routeId = state.route_id ?? this.feed?.trips.get(state.trip_id)?.route_id;
+        this.layers.setFocus(routeId ? { kind: 'route', id: routeId } : null);
+        const bounds = boundsOf(path);
+        if (bounds) {
+          this.map.fitBounds(bounds, {
+            padding: this.padding(),
+            maxZoom: 15,
+            duration: CONFIG.FOCUS_BOUNDS_DURATION,
+            essential: true,
+          });
+        }
+        return;
+      }
+
       case 'route': {
+        this.clearTrip();
         this.layers.setFocus({ kind: 'route', id: state.route_id });
         const bounds = this.layers.routeBounds(state.route_id);
         if (bounds) {
@@ -369,12 +447,14 @@ export class MapController {
       }
 
       case 'stop': {
+        this.clearTrip();
         this.layers.setFocus({ kind: 'stop', id: state.stop_id });
         this.easeToPoint(this.layers.focusPosition(state.stop_id));
         return;
       }
 
       case 'tracker': {
+        this.clearTrip();
         this.layers.setFocus({ kind: 'vehicle', id: state.tracker_id });
         // Re-arm follow on this tracker (a different one replaces the old).
         this.following = state.tracker_id;
@@ -382,6 +462,85 @@ export class MapController {
         return;
       }
     }
+  }
+
+  // ── Trip geometry ──────────────────────────────────────────────────────────
+
+  /**
+   * The path to draw for a trip: its `shapes.txt` polyline where the feed has
+   * one, and otherwise the straight line through its stops in `stop_sequence`
+   * order. The fallback is a real approximation and is drawn dashed to say so.
+   */
+  private tripPath(tripId: string): [number, number][] | null {
+    const feed = this.feed;
+    const trip = feed?.trips.get(tripId);
+    if (!feed || !trip) return null;
+
+    const shape = trip.shape_id ? feed.shapes.get(trip.shape_id) : undefined;
+    if (shape && shape.length > 1) return shape;
+
+    const points: [number, number][] = [];
+    for (const time of feed.stopTimesByTrip.get(tripId) ?? []) {
+      const stop = feed.stops.get(time.stop_id);
+      if (stop) points.push([stop.lon, stop.lat]);
+    }
+    return points.length > 1 ? points : null;
+  }
+
+  private clearTrip(): void {
+    if (this.tripShape === null) return;
+    this.tripShape = null;
+    this.drawTripShape();
+  }
+
+  /** Add the trip source and layers if missing, then publish the current path. */
+  private drawTripShape(): void {
+    if (!this.ready) return;
+
+    if (!this.map.getSource(TRIP_SOURCE)) {
+      this.map.addSource(TRIP_SOURCE, {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+      // Under the stop and vehicle layers, over the route lines: the trip is a
+      // path through the network, not a thing sitting on top of it.
+      const before = this.map.getLayer(STOP_FOCUS_HALO_LAYER) ? STOP_FOCUS_HALO_LAYER : undefined;
+      this.map.addLayer(
+        {
+          id: TRIP_CASING_LAYER,
+          type: 'line',
+          source: TRIP_SOURCE,
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
+          paint: {
+            'line-color': '#000000',
+            'line-opacity': 0.35,
+            'line-width': TRIP_LINE_WIDTH + 4,
+          },
+        },
+        before
+      );
+      this.map.addLayer(
+        {
+          id: TRIP_LINE_LAYER,
+          type: 'line',
+          source: TRIP_SOURCE,
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
+          paint: { 'line-color': tripAccent(), 'line-width': TRIP_LINE_WIDTH },
+        },
+        before
+      );
+    }
+
+    const source = this.map.getSource(TRIP_SOURCE) as maplibregl.GeoJSONSource;
+    source.setData(
+      this.tripShape
+        ? {
+            type: 'Feature',
+            properties: {},
+            geometry: { type: 'LineString', coordinates: this.tripShape },
+          }
+        : { type: 'FeatureCollection', features: [] }
+    );
   }
 
   /**
