@@ -43,7 +43,7 @@
  *
  * Selection and the static download are deliberately separate. A feed is
  * selected the moment its API row is in hand, and its trackers, rules and
- * people are reachable from that instant; the zip lands whenever it lands, or
+ * managers are reachable from that instant; the zip lands whenever it lands, or
  * never, if `static_feed_url` is unreachable. Nothing in the managed half is
  * allowed to wait on it.
  */
@@ -58,7 +58,7 @@ import type { FeedSession } from './feed-session';
 import {
   getAlert,
   getFeed,
-  getPeople,
+  getMembers,
   getTracker,
   listAlerts,
   listAssignments,
@@ -330,11 +330,11 @@ export class AppState {
   }
 
   /** Re-read the members and open invites. */
-  async refreshPeople(): Promise<void> {
+  async refreshMembers(): Promise<void> {
     const feed = this.session.feed;
     if (!feed) return;
-    await this.fetchInto('members', () => getPeople(feed.id), (people) =>
-      this.session.setPeople(people)
+    await this.fetchInto('members', () => getMembers(feed.id), (members) =>
+      this.session.setMembers(members)
     );
   }
 
@@ -421,7 +421,7 @@ export class AppState {
    * calendar, which asks for a date range rather than for everything.
    *
    * One failing does not take the others down — a member who may read the feed
-   * but not its people should still get their trackers.
+   * but not its managers should still get their trackers.
    */
   private async loadManagedObjects(feed: Feed): Promise<void> {
     await Promise.all([
@@ -431,8 +431,8 @@ export class AppState {
       this.fetchInto('service alerts', () => listAlerts(feed.id), (rows) =>
         this.session.setServiceAlerts(rows)
       ),
-      this.fetchInto('members', () => getPeople(feed.id), (people) =>
-        this.session.setPeople(people)
+      this.fetchInto('members', () => getMembers(feed.id), (members) =>
+        this.session.setMembers(members)
       ),
       // The fleet as it stands, so the map is populated before the first fix
       // is pushed. A tracker reporting once a minute would otherwise leave the
@@ -521,9 +521,9 @@ export class AppState {
       // A linked feed has no history worth a request; a hosted one's is the
       // rollback list, so it is fetched when the page that shows it opens.
       load = async () => this.refreshUploads();
-    } else if (state.type === 'people' && !session.people && session.feed) {
+    } else if (state.type === 'managers' && !session.members && session.feed) {
       const feedId = session.feed.id;
-      load = async () => session.setPeople(await getPeople(feedId));
+      load = async () => session.setMembers(await getMembers(feedId));
     }
     if (!load) return;
 

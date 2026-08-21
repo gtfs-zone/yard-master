@@ -175,10 +175,10 @@ export class Actions {
           return await this.exceptOneDay(arg, 'added');
         case 'assign:unexcept':
           return await this.undoException(arg);
-        case 'person:add':
-          return await this.addPerson();
+        case 'manager:add':
+          return await this.addManager();
         case 'member:remove':
-          return await this.removePerson(arg);
+          return await this.removeManager(arg);
         case 'invite:revoke':
           return await this.revokePendingInvite(arg);
         default:
@@ -393,18 +393,18 @@ export class Actions {
     if (!feed) return;
 
     // Only a member can receive it, which is the server's rule too, so the
-    // form offers exactly the people who can be chosen rather than a free
+    // form offers exactly the managers who can be chosen rather than a free
     // field that would fail on save.
-    const candidates = (this.session.people?.members ?? []).filter((m) => !m.is_owner);
+    const candidates = (this.session.members?.members ?? []).filter((m) => !m.is_owner);
     if (candidates.length === 0) {
-      notify.warning('Add somebody to this feed before handing it over.');
+      notify.warning('Add a manager before handing it over.');
       return;
     }
 
     const updated = await showEntityForm<Feed>({
       title: `Transfer ${feed.feed_name}`,
       intro:
-        'The new owner can delete the feed and manage its people. You stay on as a member.',
+        'The new owner can delete the feed and add or remove managers. You stay on as a manager.',
       submitLabel: 'Transfer',
       fields: [
         {
@@ -424,7 +424,7 @@ export class Actions {
     if (!updated) return;
 
     this.app.adoptFeedRow(updated);
-    await this.app.refreshPeople();
+    await this.app.refreshMembers();
     notify.success(`${feed.feed_name} now belongs to ${updated.owner_name ?? 'them'}`);
   }
 
@@ -1103,17 +1103,17 @@ export class Actions {
     notify.success(`${date} follows the rule again`);
   }
 
-  // ─── People ────────────────────────────────────────────────────────────────
+  // ─── Managers ──────────────────────────────────────────────────────────────
 
-  private async addPerson(): Promise<void> {
+  private async addManager(): Promise<void> {
     const feed = this.feedOrWarn();
     if (!feed) return;
 
     const result = await showEntityForm({
-      title: 'Share this feed',
+      title: 'Add manager',
       intro:
         'They get access once they sign in with a verified copy of this address. Nothing is emailed from here.',
-      submitLabel: 'Share',
+      submitLabel: 'Add',
       fields: [
         {
           name: 'email',
@@ -1126,34 +1126,34 @@ export class Actions {
     });
     if (!result) return;
 
-    await this.app.refreshPeople();
-    // The server's own wording: "member now" and "invited for later" are
+    await this.app.refreshMembers();
+    // The server's own wording: "manager now" and "invited for later" are
     // genuinely different outcomes and it says which one happened.
     notify.success(result.message);
   }
 
-  private async removePerson(userId: string): Promise<void> {
+  private async removeManager(userId: string): Promise<void> {
     const feed = this.feedOrWarn();
     if (!feed) return;
-    const member = this.session.people?.members.find((m) => m.user_id === Number(userId));
+    const member = this.session.members?.members.find((m) => m.user_id === Number(userId));
     if (!member) return;
 
     const confirmed = await confirmAction({
-      title: 'Remove member',
+      title: 'Remove manager',
       question: `Take ${personLabel(member)} off ${feed.feed_name}?`,
       consequences: ['Anything they made on this feed stays'],
     });
     if (!confirmed) return;
 
     await removeMember(feed.id, member.user_id);
-    await this.app.refreshPeople();
+    await this.app.refreshMembers();
     notify.success(`Removed ${personLabel(member)}`);
   }
 
   private async revokePendingInvite(inviteId: string): Promise<void> {
     const feed = this.feedOrWarn();
     if (!feed) return;
-    const invite = this.session.people?.invites.find((i) => i.id === Number(inviteId));
+    const invite = this.session.members?.invites.find((i) => i.id === Number(inviteId));
     if (!invite) return;
 
     const confirmed = await confirmAction({
@@ -1165,7 +1165,7 @@ export class Actions {
     if (!confirmed) return;
 
     await revokeInvite(feed.id, invite.id);
-    await this.app.refreshPeople();
+    await this.app.refreshMembers();
     notify.success(`Revoked the invite to ${invite.email}`);
   }
 }

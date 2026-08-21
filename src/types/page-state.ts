@@ -3,7 +3,7 @@
    @status modified
    @changes
    - Variants replaced wholesale. yard-master browses a hierarchy neither
-     upstream has: `tracker`, `assignments` and `people` are managed objects
+     upstream has: `tracker`, `assignments` and `managers` are managed objects
      from the API, `route`, `stop` and `trip` come from the in-browser GTFS.
      Dropped `vehicle`; kept `alert`, which here is a managed object rather
      than a decoded GTFS-RT entity.
@@ -32,7 +32,7 @@ export type PageState =
   | { type: 'home' }
   | { type: 'tracker'; tracker_id: string }
   | { type: 'assignments'; date?: string }
-  | { type: 'people' }
+  | { type: 'managers' }
   | { type: 'alert'; alert_id: string }
   | { type: 'route'; route_id: string; direction_id?: string }
   | { type: 'stop'; stop_id: string }
@@ -59,7 +59,7 @@ export function isPageState(value: unknown): value is PageState {
 
   switch (state.type) {
     case 'home':
-    case 'people':
+    case 'managers':
       return true;
 
     case 'tracker':

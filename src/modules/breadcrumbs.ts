@@ -5,7 +5,7 @@
    - The variant set is yard-master's. `vehicle` became `tracker` and resolves
      against `session.trackers` (the API list) rather than only against the
      live map, so a tracker that has never reported a fix still has a label.
-   - `people` and `assignments` added. They are managed objects with no GTFS
+   - `managers` and `assignments` added. They are managed objects with no GTFS
      parent, so each is one hop off the feed root. A calendar day hangs off the
      month, so `assignments` with a date is two.
    - `trip` added, with its route as the parent when the feed names one.
@@ -125,8 +125,8 @@ export function buildBreadcrumbs(session: FeedSession, state: PageState): Breadc
     case 'home':
       return [];
 
-    case 'people':
-      return [home(session), { label: 'People', pageState: state }];
+    case 'managers':
+      return [home(session), { label: 'Managers', pageState: state }];
 
     case 'assignments':
       return [
@@ -201,7 +201,7 @@ export function buildBreadcrumbs(session: FeedSession, state: PageState): Breadc
 export function validateState(session: FeedSession, state: PageState): boolean {
   switch (state.type) {
     case 'home':
-    case 'people':
+    case 'managers':
     case 'assignments':
       return true;
     case 'route':

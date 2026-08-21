@@ -36,7 +36,7 @@ import type {
   InformedEntity,
   InformedEntityWrite,
   Me,
-  People,
+  Members,
   Provisioning,
   RuleException,
   RuleExceptionWrite,
@@ -267,7 +267,7 @@ export const listAlerts = (feedId: number) => api.get<Alert[]>(`/feeds/${feedId}
 
 export const getAlert = (alertId: number) => api.get<AlertDetail>(`/alerts/${alertId}`);
 
-export const getPeople = (feedId: number) => api.get<People>(`/feeds/${feedId}/members`);
+export const getMembers = (feedId: number) => api.get<Members>(`/feeds/${feedId}/members`);
 
 export const listRules = (feedId: number) =>
   api.get<TrackerRule[]>(`/feeds/${feedId}/rules`);

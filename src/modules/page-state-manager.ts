@@ -4,7 +4,7 @@
    @changes
    - `pageStateToURL` / `urlToPageState` rewritten for yard-master's variants.
      The hash now carries an explicit `type` param, because `feed`,
-     `assignments` and `people` name no object and cannot be told apart by the
+     `assignments` and `managers` name no object and cannot be told apart by the
      presence of an object key the way test-track's four pages could.
    - A tracker appears in the hash as `tracker=<Tracker.id>`. The surrogate is
      not a secret and is unique; `device_key` is the credential and never
@@ -223,7 +223,7 @@ export class PageStateManager {
         params.set('trip', pageState.trip_id);
         if (pageState.route_id) params.set('route', pageState.route_id);
         break;
-      case 'people':
+      case 'managers':
         break;
       case 'alert':
         params.set('alert', pageState.alert_id);
@@ -247,8 +247,10 @@ export class PageStateManager {
       // A hash written before the feed page was merged into home.
       case 'feed':
         return { type: 'home' };
+      // `people` is what this page was called before it became Managers.
       case 'people':
-        return { type: 'people' };
+      case 'managers':
+        return { type: 'managers' };
       case 'assignments': {
         const date = get('date');
         return { type: 'assignments', ...(date !== undefined && { date }) };

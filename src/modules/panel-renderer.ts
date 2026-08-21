@@ -13,7 +13,7 @@
    - The dispatcher covers yard-master's eight variants: `home` renders the
      feed and its tree, `trip` is this repo's own page, `vehicle` is gone, and
      the managed variants render this repo's own pages, the calendar included.
-   - `meUserId` added to the hooks: the people page marks the signed-in row,
+   - `meUserId` added to the hooks: the managers page marks the signed-in row,
      and `RenderContext` is a verbatim type that has no business growing a
      field for it.
    - `action` added to the hooks, and `data-action` delegated alongside
@@ -42,7 +42,7 @@ import type { RenderContext } from './render-utils';
 import { escHtml, formatRelative } from './render-utils';
 import { renderAlertPage } from './pages/alert-page';
 import { renderAssignmentsPage } from './pages/assignments-page';
-import { renderPeoplePage } from './pages/people-page';
+import { renderManagersPage } from './pages/managers-page';
 import { renderRoutePage } from './pages/route-page';
 import { renderStopPage } from './pages/stop-page';
 import { renderTrackerPage } from './pages/tracker-page';
@@ -267,8 +267,8 @@ export class PanelRenderer {
         return renderAlertPage(ctx, this.state);
       case 'tracker':
         return renderTrackerPage(ctx, this.state);
-      case 'people':
-        return renderPeoplePage(ctx, this.hooks.meUserId());
+      case 'managers':
+        return renderManagersPage(ctx, this.hooks.meUserId());
       case 'assignments':
         return renderAssignmentsPage(ctx, this.state);
     }

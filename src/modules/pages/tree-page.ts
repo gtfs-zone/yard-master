@@ -6,7 +6,7 @@
  * is a manager, so the no-focus page is the feed itself plus a hierarchy. The
  * header block is the feed row the API owns — its identity, where its schedule
  * comes from, what the loader last made of it, and what this reader may do to
- * it. The managed half (trackers, assignments, alerts, people) comes from the
+ * it. The managed half (trackers, assignments, alerts, managers) comes from the
  * API, and the GTFS half below the divider comes from the in-browser zip. The
  * two are independent: the managed half renders the moment a feed is selected,
  * while the zip is still downloading, or never arrives at all.
@@ -19,9 +19,10 @@
  * a page that merged them would hide exactly that.
  *
  * The actions are not equally available. Editing the feed and replacing its
- * schedule are open to any member, matching the API; transferring and deleting
- * are what `can_manage` gates, and a member who cannot do them is not shown a
- * button that would 403.
+ * schedule are open to any member, matching the API; deleting is what
+ * `can_manage` gates, and a member who cannot do it is not shown a button that
+ * would 403. Transferring is `can_manage`-gated too, and lives on the managers
+ * page next to the list of people it can hand the feed to.
  *
  * Section bodies are `<details>` so the panel renderer's open-detail tracking
  * survives a re-render. Long sections are capped: a large feed has tens of
@@ -133,7 +134,7 @@ function renderLoad(feed: Feed): string {
 function uploaderLabel(ctx: RenderContext, upload: GtfsUpload): string {
   const id = upload.uploaded_by_user_id;
   if (id === null) return 'someone no longer on this feed';
-  const member = ctx.session.people?.members.find((m) => m.user_id === id);
+  const member = ctx.session.members?.members.find((m) => m.user_id === id);
   return member ? personLabel(member) : `user ${id}`;
 }
 
@@ -283,7 +284,6 @@ function renderOpenIn(feed: Feed): string {
 function renderActions(feed: Feed): string {
   return `<div class="flex flex-wrap gap-2">
     ${actionButton('feed:edit', '', 'Edit')}
-    ${feed.can_manage ? actionButton('feed:transfer', '', 'Transfer') : ''}
     ${feed.can_manage ? actionButton('feed:delete', '', 'Delete', 'btn-outline btn-error') : ''}
   </div>`;
 }
@@ -555,17 +555,17 @@ function renderFleet(ctx: RenderContext): string {
 }
 
 function renderManaged(ctx: RenderContext): string {
-  const people = ctx.session.people;
-  const peopleNote = people
-    ? `${people.members.length} member${people.members.length === 1 ? '' : 's'}${
-        people.invites.length ? `, ${people.invites.length} invited` : ''
+  const members = ctx.session.members;
+  const managerNote = members
+    ? `${members.members.length} manager${members.members.length === 1 ? '' : 's'}${
+        members.invites.length ? `, ${members.invites.length} invited` : ''
       }`
     : '';
   return `
     ${renderTrackers(ctx)}
     ${treeLink(ctx, { type: 'assignments' }, 'Assignments', '')}
     ${renderAlerts(ctx)}
-    ${treeLink(ctx, { type: 'people' }, 'People', peopleNote)}
+    ${treeLink(ctx, { type: 'managers' }, 'Managers', managerNote)}
     ${renderFleet(ctx)}`;
 }
 

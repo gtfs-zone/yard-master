@@ -162,7 +162,7 @@ export interface Invite {
   created_at: string;
 }
 
-export interface People {
+export interface Members {
   members: Member[];
   invites: Invite[];
 }

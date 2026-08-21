@@ -6,7 +6,7 @@
      LayerManager target kind stays `vehicle`: that is the map layer's own
      vocabulary and is unchanged.
    - `applyFocus` handles yard-master's managed variants (`feed`,
-     `assignments`, `people`) alongside `alert`, all of which clear the focus
+     `assignments`, `managers`) alongside `alert`, all of which clear the focus
      without moving the camera.
    - `trip` draws the trip's own geometry on a source this file owns, spotlights
      its route and frames it. LayerManager has no `trip` focus kind and stays
@@ -459,7 +459,7 @@ export class MapController {
       }
 
       case 'assignments':
-      case 'people':
+      case 'managers':
       case 'alert':
         // Managed pages with no geometry of their own. Nothing to highlight or
         // fly to; the camera stays where the reader left it.

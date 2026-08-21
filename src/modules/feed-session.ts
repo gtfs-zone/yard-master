@@ -43,7 +43,7 @@ import type {
   Feed,
   GtfsUpload,
   LoadStatus as LoadStatusRow,
-  People,
+  Members,
   Tracker,
   TrackerDetail,
   TrackerRule,
@@ -84,7 +84,7 @@ export class FeedSession extends EventTarget {
   alertDetails = new Map<string, AlertDetail>();
 
   /** Members and pending invites, or null until the list has arrived. */
-  people: People | null = null;
+  members: Members | null = null;
 
   /**
    * The feed's schedule uploads, newest first, or null until they have been
@@ -357,8 +357,8 @@ export class FeedSession extends EventTarget {
     this.dispatchEvent(new CustomEvent('change'));
   }
 
-  setPeople(people: People): void {
-    this.people = people;
+  setMembers(members: Members): void {
+    this.members = members;
     this.dispatchEvent(new CustomEvent('change'));
   }
 
@@ -449,7 +449,7 @@ export class FeedSession extends EventTarget {
     this.trackerDetails = new Map();
     this.serviceAlerts = new Map();
     this.alertDetails = new Map();
-    this.people = null;
+    this.members = null;
     this.uploads = null;
     this.rules = null;
     this.assignments = new Map();
