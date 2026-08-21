@@ -417,11 +417,36 @@ existing tree page; the managed and GTFS sections follow as the `<details>` they
 already are. `{ type: 'feed' }` is deleted from `page-state.ts`, the panel
 renderer, the breadcrumb builder and every link that produced it.
 
-- [ ] Merge `feed-page.ts` into `tree-page.ts`, keeping the two-halves comment
+- [x] Merge `feed-page.ts` into `tree-page.ts`, keeping the two-halves comment
       that explains why server load status and browser counts are separate
-- [ ] Delete the `feed` page state and its route
-- [ ] Breadcrumbs: one less hop everywhere
-- [ ] Any hash carrying `#feed` still lands somewhere sensible
+- [x] Delete the `feed` page state and its route
+- [x] Breadcrumbs: one less hop everywhere
+- [x] Any hash carrying `#feed` still lands somewhere sensible
+
+**What the pass turned up.** The header block is only the four things the plan
+names — identity, owner, load status, actions, schedule source. Everything else
+the old feed page rendered as a flat `<section>` became a `<details>` in the
+tree's own style, because six stacked sections above the tree is the same
+complaint the merge was meant to answer. Upload history, the published realtime
+URLs with the sibling-app links folded in, the fleet counts and the in-browser
+parse counts are all disclosures now; only "Not drawn" stays a card, since it is
+already self-hiding when every count is zero.
+
+`treeSection` takes `number | string` for its count so a section with no
+meaningful total can pass `''` — Fleet passes `"3 reporting"`, which is the one
+number worth reading without opening it.
+
+Two of the old feed page's sections went away rather than moving. "Managed
+here" was counts of exactly the lists that are now directly underneath it, and
+"Open in" was two buttons that belong with the URLs they are built from.
+
+The `feed` variant's removal was mechanical everywhere except `app-state`'s
+`ensurePageData`, where the hosted-feed upload fetch now hangs off `home`: that
+is the page the history renders on, and it is also the page every feed
+selection lands on, so the request fires on select rather than on a click that
+no longer exists. `urlToPageState` keeps a `case 'feed'` that returns home, so
+an old link still opens the feed it named — the feed itself is a hash param,
+not part of the focus.
 
 **Gotchas.** The header block renders from the API and the sections below render
 from the zip, and the zip may never arrive. The merged page must still be useful
