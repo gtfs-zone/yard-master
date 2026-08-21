@@ -25,6 +25,9 @@ import { previewGtfsZip } from './gtfs-zip-preview';
 import { notify } from './notification-system';
 import { escHtml } from './render-utils';
 
+/** Mirrors cafe-car's `_FEED_NAME_RE`, so the refusal happens before the request. */
+const FEED_NAME_RE = /^[a-z][a-z0-9_-]{2,63}$/;
+
 /** The `source_kind` choice, worded as the two things somebody is deciding between. */
 const SOURCE_OPTIONS = [
   { value: 'url', label: 'Link a URL' },
@@ -100,6 +103,16 @@ export function scheduleZipField(overrides: Partial<FormField> = {}): FormField 
   };
 }
 
+/** What cafe-car's `AnyHttpUrl` accepts: an absolute http or https URL. */
+function isHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 /** Upload a zip, reporting a rejected one under the drop zone rather than in a toast. */
 export async function putSchedule(feedId: number, file: File): Promise<GtfsUpload> {
   return uploadSchedule(feedId, file);
@@ -125,8 +138,9 @@ export async function showNewFeedForm(): Promise<Feed | null> {
         label: 'Name',
         autofocus: true,
         placeholder: 'my-agency',
-        help: `Lowercase letters, digits, - and _. It appears in every public GTFS-RT URL this
-               feed serves, so it cannot be changed casually.`,
+        help: `Starts with a lowercase letter, then lowercase letters, digits, - and _, 3-64
+               characters. It appears in every public GTFS-RT URL this feed serves, so it
+               cannot be changed casually.`,
       },
       {
         name: 'source_kind',
@@ -146,8 +160,16 @@ export async function showNewFeedForm(): Promise<Feed | null> {
       scheduleZipField({ visibleWhen: { field: 'source_kind', equals: 'hosted' } }),
     ],
     validate: (values): Record<string, string> | null => {
-      if (values.source_kind === 'url' && !values.static_feed_url.trim()) {
-        return { static_feed_url: 'A linked feed needs a static feed URL' };
+      if (!FEED_NAME_RE.test(values.feed_name.trim())) {
+        return {
+          feed_name:
+            'Starts with a lowercase letter, then lowercase letters, digits, - and _, 3-64 characters',
+        };
+      }
+      if (values.source_kind === 'url') {
+        const url = values.static_feed_url.trim();
+        if (!url) return { static_feed_url: 'A linked feed needs a static feed URL' };
+        if (!isHttpUrl(url)) return { static_feed_url: 'Must be a valid http or https URL' };
       }
       if (values.source_kind === 'hosted' && !values.file) {
         return { file: 'Choose a schedule zip to upload' };

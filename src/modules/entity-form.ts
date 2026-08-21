@@ -10,18 +10,18 @@
  *
  * What it owns:
  *
- * - **Dirty tracking.** Save is disabled until something actually changed, and
- *   Revert puts the initial values back. A form that was never touched cannot
- *   be saved, so an accidental Enter cannot rewrite a field with itself. A
- *   create form whose defaults are already the answer opts out with
- *   `allowPristine`.
+ * - **Dirty tracking.** Save is disabled until something actually changed, so
+ *   an accidental Enter cannot rewrite a field with itself. A create form whose
+ *   defaults are already the answer opts out with `allowPristine`.
  * - **In flight.** Every button is disabled while the request is out, which
  *   `showModal` already does for the action it triggered; the modal stays open
  *   until the write succeeds.
  * - **Field errors.** A 422's `detail` names the field it is about, and
  *   `ApiError.fields` keeps that mapping, so the message lands under the input
  *   that caused it. This is the thing the old SQLAdmin did well and the one
- *   piece of it that had to survive.
+ *   piece of it that had to survive. A 422 that names no field — a whole-object
+ *   validator, whose `loc` stops at `body` — goes to the banner above the
+ *   fields, so no refusal is ever invisible.
  *
  * A 409 is different: it is a conflict about the whole request, and only the
  * caller knows which field to blame ("that feed name is taken" belongs under
@@ -314,7 +314,6 @@ export async function showEntityForm<T>(options: EntityFormOptions<T>): Promise<
   let result: T | null = null;
   // Assigned by `onMount`, which runs before any button can be clicked.
   let save: () => Promise<boolean> = async () => true;
-  let revert: () => boolean = () => true;
 
   await showModal({
     title: escHtml(options.title),
@@ -325,7 +324,6 @@ export async function showEntityForm<T>(options: EntityFormOptions<T>): Promise<
         ${options.fields.map(renderField).join('')}
       </div>`,
     actions: [
-      { label: 'Revert', className: 'btn-ghost', onClick: () => revert() },
       { label: 'Cancel', onClick: () => {} },
       {
         label: options.submitLabel ?? 'Save',
@@ -340,7 +338,7 @@ export async function showEntityForm<T>(options: EntityFormOptions<T>): Promise<
     // Escape is Cancel. Enter is deliberately not wired to Save: several of
     // these forms have a textarea, and a form that saves on Enter in one field
     // and not another is worse than one that never does.
-    escapeAction: 1,
+    escapeAction: 0,
     boxClassName: 'max-w-lg',
     onMount: () => {
       // The innermost modal, which is the one just appended: these can stack,
@@ -350,7 +348,7 @@ export async function showEntityForm<T>(options: EntityFormOptions<T>): Promise<
       const box = root.closest<HTMLElement>('.modal-box')!;
       const banner = box.querySelector<HTMLElement>('[data-form-error]')!;
       const buttons = box.querySelectorAll<HTMLButtonElement>('button[data-idx]');
-      const [revertBtn, , saveBtn] = buttons;
+      const [, saveBtn] = buttons;
 
       const initial = readValues(root, options.fields);
 
@@ -601,6 +599,11 @@ export async function showEntityForm<T>(options: EntityFormOptions<T>): Promise<
         });
       };
 
+      const showFormError = (message: string): void => {
+        banner.textContent = message;
+        banner.classList.remove('hidden');
+      };
+
       const showFieldErrors = (fields: Record<string, string>): void => {
         for (const [name, message] of Object.entries(fields)) {
           const el = box.querySelector<HTMLElement>(`[data-error="${CSS.escape(name)}"]`);
@@ -610,8 +613,7 @@ export async function showEntityForm<T>(options: EntityFormOptions<T>): Promise<
           } else {
             // A field the form does not render still has to be reported, or a
             // save fails with nothing on screen to explain it.
-            banner.textContent = `${name}: ${message}`;
-            banner.classList.remove('hidden');
+            showFormError(`${name}: ${message}`);
           }
         }
       };
@@ -624,7 +626,6 @@ export async function showEntityForm<T>(options: EntityFormOptions<T>): Promise<
       const syncButtons = (): void => {
         const dirty = isDirty();
         saveBtn.disabled = !dirty && !options.allowPristine;
-        revertBtn.disabled = !dirty;
         syncVisibility();
         syncEnumNotes();
       };
@@ -657,40 +658,22 @@ export async function showEntityForm<T>(options: EntityFormOptions<T>): Promise<
         } catch (err) {
           // The page is already reloading; there is nothing useful to show.
           if (err instanceof SessionExpiredError) return true;
-          if (err instanceof ApiError && err.status === 422 && Object.keys(err.fields).length) {
-            showFieldErrors(err.fields);
+          const named =
+            err instanceof ApiError && err.status === 422 && Object.keys(err.fields).length > 0;
+          const unnamed = err instanceof ApiError && err.formErrors.length > 0;
+          if (named || unnamed) {
+            if (named) showFieldErrors((err as ApiError).fields);
+            // A whole-object validator blames no field, so the banner is the
+            // only place it can land.
+            if (unnamed) showFormError((err as ApiError).formErrors.join('; '));
           } else if (err instanceof ApiError && err.status === 409 && options.conflictField) {
             showFieldErrors({ [options.conflictField]: err.message });
           } else {
-            banner.textContent = err instanceof Error ? err.message : String(err);
-            banner.classList.remove('hidden');
+            showFormError(err instanceof Error ? err.message : String(err));
           }
           resyncAfterAction();
           return true;
         }
-      };
-
-      revert = (): boolean => {
-        for (const field of options.fields) {
-          const el = root.querySelector<
-            HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-          >(`[data-field="${CSS.escape(field.name)}"]`);
-          if (!el) continue;
-          if (el instanceof HTMLInputElement && el.type === 'checkbox') {
-            el.checked = initial[field.name] === 'true';
-          } else if (el instanceof HTMLInputElement && el.type === 'file') {
-            // A file input's value can only be cleared, never restored, so
-            // Revert on one means "un-choose it" — which is what its initial
-            // state was in every form that has one.
-            el.value = '';
-            el.dispatchEvent(new Event('change'));
-          } else {
-            el.value = initial[field.name];
-          }
-        }
-        clearErrors();
-        resyncAfterAction();
-        return true;
       };
 
       root.addEventListener('input', syncButtons);

@@ -61,11 +61,23 @@ export class ApiError extends Error {
    */
   readonly fields: Record<string, string>;
 
-  constructor(status: number, detail: string, fields: Record<string, string> = {}) {
+  /**
+   * A 422's whole-object messages: the ones whose `loc` stops at `body`, which
+   * name no field and so have nowhere to land but the top of the form.
+   */
+  readonly formErrors: string[];
+
+  constructor(
+    status: number,
+    detail: string,
+    fields: Record<string, string> = {},
+    formErrors: string[] = []
+  ) {
     super(detail);
     this.name = 'ApiError';
     this.status = status;
     this.fields = fields;
+    this.formErrors = formErrors;
   }
 }
 
@@ -99,7 +111,9 @@ function describeDetail(body: unknown, fallback: string): string {
       .map((item) => {
         if (!item || typeof item !== 'object') return String(item);
         const { loc, msg } = item as { loc?: unknown[]; msg?: string };
-        const field = Array.isArray(loc) ? loc[loc.length - 1] : undefined;
+        const last = Array.isArray(loc) ? loc[loc.length - 1] : undefined;
+        // `body` is the whole request, not a field: naming it reads as jargon.
+        const field = last === 'body' ? undefined : last;
         return field ? `${String(field)}: ${msg ?? ''}` : (msg ?? '');
       })
       .filter(Boolean);
@@ -113,8 +127,8 @@ function describeDetail(body: unknown, fallback: string): string {
  *
  * `loc` is the path into the request body — `["body", "nickname"]` — so the
  * last element is the field a form can point at. A `loc` that stops at `body`
- * is a whole-object validator, which has no field to blame and is left to the
- * flattened message.
+ * is a whole-object validator, which has no field to blame and goes to
+ * `formErrors` instead.
  */
 function fieldErrors(body: unknown): Record<string, string> {
   const detail = (body as { detail?: unknown } | null)?.detail;
@@ -125,10 +139,28 @@ function fieldErrors(body: unknown): Record<string, string> {
     const { loc, msg } = item as { loc?: unknown[]; msg?: string };
     if (!Array.isArray(loc) || loc.length < 2 || !msg) continue;
     const field = String(loc[loc.length - 1]);
-    // Pydantic prefixes its own messages; the form has the label already.
-    fields[field] ??= msg.replace(/^Value error, /, '');
+    fields[field] ??= stripPrefix(msg);
   }
   return fields;
+}
+
+/** Pydantic prefixes its own messages; the form has the label already. */
+function stripPrefix(msg: string): string {
+  return msg.replace(/^Value error, /, '');
+}
+
+/** A 422's whole-object messages: `loc` is `["body"]` or shorter. */
+function formErrors(body: unknown): string[] {
+  const detail = (body as { detail?: unknown } | null)?.detail;
+  if (!Array.isArray(detail)) return [];
+  const messages: string[] = [];
+  for (const item of detail) {
+    if (!item || typeof item !== 'object') continue;
+    const { loc, msg } = item as { loc?: unknown[]; msg?: string };
+    if (!Array.isArray(loc) || loc.length >= 2 || !msg) continue;
+    messages.push(stripPrefix(msg));
+  }
+  return messages;
 }
 
 async function request<T>(
@@ -182,7 +214,8 @@ async function request<T>(
     throw new ApiError(
       response.status,
       describeDetail(payload, response.statusText),
-      fieldErrors(payload)
+      fieldErrors(payload),
+      formErrors(payload)
     );
   }
   return payload as T;
