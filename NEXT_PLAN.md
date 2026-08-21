@@ -505,20 +505,67 @@ pre-commit hook, the same way coloring-book's does, so drift blocks a commit.
 Only the messages this app can edit or display need to be complete on the first
 pass. `Alert` and `EntitySelector` are the ones the forms use.
 
-- [ ] `reference/gtfs-realtime-reference.md` and a `reference/README.md` saying
+- [x] `reference/gtfs-realtime-reference.md` and a `reference/README.md` saying
       where it came from and how to refresh it
-- [ ] `src/gtfs-rt-spec/types.ts`, `files/*.ts`, `index.ts`
-- [ ] `scripts/check-rt-spec.ts`, wired into `package.json` and pre-commit
-- [ ] `VENDORED.md`: a note that the shape is coloring-book's and the content is
+- [x] `src/gtfs-rt-spec/types.ts`, `files/*.ts`, `index.ts`
+- [x] `scripts/check-rt-spec.ts`, wired into `package.json` and pre-commit
+- [x] `VENDORED.md`: a note that the shape is coloring-book's and the content is
       this repo's, so nothing is checked against a sibling
-- [ ] `managed-render.ts`'s `ALERT_CAUSES` / `ALERT_EFFECTS` /
+- [x] `managed-render.ts`'s `ALERT_CAUSES` / `ALERT_EFFECTS` /
       `ALERT_SEVERITIES` are derived from the spec, not hand-listed
-- [ ] The derived lists still match cafe-car's `alert_enums.py`, with a test
+- [x] The derived lists still match cafe-car's `alert_enums.py`, with a test
 
 **Gotchas.** cafe-car's `alert_enums.py` is the server's truth and a value the
 spec allows but the API rejects is a 422 somebody will hit. If the two disagree,
 the reference wins and cafe-car changes — but they must be *made* to agree, not
 left to drift.
+
+**What this turned up.**
+
+The reference has a thirteenth alert cause, `SPECIAL_EVENT`, that cafe-car did
+not accept. The chain behind that gap was longer than one Literal: cafe-car's
+lock had resolved `gtfs-realtime-bindings` at 2.0.0, whose generated
+`Alert.Cause` has no `SPECIAL_EVENT`, so simply widening the Literal would have
+accepted a value and then thrown inside `Alert.Cause.Value()` while serializing
+the public `.pb`. The fix in cafe-car is therefore three things, not one: the
+floor moved to `>=2.2.0`, the lock was refreshed, and `SPECIAL_EVENT` was added
+to `alert_enums.py` and to the SQLAdmin choice list that phase 10 deletes
+anyway. Its 298 tests pass. **This repo cannot check the binding version**, only
+the Literal, so the same trap is waiting for the next value the reference adds.
+
+The realtime reference is not shaped like the schedule one, so the checker is
+not a port of coloring-book's. Sections are `## _message_ X` / `## _enum_ X`
+rather than `### x.txt`; a field carries a Cardinality column the schedule
+reference has no equivalent of; enum values live in their own tables, sometimes
+with a Comment column and sometimes as bare names; and the heading markup is
+inconsistent enough (`## _enum OccupancyStatus_`, `_**EMPTY**_` value cells,
+`#### Values` under WheelchairAccessible) that emphasis has to be stripped
+positionally rather than globally, or `active_period` parses as `activeperiod`.
+
+Two enums are named `ScheduleRelationship`, one under StopTimeUpdate and one
+under TripDescriptor, with different value sets. `RTEnumSpec.referenceOccurrence`
+is what disambiguates them for the checker; only the trip one is covered, so the
+runtime `rtEnum('ScheduleRelationship')` lookup stays unambiguous.
+
+`Cause`, `Effect` and `SeverityLevel` are listed in the reference as bare values
+with no Comment column, so their `description` is empty by construction and the
+curated `label` is all a select row has to show. Phase 8's "each value's
+description in its own row" therefore only has something to render for
+`VehicleStopStatus`, `OccupancyStatus` and `ScheduleRelationship`; for cause and
+effect the row is the label alone.
+
+Coverage is deliberately partial and the checker knows it: a reference message
+the spec does not declare is not a finding. What is declared must match field
+for field, which is what the `--full` dump is for when refreshing.
+
+The repo had no pre-commit hook at all, so one was added at `.githooks/pre-commit`
+and has to be turned on per clone with `git config core.hooksPath .githooks`.
+`pnpm check` runs the same two checks plus the typecheck for anyone who has not.
+
+The spec adds about 60 kB of raw strings to the bundle, roughly 15 kB gzipped,
+because `gtfsRtSpec` references every file and nothing tree-shakes. That is the
+price of phase 8's tooltips and is worth paying once, but it is a reason not to
+grow the module to messages no form touches.
 
 ---
 
