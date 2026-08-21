@@ -14,6 +14,11 @@ pnpm dev          # :8091, proxies /api to a local cafe-car admin app on :8001
 pnpm typecheck    # the gate before any commit
 pnpm build
 pnpm vendor:check # diff vendored files against test-track
+pnpm check-rt-spec     # diff src/gtfs-rt-spec against reference/
+pnpm check-alert-enums # hold the alert enums to cafe-car's alert_enums.py
+pnpm check             # typecheck plus both of the above
+
+git config core.hooksPath .githooks   # once per clone; runs both checks pre-commit
 
 # Behind the real oauth2-proxy, at music-student's http://localhost:4180. That
 # stack bind-mounts this dist/, so a rebuild is the whole deploy step.

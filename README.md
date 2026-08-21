@@ -17,6 +17,9 @@ pnpm dev          # :8091, proxies /api to a local cafe-car admin app on :8001
 pnpm typecheck
 pnpm build
 pnpm vendor:check # diff vendored files against coloring-book / test-track
+pnpm check-rt-spec     # diff src/gtfs-rt-spec against reference/
+pnpm check-alert-enums # hold the alert enums to cafe-car's alert_enums.py
+pnpm check             # typecheck plus both of the above
 ```
 
 ## Two local doors

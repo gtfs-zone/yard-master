@@ -14,6 +14,7 @@
  */
 
 import type { LoadStatus, Member, TrackerRule } from '../types/api';
+import { rtEnumValues } from '../gtfs-rt-spec/index';
 import { WEEKDAY_KEYS, WEEKDAY_LABELS } from './service-date';
 import type { FeedSession } from './feed-session';
 import { escHtml, formatAbsolute, formatRelative, timestampWithAge } from './render-utils';
@@ -84,44 +85,25 @@ export function actionButton(
     data-action="${escHtml(action)}" data-arg="${escHtml(arg)}">${escHtml(label)}</button>`;
 }
 
-/** The GTFS-RT enumerations by name, mirroring cafe-car's `alert_enums.py`. */
-export const ALERT_CAUSES = [
-  'UNKNOWN_CAUSE',
-  'OTHER_CAUSE',
-  'TECHNICAL_PROBLEM',
-  'STRIKE',
-  'DEMONSTRATION',
-  'ACCIDENT',
-  'HOLIDAY',
-  'WEATHER',
-  'MAINTENANCE',
-  'CONSTRUCTION',
-  'POLICE_ACTIVITY',
-  'MEDICAL_EMERGENCY',
-] as const;
+/**
+ * The GTFS-RT alert enumerations by name, in reference order.
+ *
+ * Derived from `src/gtfs-rt-spec/`, not listed here: the reference is the
+ * truth, `scripts/check-rt-spec.ts` holds the spec to it, and
+ * `scripts/check-alert-enums.ts` holds cafe-car's `alert_enums.py` to these,
+ * so a value the forms offer is a value the API accepts.
+ */
+export const ALERT_CAUSES = rtEnumValues('Cause');
+export const ALERT_EFFECTS = rtEnumValues('Effect');
+export const ALERT_SEVERITIES = rtEnumValues('SeverityLevel');
 
-export const ALERT_EFFECTS = [
-  'NO_SERVICE',
-  'REDUCED_SERVICE',
-  'SIGNIFICANT_DELAYS',
-  'DETOUR',
-  'ADDITIONAL_SERVICE',
-  'MODIFIED_SERVICE',
-  'OTHER_EFFECT',
-  'UNKNOWN_EFFECT',
-  'STOP_MOVED',
-  'NO_EFFECT',
-  'ACCESSIBILITY_ISSUE',
-] as const;
-
-export const ALERT_SEVERITIES = [
-  'UNKNOWN_SEVERITY',
-  'INFO',
-  'WARNING',
-  'SEVERE',
-] as const;
-
-/** `TECHNICAL_PROBLEM` as `Technical problem`, for a select. */
+/**
+ * `TECHNICAL_PROBLEM` as `Technical problem`, for a select.
+ *
+ * The spec carries a curated `label` for every enum value, so this is the
+ * fallback for a value that arrives from the API without one — an older row,
+ * or a value the reference has since dropped.
+ */
 export function enumLabel(value: string): string {
   const words = value.toLowerCase().split('_');
   return words.map((w, i) => (i === 0 ? w.charAt(0).toUpperCase() + w.slice(1) : w)).join(' ');

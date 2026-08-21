@@ -49,6 +49,17 @@ no-focus page is a browse tree, and the managed half of that tree — feeds,
 trackers, assignments, alerts and managers — has no counterpart upstream at all,
 because test-track owns none of those objects.
 
+`src/gtfs-rt-spec/` is not vendored and is not in the table. Its *shape* is
+coloring-book's `src/gtfs-spec/` — the same `types.ts` / `files/*.ts` /
+`index.ts` split, the same verbatim-description discipline, the same
+reference-snapshot-plus-checker arrangement — but not one line of its content
+comes from a sibling, because coloring-book describes the schedule spec and this
+describes the realtime one. There is nothing to re-sync and nothing to diff, so
+`vendor-check` is told about none of it. What holds it honest instead is
+`scripts/check-rt-spec.ts` against `reference/gtfs-realtime-reference.md`, and
+`scripts/check-alert-enums.ts` against cafe-car's `alert_enums.py`. Both run
+from `.githooks/pre-commit`.
+
 Run `pnpm vendor:check` to diff every `verbatim` entry against its recorded SHA
 in the repo its `Source repo` column names (rows whose sibling is not checked out
 are skipped, so CI is never blocked by it). `adopted` rows are listed and then

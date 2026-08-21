@@ -10,7 +10,10 @@
     "start": "vite",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
-    "vendor:check": "tsx scripts/vendor-check.ts"
+    "vendor:check": "tsx scripts/vendor-check.ts",
+    "check-rt-spec": "tsx scripts/check-rt-spec.ts",
+    "check-alert-enums": "tsx scripts/check-alert-enums.ts",
+    "check": "pnpm run typecheck && pnpm run check-rt-spec && pnpm run check-alert-enums"
   },
   "keywords": [
     "gtfs",

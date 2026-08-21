@@ -1,0 +1,9 @@
+#!/bin/sh
+# Drift from the GTFS-realtime reference blocks a commit, and so does a spec
+# that has drifted from cafe-car's accepted alert values. Both are fast and
+# neither touches the network.
+#
+# Enable with: git config core.hooksPath .githooks
+set -e
+pnpm run check-rt-spec
+pnpm run check-alert-enums
