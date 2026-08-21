@@ -3,10 +3,12 @@
    @status modified
    @changes
    - Variants replaced wholesale. yard-master browses a hierarchy neither
-     upstream has: `feed`, `tracker`, `assignments` and `people` are managed
-     objects from the API, `route`, `stop` and `trip` come from the in-browser
-     GTFS. Dropped `vehicle`; kept `alert`, which here is a managed object
-     rather than a decoded GTFS-RT entity.
+     upstream has: `tracker`, `assignments` and `people` are managed objects
+     from the API, `route`, `stop` and `trip` come from the in-browser GTFS.
+     Dropped `vehicle`; kept `alert`, which here is a managed object rather
+     than a decoded GTFS-RT entity.
+   - `home` is the feed itself: its properties, its schedule source and the
+     browse tree, all on one page. There is no separate `feed` variant.
    - `tracker` is keyed by `Tracker.id`, the surrogate. It is not the Traccar
      credential (that is `device_key`, which never leaves the properties panel)
      and it is genuinely unique, which nickname is not.
@@ -28,7 +30,6 @@
  */
 export type PageState =
   | { type: 'home' }
-  | { type: 'feed' }
   | { type: 'tracker'; tracker_id: string }
   | { type: 'assignments'; date?: string }
   | { type: 'people' }
@@ -58,7 +59,6 @@ export function isPageState(value: unknown): value is PageState {
 
   switch (state.type) {
     case 'home':
-    case 'feed':
     case 'people':
       return true;
 

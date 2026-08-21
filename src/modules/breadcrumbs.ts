@@ -5,9 +5,9 @@
    - The variant set is yard-master's. `vehicle` became `tracker` and resolves
      against `session.trackers` (the API list) rather than only against the
      live map, so a tracker that has never reported a fix still has a label.
-   - `feed`, `people` and `assignments` added. They are managed objects with no
-     GTFS parent, so each is one hop off the feed root. A calendar day hangs
-     off the month, so `assignments` with a date is two.
+   - `people` and `assignments` added. They are managed objects with no GTFS
+     parent, so each is one hop off the feed root. A calendar day hangs off the
+     month, so `assignments` with a date is two.
    - `trip` added, with its route as the parent when the feed names one.
    - HOME is the feed root rather than test-track's "Feed status" page, and it
      is labelled with the selected feed's name.
@@ -31,7 +31,7 @@ import type { FeedSession } from './feed-session';
 import { dayLabel, isServiceDate } from './service-date';
 
 function home(session: FeedSession): BreadcrumbItem {
-  return { label: session.feed?.feed_name ?? 'Feed', pageState: { type: 'feed' } };
+  return { label: session.feed?.feed_name ?? 'Feed', pageState: { type: 'home' } };
 }
 
 /** Human label for a route: short name, long name, or the bare id. */
@@ -125,9 +125,6 @@ export function buildBreadcrumbs(session: FeedSession, state: PageState): Breadc
     case 'home':
       return [];
 
-    case 'feed':
-      return [home(session)];
-
     case 'people':
       return [home(session), { label: 'People', pageState: state }];
 
@@ -204,7 +201,6 @@ export function buildBreadcrumbs(session: FeedSession, state: PageState): Breadc
 export function validateState(session: FeedSession, state: PageState): boolean {
   switch (state.type) {
     case 'home':
-    case 'feed':
     case 'people':
     case 'assignments':
       return true;

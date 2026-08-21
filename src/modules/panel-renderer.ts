@@ -10,9 +10,9 @@
      the panel always has something to render.
    - `setBreadcrumbs` added: the trail is rebuilt outside this class and can
      arrive after the page it belongs to, without a scroll reset.
-   - The dispatcher covers yard-master's nine variants: `home` renders the
-     tree, `trip` is this repo's own page, `vehicle` is gone, and the managed
-     variants render this repo's own pages, the calendar included.
+   - The dispatcher covers yard-master's eight variants: `home` renders the
+     feed and its tree, `trip` is this repo's own page, `vehicle` is gone, and
+     the managed variants render this repo's own pages, the calendar included.
    - `meUserId` added to the hooks: the people page marks the signed-in row,
      and `RenderContext` is a verbatim type that has no business growing a
      field for it.
@@ -42,7 +42,6 @@ import type { RenderContext } from './render-utils';
 import { escHtml, formatRelative } from './render-utils';
 import { renderAlertPage } from './pages/alert-page';
 import { renderAssignmentsPage } from './pages/assignments-page';
-import { renderFeedPage } from './pages/feed-page';
 import { renderPeoplePage } from './pages/people-page';
 import { renderRoutePage } from './pages/route-page';
 import { renderStopPage } from './pages/stop-page';
@@ -61,7 +60,7 @@ export interface PanelRendererHooks {
   meUserId: () => number | null;
   /** Run a write, named by the button that asked for it. */
   action: (action: string, arg: string) => void;
-  /** What the map could not draw, for the feed page's warning card. */
+  /** What the map could not draw, for the home page's warning card. */
   mapIssues: () => MapDataIssues;
 }
 
@@ -257,7 +256,7 @@ export class PanelRenderer {
     const index = this.rtIndex;
     switch (this.state.type) {
       case 'home':
-        return renderTreePage(ctx);
+        return renderTreePage(ctx, this.hooks.mapIssues());
       case 'route':
         return renderRoutePage(ctx, index, this.state);
       case 'stop':
@@ -266,8 +265,6 @@ export class PanelRenderer {
         return renderTripPage(ctx, index, this.state);
       case 'alert':
         return renderAlertPage(ctx, this.state);
-      case 'feed':
-        return renderFeedPage(ctx, this.hooks.mapIssues());
       case 'tracker':
         return renderTrackerPage(ctx, this.state);
       case 'people':

@@ -223,7 +223,6 @@ export class PageStateManager {
         params.set('trip', pageState.trip_id);
         if (pageState.route_id) params.set('route', pageState.route_id);
         break;
-      case 'feed':
       case 'people':
         break;
       case 'alert':
@@ -245,8 +244,9 @@ export class PageStateManager {
     const get = (key: string) => params.get(key) ?? undefined;
 
     switch (params.get('type')) {
+      // A hash written before the feed page was merged into home.
       case 'feed':
-        return { type: 'feed' };
+        return { type: 'home' };
       case 'people':
         return { type: 'people' };
       case 'assignments': {

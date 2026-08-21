@@ -458,7 +458,6 @@ export class MapController {
         return;
       }
 
-      case 'feed':
       case 'assignments':
       case 'people':
       case 'alert':

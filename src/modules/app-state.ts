@@ -513,7 +513,7 @@ export class AppState {
       const id = Number(state.alert_id);
       if (Number.isFinite(id)) load = async () => session.setAlertDetail(await getAlert(id));
     } else if (
-      state.type === 'feed' &&
+      state.type === 'home' &&
       session.uploads === null &&
       session.feed &&
       isHosted(session.feed)
