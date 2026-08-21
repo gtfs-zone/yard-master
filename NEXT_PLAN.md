@@ -140,15 +140,53 @@ Garage joins music-student's compose with a one-shot init container that applies
 the layout and creates the bucket and key, and joins deploy-gtfs-rt as a
 StatefulSet with a PVC, a Service and the secret the two apps read.
 
-- [ ] railroad-club: `src/railroad_club/object_store.py` and its settings
-- [ ] railroad-club: `GtfsUpload` model, `Feed.source_kind`,
+- [x] railroad-club: `src/railroad_club/object_store.py` and its settings
+- [x] railroad-club: `GtfsUpload` model, `Feed.source_kind`,
       `Feed.current_upload_id`, `static_feed_url` made nullable
-- [ ] railroad-club: the Alembic revision, backfilling `source_kind = 'url'`
-- [ ] railroad-club: a `Feed.is_hosted` property, so no caller compares strings
-- [ ] music-student: the `garage` service, the init one-shot, `.env.example`
+- [x] railroad-club: the Alembic revision, backfilling `source_kind = 'url'`
+- [x] railroad-club: a `Feed.is_hosted` property, so no caller compares strings
+- [x] music-student: the `garage` service, the init one-shot, `.env.example`
       keys, and the layout/bucket step folded into `scripts/reset.sh`
-- [ ] deploy-gtfs-rt: the Garage StatefulSet, Service, PVC and secret
-- [ ] Tests in railroad-club against a Garage container or a stub
+- [x] deploy-gtfs-rt: the Garage StatefulSet, Service, PVC and secret
+- [x] Tests in railroad-club against a Garage container or a stub
+- [x] railroad-club bumped in cafe-car, schedule-foamer, vehicle-poser and
+      trip-updogger
+
+**What the pass turned up.** `GtfsUpload.id` is a uuid4 hex like `Tracker.id`,
+not a sequence: the object is written before the row is committed, so the key
+has to be known first. That also removes the flush-then-update dance the
+`feeds/{feed_id}/{upload_id}.zip` layout would otherwise need, and the layout
+itself lives in `object_key_for` / `feed_object_prefix` so the feed-delete sweep
+and the writer cannot disagree.
+
+The two tables reference each other, so `feed.current_upload_id` is created with
+`use_alter`: as part of either `CREATE TABLE` there is no valid order. The
+downgrade refuses to run while any feed is hosted rather than inventing a URL
+for it.
+
+The store is sync boto3, which is right for schedule-foamer's Celery tasks and
+wrong for cafe-car's handlers, so `AsyncObjectStore` wraps every call in
+`asyncio.to_thread`. Phase 2 should use that one and never the bare client: a
+blocking put of a 30 MB zip stalls every request in flight.
+
+Garage's image is a single static binary with **no shell**, which decides the
+shape of both init paths. In compose it is that binary copied into alpine
+(`dev/garage/Dockerfile`). In k3s there is no image to build, so `garage-init`
+drives Garage's admin API with curl and jq instead; every endpoint it calls was
+checked against a running node first. The image also has no entrypoint, only a
+command, so the StatefulSet has to say `command: ["/garage", "server"]` — `args`
+alone replaces the binary path and fails to exec.
+
+Garage validates the key format on import: `GK` plus 24 hex, and 64 hex for the
+secret. Placeholder strings are rejected with a 400, so the dev key in
+`.env.example` is a real-shaped pair.
+
+Adding two relationships to `Feed` broke five cafe-car admin tests. SQLAdmin's
+edit form calls `hasattr()` across every attribute of a detached instance, so
+`uploads` and `current_upload` joined the `form_excluded_columns` list that
+already exists for `members` and `invites` for exactly this reason. Nothing else
+in either app noticed `static_feed_url` going nullable, because every existing
+row backfills to `'url'` and nothing writes a null until phase 2.
 
 **Gotchas.** `static_feed_url` going nullable makes every existing reader a
 possible `None` dereference; grep both apps for it before the revision, not
