@@ -181,13 +181,15 @@ new SearchController<PageState>({
 }).initialize();
 
 // ─── Feed switcher ────────────────────────────────────────────────────────────
-feedSwitcherBtn.addEventListener('click', async () => {
+async function openFeedSwitcher(): Promise<void> {
   const feed = await showFeedSwitcher({
     selected: session.feed,
     isAdmin: appState.me?.is_admin ?? false,
   });
   if (feed) await appState.selectFeed(feed);
-});
+}
+
+feedSwitcherBtn.addEventListener('click', () => void openFeedSwitcher());
 
 // ─── Reload ───────────────────────────────────────────────────────────────────
 // Two halves, deliberately: cafe-car re-downloads the zip for the schedule
@@ -229,4 +231,10 @@ void appState.boot().then(() => {
   } else {
     accountLink.classList.add('hidden');
   }
+
+  // Landing on no feed leaves an empty map with nothing on it to act on, so the
+  // switcher opens itself: it lists the feeds worth picking, and offers the new
+  // feed form when there are none. Only when boot actually reached the API,
+  // because a failed boot has already said so and a modal would bury it.
+  if (appState.me && !session.feed) void openFeedSwitcher();
 });

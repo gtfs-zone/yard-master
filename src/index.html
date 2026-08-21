@@ -30,8 +30,12 @@
             <button id="feed-switcher-btn" class="btn btn-primary btn-sm">Select feed</button>
             <!-- Hidden until a feed is selected: there is nothing to reload otherwise -->
             <button id="reload-feed-btn" class="btn btn-ghost btn-sm hidden">Reload</button>
-            <!-- href and visibility come from /api/me's account_url at boot -->
-            <a id="account-link" class="btn btn-ghost btn-sm hidden" href="#">Account</a>
+            <!-- href and visibility come from /api/me's account_url at boot.
+                 A new tab, like cafe-car's own account page: Keycloak's console
+                 is a different origin with no link back, so navigating there in
+                 this tab strands the map. -->
+            <a id="account-link" class="btn btn-ghost btn-sm hidden" href="#"
+               target="_blank" rel="noopener noreferrer">Account</a>
             <label class="swap swap-rotate btn btn-ghost btn-sm btn-circle">
               <input type="checkbox" class="theme-controller" value="light" />
               <svg class="swap-on h-5 w-5 fill-current" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">

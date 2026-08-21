@@ -111,7 +111,14 @@ export const CONFIG = {
   // cafe-car (`docker-compose.yml`, service `api`); prod is the deployed feed
   // server. Read by the vendored `feed-url-resolve.ts`, which is shared with
   // coloring-book and so cannot hardcode either.
-  RT_BASE: import.meta.env.DEV ? 'http://localhost:8000' : 'https://rt.gtfs.zone',
+  //
+  // The DEV flag alone is not enough: the copy served behind the local
+  // oauth2-proxy is a production build, so it would resolve against the real
+  // feed server while everything else it talks to is local. VITE_RT_BASE is
+  // how that build says otherwise.
+  RT_BASE:
+    import.meta.env.VITE_RT_BASE ??
+    (import.meta.env.DEV ? 'http://localhost:8000' : 'https://rt.gtfs.zone'),
 
   // Prod URLs of the sibling apps, for deep links out of a properties page.
   VIZ_BASE: 'https://viz.rt.gtfs.zone',

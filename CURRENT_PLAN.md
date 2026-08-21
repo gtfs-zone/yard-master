@@ -1344,6 +1344,28 @@ rest.
 
 ## Phase 10: deploy and cutover
 
+The local half landed first, and turned out to be a prerequisite rather than a
+convenience: none of the parity review below can be judged from vite's :8091,
+because the dev proxy forges the headers and so cannot reproduce a single
+auth-shaped failure. music-student now runs the SPA behind its real
+oauth2-proxy at `http://localhost:4180`, with `OAUTH2_PROXY_UPSTREAMS` standing
+in for Traefik's path rules: `/` to an nginx serving a bind-mounted `dist/`,
+`/api/`, `/account` and SQLAdmin's five model prefixes to cafe-car. The old
+admin's index page is the only thing lost, and `/feed/list` still reaches it for
+a side-by-side comparison.
+
+Two things only showed up once a *production* build was the thing being served.
+`CONFIG.RT_BASE` picked its value off `import.meta.env.DEV`, so the copy behind
+the local proxy resolved path-only feed URLs against the deployed feed server
+while everything around it was local; it reads `VITE_RT_BASE` now. And the vite
+proxy claimed `X-Auth-Request-User: 'alice'`, a literal where Keycloak's subject
+is a UUID, so :8091 had been quietly working against a second `User` row this
+whole time (the local DB has it: user 4, `alice@example.com`, owning a feed the
+real alice cannot see). The proxy resolves the real subject from Keycloak now,
+and forges the same debug JWT `reset.sh` does, so both doors reach one account.
+
+- [x] music-student: an nginx service for the SPA, and split the oauth2-proxy
+      upstreams so `/api` stays inside the authenticated proxy
 - [ ] CI in yard-master: typecheck, build, image, matching test-track's pipeline
 - [ ] deploy-gtfs-rt / music-student: the nginx deployment, the Traefik router
       for `manage.rt.gtfs.zone`, and the `/api` path rule to cafe-car, both

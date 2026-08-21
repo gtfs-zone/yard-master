@@ -10,10 +10,14 @@ authenticated JSON API. Replaces cafe-car's SQLAdmin admin interface.
 
 ```bash
 pnpm install
-pnpm dev          # :8090, proxies /api to a local cafe-car admin app on :8001
+pnpm dev          # :8091, proxies /api to a local cafe-car admin app on :8001
 pnpm typecheck    # the gate before any commit
 pnpm build
 pnpm vendor:check # diff vendored files against test-track
+
+# Behind the real oauth2-proxy, at music-student's http://localhost:4180. That
+# stack bind-mounts this dist/, so a rebuild is the whole deploy step.
+VITE_RT_BASE=http://localhost:8000 pnpm build --watch
 ```
 
 ## Architecture
@@ -62,6 +66,10 @@ objects (feeds, trackers, rules, alerts, members) and never the schedule.
   in `issues.vehiclesUnmatched`. Nickname is the label the map shows, unique
   within a feed but never the key.
 - All magic numbers live in `src/config.ts`.
+- Anything auth-shaped is verified at music-student's `:4180`, not at vite's
+  `:8091`. Session expiry, the cookie, the CSRF header on a write and SSE
+  through the proxy only exist behind the real oauth2-proxy; the dev proxy
+  forges headers and cannot fail the way production does.
 
 ## Related Repos
 

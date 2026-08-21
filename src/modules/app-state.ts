@@ -189,7 +189,7 @@ export class AppState {
       new URLSearchParams(window.location.hash.slice(1)).get('feed') ??
       localStorage.getItem(CONFIG.SELECTED_FEED_KEY);
 
-    const feed = wanted ? await this.findFeed(wanted) : null;
+    const feed = (wanted ? await this.findFeed(wanted) : null) ?? (await this.onlyFeed());
     if (!feed) {
       if (wanted) notify.warning(`No feed named "${wanted}" is available to you.`);
       // No feed means no focus worth restoring: every page but home is scoped
@@ -200,6 +200,23 @@ export class AppState {
     }
 
     await this.selectFeed(feed, pending);
+  }
+
+  /**
+   * The feed to open when nothing named one: the only one there is, or null.
+   *
+   * Somebody with a single feed has no choice to make, so asking them to make
+   * it is friction with one answer. Two or more, or none, and the caller opens
+   * the switcher instead. A listing failure is not reported here, because the
+   * switcher lists again and shows the error in place.
+   */
+  private async onlyFeed(): Promise<Feed | null> {
+    try {
+      const mine = await listFeeds();
+      return mine.length === 1 ? mine[0] : null;
+    } catch {
+      return null;
+    }
   }
 
   /**
