@@ -183,9 +183,12 @@ function renderInput(field: FormField): string {
   if (type === 'file') {
     // A label wrapping a hidden input is the whole drop zone: clicking
     // anywhere in it opens the picker without a click handler, and it stays
-    // keyboard-reachable because the input itself is still focusable.
+    // keyboard-reachable because the input itself is still focusable. The
+    // input is off-screen rather than hidden, so the zone has to draw that
+    // focus itself or a keyboard user gets no ring at all.
     return `<label class="flex flex-col items-center justify-center gap-1 cursor-pointer
         rounded-lg border border-dashed border-base-300 hover:border-primary
+        has-[:focus-visible]:border-primary has-[:focus-visible]:ring-1
         bg-base-200 px-4 py-6 text-center" data-drop="${escHtml(field.name)}">
       <input ${common} type="file" class="sr-only"${
         field.accept ? ` accept="${escHtml(field.accept)}"` : ''
