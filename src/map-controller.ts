@@ -3,14 +3,14 @@
    @status modified
    @changes
    - The `vehicle` PageState variant became `tracker`, keyed by `Tracker.id`. The
-     LayerManager target kind stays `vehicle`: that is the map layer's own
-     vocabulary and is unchanged.
+     LayerManager target kind stays `vehicle` — that is the map layer's own
+     vocabulary — but carries the `trackerId` a click has to navigate by.
    - `applyFocus` handles yard-master's managed variants (`feed`,
      `assignments`, `managers`) alongside `alert`, all of which clear the focus
      without moving the camera.
    - `trip` draws the trip's own geometry on a source this file owns, spotlights
-     its route and frames it. LayerManager has no `trip` focus kind and stays
-     verbatim, so the shape lives here instead. The same source takes a whole
+     its route and frames it. LayerManager has no `trip` focus kind, so the
+     shape lives here instead. The same source takes a whole
      day's assigned trips at once, which is what a selected day in the
      assignments calendar draws.
    - `VehiclePosition` grows a `trackerId`. A tracker can carry several
@@ -18,8 +18,8 @@
      something else has to say which tracker they belong to; upstream's feeds
      have no such object.
    - The last pushed positions are kept here so a `tracker` focus can resolve
-     the tracker's vehicles. LayerManager is keyed by `key` and stays verbatim,
-     so it cannot answer "which of these is this tracker's". */
+     the tracker's vehicles. LayerManager's layer is keyed by `key`, so it
+     cannot answer "which of these is this tracker's". */
 import maplibregl from 'maplibre-gl';
 import { CONFIG } from './config';
 import type { GTFSStatic } from './gtfs-static';

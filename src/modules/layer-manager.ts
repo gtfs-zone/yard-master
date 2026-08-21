@@ -1,6 +1,11 @@
 /* @vendored-from test-track:src/modules/layer-manager.ts
    @sha 56f120a
-   @status verbatim */
+   @status modified
+   @changes
+   - A vehicle feature carries `tracker_id` beside `vehicle_id`, and a vehicle
+     hit returns it as `FocusTarget.trackerId`. `vehicle_id` is cafe-car's
+     composite key, which addresses no tracker; the surrogate is what a page
+     and an API call are keyed by. */
 /* @vendored-from coloring-book:src/modules/layer-manager.ts
    @sha a4b5ee1
    @status modified
