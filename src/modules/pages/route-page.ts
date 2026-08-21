@@ -3,7 +3,7 @@
    @status modified
    @changes
    - The `vehicle` PageState variant became `tracker`, keyed by `Tracker.id`,
-     which is what `VehiclePosition.key` holds here.
+     which is `VehiclePosition.trackerId` here and never `key`.
    - A Trips section lists the direction's trips, each a link to the `trip`
      page, which test-track does not have.
    - User-facing "vehicle" wording became "tracker". The internal names keep
@@ -216,7 +216,7 @@ function vehicleChip(
         )}</span>`;
   return `<div class="text-xs flex items-center gap-1 flex-wrap">
     <span class="badge badge-xs badge-neutral">${renderTriangleIcon('h-2 w-2')}</span>
-    ${entityLink(ctx, { type: 'tracker', tracker_id: vehicle.key }, label, 'link link-hover font-medium')}
+    ${entityLink(ctx, { type: 'tracker', tracker_id: vehicle.trackerId }, label, 'link link-hover font-medium')}
     ${status ? `<span class="opacity-40">·</span>${status}` : ''}
     ${occupancy ? `<span class="opacity-40">·</span>${occupancy}` : ''}
     ${stopSequenceMark(vehicle, current)}
@@ -391,7 +391,7 @@ function renderUnplaced(ctx: RenderContext, unplaced: Unplaced[]): string {
      <ul class="space-y-1">${unplaced
        .map(
          u => `<li class="text-xs flex justify-between gap-2">
-           ${entityLink(ctx, { type: 'tracker', tracker_id: u.vehicle.key }, vehicleDisplayName(ctx.session.staticFeed, u.vehicle))}
+           ${entityLink(ctx, { type: 'tracker', tracker_id: u.vehicle.trackerId }, vehicleDisplayName(ctx.session.staticFeed, u.vehicle))}
            <span class="opacity-60 text-right">${escHtml(u.reason)}</span>
          </li>`,
        )

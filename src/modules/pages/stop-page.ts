@@ -189,7 +189,7 @@ function renderTrackersHere(
     for (const v of rt.vehiclesAtStop.get(id) ?? []) {
       rows.push(`<li class="flex justify-between gap-2 items-center">
         <span class="flex items-center gap-2 min-w-0">
-          ${entityLink(ctx, { type: 'tracker', tracker_id: v.key }, vehicleDisplayName(ctx.session.staticFeed, v))}
+          ${entityLink(ctx, { type: 'tracker', tracker_id: v.trackerId }, vehicleDisplayName(ctx.session.staticFeed, v))}
           ${isStation ? fromChild(ctx, id) : ''}
         </span>
         <span class="opacity-60 shrink-0">${escHtml(

@@ -183,7 +183,9 @@ function zoomWidth(
 type FocusTarget =
   | { kind: 'stop'; id: string }
   | { kind: 'route'; id: string }
-  | { kind: 'vehicle'; id: string }
+  // `id` is `VehiclePosition.key`, the composite the layer is keyed by;
+  // `trackerId` is the surrogate that addresses a tracker page.
+  | { kind: 'vehicle'; id: string; trackerId: string }
   | null;
 
 const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
@@ -952,7 +954,11 @@ export class LayerManager {
       if (!feature) continue;
       const props = feature.properties ?? {};
       if (layer === 'vehicles-clickarea' && props.vehicle_id) {
-        return { kind: 'vehicle', id: String(props.vehicle_id) };
+        return {
+          kind: 'vehicle',
+          id: String(props.vehicle_id),
+          trackerId: String(props.tracker_id ?? ''),
+        };
       }
       if (layer === 'stops-clickarea' && props.stop_id) {
         return { kind: 'stop', id: String(props.stop_id) };
@@ -1078,6 +1084,7 @@ export class LayerManager {
         geometry: { type: 'Point' as const, coordinates: [v.lon, v.lat] },
         properties: {
           vehicle_id: v.key,
+          tracker_id: v.trackerId,
           bearing: v.bearing ?? 0,
           has_bearing: v.bearing !== undefined,
           color: route?.color ?? CONFIG.VEHICLE_UNMATCHED_COLOR,

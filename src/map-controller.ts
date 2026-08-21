@@ -249,7 +249,10 @@ export class MapController {
           break;
         case 'vehicle':
           // The map's moving dots are trackers, addressed by their surrogate.
-          this.onSelect?.({ type: 'tracker', tracker_id: target.id });
+          // `target.id` is the composite feature key, never a tracker id.
+          if (target.trackerId) {
+            this.onSelect?.({ type: 'tracker', tracker_id: target.trackerId });
+          }
           break;
       }
     };
@@ -515,7 +518,9 @@ export class MapController {
         // The layer is keyed by `key`, so a tracker running several vehicles
         // spotlights its most recent one; the panel lists all of them.
         const vehicle = this.trackerVehicle(state.tracker_id);
-        this.layers.setFocus(vehicle ? { kind: 'vehicle', id: vehicle.key } : null);
+        this.layers.setFocus(
+          vehicle ? { kind: 'vehicle', id: vehicle.key, trackerId: vehicle.trackerId } : null
+        );
         // Re-arm follow on this tracker (a different one replaces the old).
         this.following = state.tracker_id;
         if (vehicle) this.easeToPoint([vehicle.lon, vehicle.lat]);
