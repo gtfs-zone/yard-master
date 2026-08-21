@@ -119,12 +119,20 @@ toast, and `session.trackers.get(key)` misses, which is the "Tracker ... is not
 in the loaded feed" page. Browse works because `tree-page.ts` uses `tracker.id`.
 `trip-page.ts` is the one call site that got it right.
 
-- [ ] `layer-manager.ts`: carry `tracker_id` as a second feature property, so
+- [x] `layer-manager.ts`: carry `tracker_id` as a second feature property, so
       the resolution happens where the key was minted
-- [ ] `map-controller.ts`: navigate off that, and arm follow mode off it too
-- [ ] `route-page.ts` (two sites) and `stop-page.ts`: `vehicle.key` becomes
+- [x] `map-controller.ts`: navigate off that, and arm follow mode off it too
+- [x] `route-page.ts` (two sites) and `stop-page.ts`: `vehicle.key` becomes
       `vehicle.trackerId`
-- [ ] Grep for `.key` reaching a `tracker_id` anywhere else
+- [x] Grep for `.key` reaching a `tracker_id` anywhere else
+
+`layer-manager.ts` was `verbatim`, so this promoted it to `modified` with an
+`@changes` list and a rewritten `VENDORED.md` row. `map-controller.ts`'s own
+banner said in two places that LayerManager stays verbatim; both lines were
+corrected. `FocusTarget`'s vehicle variant now carries `trackerId` beside `id`,
+which keeps `setFocus` keyed by the composite (the layer is) while `onSelect`
+navigates by the surrogate. A hit with an empty `tracker_id` navigates nowhere
+rather than to a page for the empty id.
 
 ### 1b. Load status stuck on "running"
 
@@ -144,11 +152,16 @@ stream's first frame, read from the DB at connect, plus the `GET /feeds/{id}`
 fired right after Reload. Both say `running`. A refresh reconnects and reads
 `success`.
 
-- [ ] music-student `docker-compose.yml`: `REDIS_URL: redis://redis:6379/1` on
+- [x] music-student `docker-compose.yml`: `REDIS_URL: redis://redis:6379/1` on
       `celery-worker` and `celery-beat`
-- [ ] deploy-gtfs-rt `gtfs/celery.yaml`: the same on both Deployments
-- [ ] schedule-foamer: a `log.warning` inside `publish_load`'s suppress. A
+- [x] deploy-gtfs-rt `gtfs/celery.yaml`: the same on both Deployments
+- [x] schedule-foamer: a `log.warning` inside `publish_load`'s suppress. A
       publish that silently does nothing is what made this invisible
+
+Committed in each of the three repos, not here. `publish_load` traded
+`contextlib.suppress` for a `try`/`except` that logs the feed id and the
+`redis_url` it failed against, with `exc_info`, so the next misconfiguration
+names itself.
 
 ### 1c. The 422 on creating a feed with a zip
 
@@ -167,31 +180,45 @@ shows as a blank form.
 ("Promised response from onMessage listener went out of scope" is a browser
 extension talking to itself. Not ours.)
 
-- [ ] `schedule-upload.ts`: mirror the name regex in `validate`, and reword the
+- [x] `schedule-upload.ts`: mirror the name regex in `validate`, and reword the
       help text to say it starts with a letter and is 3-64 characters
-- [ ] `schedule-upload.ts`: check `static_feed_url` parses as http(s), which is
+- [x] `schedule-upload.ts`: check `static_feed_url` parses as http(s), which is
       what `AnyHttpUrl` enforces server-side
-- [ ] `entity-form.ts`: a form-level error slot above the fields, fed by any
+- [x] `entity-form.ts`: a form-level error slot above the fields, fed by any
       422 whose `loc` stops at `body`. No 422 may be invisible
+
+The banner slot already existed (`[data-form-error]`), used for unknown fields
+and for anything that is not a 422. What was missing is that a 422 carrying
+*both* a field error and a whole-object error dropped the second one on the
+floor: the branch tested `err.fields` alone. `ApiError` grew `formErrors`, the
+messages whose `loc` is `["body"]` or shorter, and the form now shows both.
+`describeDetail` also stopped printing `body:` as if it were a field name.
 
 ### 1d. The chrome
 
-- [ ] Delete `tracker:bulk` and its "Add several" button: the button in
+- [x] Delete `tracker:bulk` and its "Add several" button: the button in
       `tree-page.ts`, the case in `actions.ts`, `newTrackers`,
       `api-client.createTrackers` and the `TrackerBulkCreate` type. cafe-car's
       route stays; only the client stops offering it
-- [ ] Delete "Revert" from `entity-form.ts` and its `revert()` implementation.
+- [x] Delete "Revert" from `entity-form.ts` and its `revert()` implementation.
       Dirty tracking and `allowPristine` stay
-- [ ] Move `#reload-feed-btn` out of the navbar into the feed page's Schedule
+- [x] Move `#reload-feed-btn` out of the navbar into the feed page's Schedule
       source block, rendered only when `source_kind === 'url'`. A hosted feed
       has no upstream to re-download; Replace schedule is its equivalent. The
       disabled/"Reloading..." logic moves with it, off the same `change` event
-- [ ] Restyle `#feed-switcher-btn` as test-track's Load button: the
+- [x] Restyle `#feed-switcher-btn` as test-track's Load button: the
       cloud-upload SVG plus `<span class="hidden md:inline">` around the label
-- [ ] `tracker-page.ts`: tell "the list has not arrived yet" from "no such
+- [x] `tracker-page.ts`: tell "the list has not arrived yet" from "no such
       tracker". `breadcrumbs.validateState` already accepts a tracker id while
       `session.trackers` is empty, and the page contradicts it for one round
       trip
+
+Removing Revert reindexed the modal's actions, so `escapeAction` went from 1 to
+0 — Escape had otherwise become Save. The reload button became a `feed:reload`
+action in `actions.ts` rendered in the Schedule source block, which meant
+`actionButton` grew a `disabled` flag to carry the "Reloading…" state the
+navbar button held imperatively. The switcher's label moved into
+`#feed-switcher-label` so the icon survives a feed change.
 
 ---
 
