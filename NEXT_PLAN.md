@@ -653,12 +653,28 @@ closes the whole form on the key that was meant to close a list.
 
 ## Phase 9: the About modal
 
-- [ ] Vendor `test-track:src/modules/about-modal.ts`, `@status modified`, with
+- [x] Vendor `test-track:src/modules/about-modal.ts`, `@status modified`, with
       yard-master's own `AboutApp`
-- [ ] A header button beside the theme toggle
-- [ ] The blurb says what this app is, and — because of phase 1 — says plainly
+- [x] A header button beside the theme toggle
+- [x] The blurb says what this app is, and — because of phase 1 — says plainly
       that an uploaded feed is stored and published
-- [ ] `VENDORED.md` row, and `pnpm vendor:check` clean
+- [x] `VENDORED.md` row, and `pnpm vendor:check` clean
+
+**What the pass turned up.** Two of `about-links`'s shared blocks do not fit an
+app that is itself one of the destinations. `renderProjectSection` always lists
+manage.rt.gtfs.zone as "run your own realtime feed", which here links the page
+you are already on, and `renderResourcesSection` describes TransitLand as "the
+source behind Load -> From TransitLand Atlas", a menu this app does not have.
+Both are rendered locally instead, from the same `link`/`divider`/`list` shapes:
+Project names viz.rt.gtfs.zone and edit.gtfs.zone, and Resources links the
+schedule and realtime references — the realtime one being what
+`scripts/check-rt-spec.ts` already holds `src/gtfs-rt-spec/` to. `renderBlurb`,
+`renderVersionAndSource` and `renderFeedbackSection` are used unchanged, so the
+version line, the repo links and the contact address still cannot drift.
+
+The blurb's footer is the gotcha's answer and says both halves: browsing a feed
+parses the zip in the browser and uploads nothing, and uploading a schedule is
+the deliberate exception, stored and served at that feed's public `gtfs.zip`.
 
 ---
 
