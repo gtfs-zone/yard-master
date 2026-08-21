@@ -22,10 +22,15 @@ import { PanelRenderer } from './modules/panel-renderer';
 import { Actions } from './modules/actions';
 import { isServiceDate } from './modules/service-date';
 import { initFieldTooltipPortal } from './utils/tooltip-position';
+import { showAboutModal } from './modules/about-modal';
 
 // ─── Shell ────────────────────────────────────────────────────────────────────
 const version = document.getElementById('app-version');
 if (version) version.textContent = __APP_VERSION__;
+
+document
+  .getElementById('about-btn')
+  ?.addEventListener('click', () => void showAboutModal(__APP_VERSION__));
 
 const appContainer = document.querySelector<HTMLElement>('.app-container')!;
 restorePanelWidth(appContainer);
