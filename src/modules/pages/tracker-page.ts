@@ -221,8 +221,12 @@ export function renderTrackerPage(
 ): string {
   const tracker = ctx.session.trackers.get(state.tracker_id);
   if (!tracker) {
-    // The list is fetched on selection, so an id that misses is a tracker that
-    // was deleted or belongs to another feed, not one that has not arrived.
+    // An empty map is the list not having arrived, which is exactly what
+    // `breadcrumbs.validateState` lets through; saying "not in the feed" for
+    // one round trip contradicts it.
+    if (ctx.session.trackers.size === 0) {
+      return `<p class="text-sm opacity-60">Loading this feed's trackers…</p>`;
+    }
     return missing(`Tracker ${state.tracker_id}`);
   }
 

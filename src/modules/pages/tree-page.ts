@@ -153,6 +153,19 @@ function uploadLine(ctx: RenderContext, upload: GtfsUpload): string {
  * hosted feed shows the URL this app publishes, which is the only one anybody
  * outside the stack is given for it.
  */
+/**
+ * Re-download a linked feed's zip.
+ *
+ * Disabled while cafe-car's own load is running, which the event stream
+ * reports as it happens. Queueing a second load on top of one already in
+ * flight does nothing — schedule-foamer's task is a singleton per feed — so a
+ * button that offered it would be lying about what it does.
+ */
+function reloadButton(feed: Feed): string {
+  const running = feed.load?.status === 'running';
+  return actionButton('feed:reload', '', running ? 'Reloading…' : 'Reload', 'btn-outline', running);
+}
+
 function renderSource(ctx: RenderContext, feed: Feed): string {
   const hosted = isHosted(feed);
   const published = publicScheduleUrl(feed);
@@ -183,6 +196,7 @@ function renderSource(ctx: RenderContext, feed: Feed): string {
         '',
         hosted ? 'Replace schedule' : 'Upload a schedule'
       )}
+      ${hosted ? '' : reloadButton(feed)}
       ${published ? actionButton('feed:copy-schedule-url', '', 'Copy URL') : ''}
     </div>`
   );
@@ -467,7 +481,6 @@ function renderTrackers(ctx: RenderContext): string {
   // this is the list somebody is looking at when they notice one is missing.
   const create = `<div class="flex flex-wrap gap-2 mt-2">
     ${actionButton('tracker:new', '', 'New tracker')}
-    ${actionButton('tracker:bulk', '', 'Add several')}
   </div>`;
 
   return treeSection(

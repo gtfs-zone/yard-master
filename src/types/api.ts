@@ -236,12 +236,6 @@ export interface TrackerCreate {
   device_key?: string;
 }
 
-/** Several trackers named `{prefix}{n}`, numbered past whatever exists. */
-export interface TrackerBulkCreate {
-  prefix: string;
-  count: number;
-}
-
 /** A rename. `id` and `device_key` are immutable, so neither is here. */
 export interface TrackerUpdate {
   nickname: string;

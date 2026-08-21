@@ -41,7 +41,6 @@ import {
   createEntity,
   createRule,
   createTracker,
-  createTrackers,
   deleteAlert,
   deleteEntity,
   deleteFeed,
@@ -51,6 +50,7 @@ import {
   deleteUpload,
   getAlert,
   getProvisioning,
+  reloadFeed,
   removeMember,
   revokeInvite,
   SessionExpiredError,
@@ -152,6 +152,8 @@ export class Actions {
           return await this.removeFeed();
         case 'feed:transfer':
           return await this.transferFeed();
+        case 'feed:reload':
+          return await this.reloadSchedule();
         case 'feed:replace-schedule':
           return await this.replaceSchedule();
         case 'feed:copy-schedule-url':
@@ -162,8 +164,6 @@ export class Actions {
           return await this.removeUpload(arg);
         case 'tracker:new':
           return await this.newTracker();
-        case 'tracker:bulk':
-          return await this.newTrackers();
         case 'tracker:edit':
           return await this.editTracker(arg);
         case 'tracker:delete':
@@ -294,6 +294,27 @@ export class Actions {
    * The upload is what flips `source_kind` and queues the load, so nothing
    * here patches the feed: it re-reads the row the server wrote.
    */
+  /**
+   * Ask cafe-car to re-download a linked feed's zip, and re-download it here.
+   *
+   * Two halves, deliberately: cafe-car re-downloads the zip for the schedule
+   * pipeline, and this browser re-downloads it for the map. Neither is the
+   * other. Offered on a linked feed only; a hosted one has no upstream, and
+   * Replace schedule is its equivalent.
+   */
+  private async reloadSchedule(): Promise<void> {
+    const feed = this.feedOrWarn();
+    if (!feed) return;
+
+    await reloadFeed(feed.id);
+    notify.info(`Queued a reload of ${feed.feed_name}`);
+    // The stream reports the load moving to `running` a moment from now, but
+    // only once schedule-foamer picks the task up; re-reading the row keeps the
+    // gap from looking like nothing happened.
+    await this.app.refreshFeed();
+    this.app.reloadStatic();
+  }
+
   private async replaceSchedule(): Promise<void> {
     const feed = this.feedOrWarn();
     if (!feed) return;
@@ -490,43 +511,6 @@ export class Actions {
     // Straight to its page: the next thing anybody does with a new tracker is
     // provision it, and the credential is served there.
     this.app.setFocus({ type: 'tracker', tracker_id: created.id });
-  }
-
-  private async newTrackers(): Promise<void> {
-    const feed = this.feedOrWarn();
-    if (!feed) return;
-
-    const created = await showEntityForm<Tracker[]>({
-      title: 'New trackers',
-      intro: 'Numbering continues past whatever this feed already has under the prefix.',
-      submitLabel: 'Create',
-      fields: [
-        {
-          name: 'prefix',
-          label: 'Prefix',
-          placeholder: 'bus-',
-          autofocus: true,
-          help: 'Used exactly as typed: "bus-" gives bus-1, bus-2, bus-3.',
-        },
-        { name: 'count', label: 'How many', type: 'number', value: '10' },
-      ],
-      validate: (values) => {
-        const count = Number(values.count);
-        if (!Number.isInteger(count) || count < 1) {
-          return { count: 'A whole number of trackers, at least one' };
-        }
-        return null;
-      },
-      submit: (values) =>
-        createTrackers(feed.id, {
-          prefix: values.prefix.trim(),
-          count: Number(values.count),
-        }),
-    });
-    if (!created) return;
-
-    await this.app.refreshTrackers();
-    notify.success(`Created ${created.length} tracker${created.length === 1 ? '' : 's'}`);
   }
 
   private async editTracker(trackerId: string): Promise<void> {

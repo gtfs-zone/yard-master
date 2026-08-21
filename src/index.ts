@@ -15,7 +15,6 @@ import { ThemeController } from './modules/theme-controller';
 import { FeedSession } from './modules/feed-session';
 import { AppState } from './modules/app-state';
 import { showFeedSwitcher } from './modules/feed-switcher';
-import { reloadFeed, SessionExpiredError } from './modules/api-client';
 import { SearchController } from './modules/search-controller';
 import { buildSearchEntries } from './modules/search-entries';
 import { PanelRenderer } from './modules/panel-renderer';
@@ -85,35 +84,16 @@ session.addEventListener('vehicles', showVehicles);
 // ─── Focus and selection ──────────────────────────────────────────────────────
 const panelContent = document.getElementById('panel-content')!;
 const feedSwitcherBtn = document.getElementById('feed-switcher-btn') as HTMLButtonElement;
-const reloadBtn = document.getElementById('reload-feed-btn') as HTMLButtonElement;
+const feedSwitcherLabel = document.getElementById('feed-switcher-label')!;
 const accountLink = document.getElementById('account-link') as HTMLAnchorElement;
 
 // Declared before AppState so the focus hook can name it; the hooks on both
 // sides are only ever called after this block has run.
 let panel: PanelRenderer;
 
-/**
- * The reload button's two states.
- *
- * Hidden without a feed, and disabled while cafe-car's own load is running,
- * which the event stream reports as it happens. Queueing a second load on top
- * of one already in flight does nothing — schedule-foamer's task is a singleton
- * per feed — so a button that offered it would be lying about what it does.
- */
-function syncReloadButton(): void {
-  const feed = session.feed;
-  reloadBtn.classList.toggle('hidden', !feed);
-  const running = feed?.load?.status === 'running';
-  reloadBtn.disabled = running;
-  reloadBtn.textContent = running ? 'Reloading…' : 'Reload';
-}
-
-session.addEventListener('change', syncReloadButton);
-
 const appState = new AppState(session, {
   onFeedChange: (feed) => {
-    feedSwitcherBtn.textContent = feed ? feed.feed_name : 'Select feed';
-    syncReloadButton();
+    feedSwitcherLabel.textContent = feed ? feed.feed_name : 'Select feed';
     if (!feed) {
       mapCtrl.clearStaticFeed();
       mapCtrl.clearVehicles();
@@ -201,33 +181,6 @@ async function openFeedSwitcher(): Promise<void> {
 
 feedSwitcherBtn.addEventListener('click', () => void openFeedSwitcher());
 
-// ─── Reload ───────────────────────────────────────────────────────────────────
-// Two halves, deliberately: cafe-car re-downloads the zip for the schedule
-// pipeline, and this browser re-downloads it for the map. Neither is the other.
-reloadBtn.addEventListener('click', async () => {
-  const feed = session.feed;
-  if (!feed) return;
-  reloadBtn.disabled = true;
-  try {
-    await reloadFeed(feed.id);
-    notify.info(`Queued a reload of ${feed.feed_name}`);
-    // The stream reports the load moving to `running` a moment from now, but
-    // only once schedule-foamer picks the task up; re-reading the row keeps the
-    // gap from looking like nothing happened.
-    await appState.refreshFeed();
-    appState.reloadStatic();
-  } catch (err) {
-    if (!(err instanceof SessionExpiredError)) {
-      notify.error(
-        `Could not reload ${feed.feed_name}: ${err instanceof Error ? err.message : String(err)}`
-      );
-    }
-  } finally {
-    // Not unconditionally re-enabled: the load this just queued may already be
-    // running, and that is what decides the button now.
-    syncReloadButton();
-  }
-});
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 void appState.boot().then(() => {

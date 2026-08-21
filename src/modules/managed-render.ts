@@ -79,9 +79,10 @@ export function actionButton(
   action: string,
   arg: string,
   label: string,
-  className = 'btn-outline'
+  className = 'btn-outline',
+  disabled = false
 ): string {
-  return `<button type="button" class="btn btn-xs ${className}"
+  return `<button type="button" class="btn btn-xs ${className}" ${disabled ? 'disabled' : ''}
     data-action="${escHtml(action)}" data-arg="${escHtml(arg)}">${escHtml(label)}</button>`;
 }
 

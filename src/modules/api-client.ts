@@ -43,7 +43,6 @@ import type {
   RuleWrite,
   ShareResult,
   Tracker,
-  TrackerBulkCreate,
   TrackerCreate,
   TrackerDetail,
   TrackerRule,
@@ -347,9 +346,6 @@ export const transferFeed = (feedId: number, newOwnerId: number) =>
 /** Answers with the detail form: a new tracker is about to be provisioned. */
 export const createTracker = (feedId: number, body: TrackerCreate) =>
   api.post<TrackerDetail>(`/feeds/${feedId}/trackers`, body);
-
-export const createTrackers = (feedId: number, body: TrackerBulkCreate) =>
-  api.post<Tracker[]>(`/feeds/${feedId}/trackers/bulk`, body);
 
 export const updateTracker = (trackerId: string, body: TrackerUpdate) =>
   api.patch<Tracker>(`/trackers/${encodeURIComponent(trackerId)}`, body);

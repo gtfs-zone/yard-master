@@ -27,9 +27,12 @@
         <div class="navbar-end">
           <div class="flex items-center gap-2">
             <!-- The feed switcher: your feeds only, plus New feed -->
-            <button id="feed-switcher-btn" class="btn btn-primary btn-sm">Select feed</button>
-            <!-- Hidden until a feed is selected: there is nothing to reload otherwise -->
-            <button id="reload-feed-btn" class="btn btn-ghost btn-sm hidden">Reload</button>
+            <button id="feed-switcher-btn" class="btn btn-primary btn-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              <span id="feed-switcher-label" class="hidden md:inline">Select feed</span>
+            </button>
             <!-- href and visibility come from /api/me's account_url at boot.
                  A new tab, like cafe-car's own account page: Keycloak's console
                  is a different origin with no link back, so navigating there in
