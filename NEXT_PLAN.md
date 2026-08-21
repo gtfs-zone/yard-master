@@ -284,11 +284,42 @@ hosted feed only changes when somebody uploads, and that upload already enqueues
 the load, so `ensure_all_feeds_scheduled` skips hosted feeds unless they have
 never loaded or their last load failed.
 
-- [ ] `gtfs_loader.read_gtfs_object(key)` beside `download_gtfs_zip`
-- [ ] `tasks.load_feed`: the branch, and the no-upload permanent failure
-- [ ] `ensure_all_feeds_scheduled`: hosted feeds excluded from the refresh timer
-- [ ] Settings for the store, from railroad-club's shared config
-- [ ] Tests for both branches
+- [x] `gtfs_loader.read_gtfs_object(key)` beside `download_gtfs_zip`
+- [x] `tasks.load_feed`: the branch, and the no-upload permanent failure
+- [x] `ensure_all_feeds_scheduled`: hosted feeds excluded from the refresh timer
+- [x] Settings for the store, from railroad-club's shared config
+- [x] Tests for both branches
+
+**What the pass turned up.** `ObjectStoreSettings` reads `.env` with
+pydantic-settings' default `extra="forbid"`, so it owned the whole file rather
+than its slice of it: the first store call in *any* app whose `.env` carries
+other keys raised a `ValidationError` naming every one of them. cafe-car had
+the same landmine and would have answered 503 on every upload in dev. Fixed in
+railroad-club with `extra="ignore"`, and bumped into both apps.
+schedule-foamer's own `Settings` needed the same, in the other direction: the
+`S3_*` keys in its `.env` are not its to declare.
+
+The store client is reached through `get_object_store()` and nothing else, so
+schedule-foamer grew no settings of its own. The env keys are railroad-club's
+names, in `.env.example` and in a pointer comment on `Settings`, so the two
+apps cannot be aimed at different buckets by accident.
+
+A missing *object* is permanent too, not just a missing upload row: the retry
+reads the same absent key. Both go through `_fail_load`, which records and
+publishes the failure before the task raises — `permanent` says only that the
+Celery retry is pointless, and the row still takes the ordinary 24h
+`next_retry_at` so the beat sweep looks once a day rather than on every pass.
+
+The refresh exclusion is narrower than "skip hosted feeds": only the
+stale-success clause takes `source_kind != 'hosted'`. Never-loaded, failed and
+stuck-running hosted feeds still come through, because those are repairs rather
+than refreshes and a hosted feed can be stuck exactly as a url one can.
+
+The repo had no test suite at all, so pytest and moto are new here, with the
+sqlite-plus-`StaticPool` and foreign-key-pragma setup cafe-car's `conftest`
+already uses. `load_feed` is called directly rather than through Celery;
+`get_session` is patched on `schedule_foamer.tasks` because the task module
+imported the name at import time.
 
 **Gotchas.** The store client is created per task, not at import: a worker that
 starts before Garage is reachable must not die. `max_gtfs_zip_bytes` still
@@ -314,22 +345,67 @@ with a copy button when hosted, the current upload's filename, size and time,
 and the upload history underneath with Activate and Delete on the ones that are
 not current.
 
-- [ ] `types/api.ts`: `GtfsUpload`, and `Feed` gains `source_kind`,
+- [x] `types/api.ts`: `GtfsUpload`, and `Feed` gains `source_kind`,
       `hosted_url`, `current_upload`
-- [ ] `api-client.ts`: the upload call, multipart, still carrying `X-Yard-Master`
-- [ ] `entity-form.ts`: the `file` field type, drop zone, and a preview slot
-- [ ] `modules/gtfs-zip-preview.ts`: parse a `File`, return the summary or the
+- [x] `api-client.ts`: the upload call, multipart, still carrying `X-Yard-Master`
+- [x] `entity-form.ts`: the `file` field type, drop zone, and a preview slot
+- [x] `modules/gtfs-zip-preview.ts`: parse a `File`, return the summary or the
       reason it is not a feed
-- [ ] `actions.ts`: the create dialog's source choice, the replace-schedule
+- [x] `actions.ts`: the create dialog's source choice, the replace-schedule
       action, activate and delete
-- [ ] The feed page's Schedule source section and upload history
-- [ ] `CONFIG`: the upload size cap, mirroring cafe-car's, and the history cap
+- [x] The feed page's Schedule source section and upload history
+- [x] `CONFIG`: the upload size cap, mirroring cafe-car's, and the history cap
+
+**What the pass turned up.** `static_feed_url` going nullable is the change
+that reached furthest. Four call sites downloaded the zip from it directly, and
+a hosted feed has none, so `modules/feed-source.ts` now owns the question:
+`scheduleFetchUrl` for what *this browser* fetches and `publicScheduleUrl` for
+what a *consumer* is told. They are deliberately different values. cafe-car's
+`hosted_url` is built from its hardcoded prod `PUBLIC_RT_BASE`, which is right
+for the sibling-app links and for the Copy button and useless for a feed
+created against a local stack, so the browser's own download resolves
+`{RT_BASE}/{feed_name}/gtfs.zip` the way the realtime links already do.
+`app-state.reloadStatic()` is the single entry point; nothing calls
+`loadStatic` with a URL of its own any more.
+
+A hosted feed between its creation and its first upload has no zip anywhere,
+which the old code would have shown as a progress bar that never moves.
+`FeedSession.noStatic()` says so instead, and the create dialog re-reads the
+feed after the upload so the row carries `current_upload` before the feed is
+selected.
+
+The create dialog moved out of `feed-switcher.ts` altogether. Its hand-rolled
+`<details>` form had none of `entity-form`'s 422 mapping, and the source choice
+needs exactly that — a rejected zip is a 422 naming `file`. The switcher is now
+a list and a button, and `schedule-upload.ts` owns both dialogs so the drop
+zone and its preview are one thing rather than two copies.
+
+`entity-form` grew two things, not one. The `file` type is the drop zone, the
+preview slot and a `submit(values, files)` second argument — a `File` is not a
+string and putting it in `values` would break dirty tracking for every other
+field. `visibleWhen` is the other: a new feed is really two forms sharing a
+header, and the field that does not apply is noise. A hidden field is still
+read and still submitted; the caller decides what to do with it.
+
+`gtfs-zip-preview.ts` repeats cafe-car's `REQUIRED_FILES` checks in the same
+order and the same wording, including the nested-directory message, so a zip
+that passes here and fails there is a bug rather than a difference of opinion.
+The name checks run off `JSZip.loadAsync`'s central directory before anything
+is decompressed, which is why the double unzip costs almost nothing.
+
+The edit form offers `hosted` only to a feed that already has an upload. That
+is the server's rule too — a PATCH carries no bytes, so it cannot be what makes
+a feed hosted — and offering it otherwise would be offering a guaranteed 422.
 
 **Gotchas.** Parsing a 30 MB zip on the main thread will jank the panel; do it
 off a `requestIdleCallback` or accept the freeze and say so in a spinner —
-either is fine, pretending it is instant is not. The upload request is the one
-write that is not JSON: the fetch helper must not set `Content-Type` and let the
-browser write the multipart boundary. Never log the `File`.
+either is fine, pretending it is instant is not. Taken as the spinner: the
+parse yields once before starting so the dialog paints it first, and a second
+file chosen while the first is still parsing is guarded by a token, because the
+slower answer would otherwise land last and describe the wrong file. The upload
+request is the one write that is not JSON: the fetch helper must not set
+`Content-Type` and let the browser write the multipart boundary. Never log the
+`File`.
 
 ---
 

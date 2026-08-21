@@ -66,8 +66,10 @@ import {
   listRules,
   listTrackerPositions,
   listTrackers,
+  listUploads,
   SessionExpiredError,
 } from './api-client';
+import { isHosted, scheduleFetchUrl } from './feed-source';
 import { anchorDate, gridRange } from './pages/assignments-page';
 import type { ServiceDate } from './service-date';
 import { getMe } from './api-client';
@@ -272,7 +274,26 @@ export class AppState {
     // Not awaited: the tree above is already usable, and a feed whose zip is
     // slow or unreachable must not hold it hostage. `loadStatic` reports its
     // own failure through `session.staticError` rather than throwing.
-    void this.session.loadStatic(feed.static_feed_url, feed.feed_name);
+    this.reloadStatic();
+  }
+
+  /**
+   * Re-download the selected feed's zip into this browser.
+   *
+   * Where the zip *is* depends on the feed's source, which is why nothing
+   * calls `loadStatic` with a URL of its own any more. A hosted feed with no
+   * upload yet has no zip anywhere, and saying so is better than a progress
+   * bar that never moves.
+   */
+  reloadStatic(): void {
+    const feed = this.session.feed;
+    if (!feed) return;
+    const url = scheduleFetchUrl(feed);
+    if (!url) {
+      this.session.noStatic('This feed has no schedule yet. Upload a zip to give it one.');
+      return;
+    }
+    void this.session.loadStatic(url, feed.feed_name);
   }
 
   /**
@@ -314,6 +335,21 @@ export class AppState {
     if (!feed) return;
     await this.fetchInto('members', () => getPeople(feed.id), (people) =>
       this.session.setPeople(people)
+    );
+  }
+
+  /**
+   * Re-read the feed's upload history.
+   *
+   * Only a hosted feed has one, but the request is made either way when it is
+   * asked for: a feed that was hosted an hour ago and is linked now still has
+   * the uploads it had, and hiding them would hide the way back.
+   */
+  async refreshUploads(): Promise<void> {
+    const feed = this.session.feed;
+    if (!feed) return;
+    await this.fetchInto('uploads', () => listUploads(feed.id), (rows) =>
+      this.session.setUploads(rows)
     );
   }
 
@@ -476,6 +512,15 @@ export class AppState {
       // nowhere else: everything above this line keys alerts by string.
       const id = Number(state.alert_id);
       if (Number.isFinite(id)) load = async () => session.setAlertDetail(await getAlert(id));
+    } else if (
+      state.type === 'feed' &&
+      session.uploads === null &&
+      session.feed &&
+      isHosted(session.feed)
+    ) {
+      // A linked feed has no history worth a request; a hosted one's is the
+      // rollback list, so it is fetched when the page that shows it opens.
+      load = async () => this.refreshUploads();
     } else if (state.type === 'people' && !session.people && session.feed) {
       const feedId = session.feed.id;
       load = async () => session.setPeople(await getPeople(feedId));

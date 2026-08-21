@@ -120,6 +120,16 @@ export const CONFIG = {
     import.meta.env.VITE_RT_BASE ??
     (import.meta.env.DEV ? 'http://localhost:8000' : 'https://rt.gtfs.zone'),
 
+  // The cap cafe-car enforces on an uploaded schedule zip
+  // (`max_gtfs_zip_bytes`, which is also schedule-foamer's download cap).
+  // Mirrored so the drop zone refuses an oversized file before spending a
+  // minute sending it; the server still enforces it, this only saves the wait.
+  UPLOAD_MAX_BYTES: 31_457_280,
+
+  // Uploads the feed page lists before the rest are left to the server's own
+  // retention. Matches cafe-car's `keep_uploads`, so a full history fits.
+  UPLOAD_HISTORY_MAX: 10,
+
   // Prod URLs of the sibling apps, for deep links out of a properties page.
   VIZ_BASE: 'https://viz.rt.gtfs.zone',
   EDITOR_BASE: 'https://edit.gtfs.zone',

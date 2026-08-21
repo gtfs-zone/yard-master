@@ -41,6 +41,7 @@ import type {
   AlertDetail,
   Assignment,
   Feed,
+  GtfsUpload,
   LoadStatus as LoadStatusRow,
   People,
   Tracker,
@@ -84,6 +85,14 @@ export class FeedSession extends EventTarget {
 
   /** Members and pending invites, or null until the list has arrived. */
   people: People | null = null;
+
+  /**
+   * The feed's schedule uploads, newest first, or null until they have been
+   * asked for. Empty is a real answer — a linked feed has none — so the null
+   * matters: a page that read `[]` as "no uploads" would say so while the
+   * request was still out.
+   */
+  uploads: GtfsUpload[] | null = null;
 
   /**
    * The feed's assignment rules as stored, keyed by rule id, or null until
@@ -328,6 +337,26 @@ export class FeedSession extends EventTarget {
     this.dispatchEvent(new CustomEvent('change'));
   }
 
+  setUploads(uploads: GtfsUpload[]): void {
+    this.uploads = uploads;
+    this.dispatchEvent(new CustomEvent('change'));
+  }
+
+  /**
+   * Say plainly that there is no zip to fetch, rather than leaving the panel
+   * on "downloading" forever.
+   *
+   * The case is a hosted feed with no upload yet, which is every hosted feed
+   * for the moment between its creation and its first zip.
+   */
+  noStatic(reason: string): void {
+    this.cancelLoad();
+    this.staticFeed = null;
+    this.staticError = reason;
+    this.staticLoadedAt = null;
+    this.dispatchEvent(new CustomEvent('change'));
+  }
+
   setPeople(people: People): void {
     this.people = people;
     this.dispatchEvent(new CustomEvent('change'));
@@ -421,6 +450,7 @@ export class FeedSession extends EventTarget {
     this.serviceAlerts = new Map();
     this.alertDetails = new Map();
     this.people = null;
+    this.uploads = null;
     this.rules = null;
     this.assignments = new Map();
     this.assignmentsRange = null;

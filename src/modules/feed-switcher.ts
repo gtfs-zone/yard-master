@@ -2,9 +2,10 @@
  * The feed picker: your feeds, and a form for a new one.
  *
  * yard-master's feeds are rows you own or were given, not URLs you type, which
- * is why none of test-track's `FeedSelection` machinery appears here. The only
- * URL anybody enters is a new feed's `static_feed_url`, and that is stored
- * server-side rather than kept in the hash.
+ * is why none of test-track's `FeedSelection` machinery appears here. A feed
+ * either links a URL, which is stored server-side rather than kept in the
+ * hash, or hosts a zip somebody uploaded; `schedule-upload.ts` owns that form,
+ * because the drop zone and its preview are shared with the feed page.
  *
  * The "show all feeds" toggle is admin-only and off by default, because
  * `GET /feeds` deliberately does not apply the admin bypass: an admin whose
@@ -13,12 +14,12 @@
  * Resolves to the feed the person chose, or null if they closed the dialog.
  */
 
-import { createFeed, listFeeds } from './api-client';
-import { ApiError } from './api-client';
+import { listFeeds } from './api-client';
+import { sourceLabel } from './feed-source';
 import { escHtml } from './render-utils';
 import { loadStatusBadge } from './managed-render';
 import { showModal } from './modal-utils';
-import { notify } from './notification-system';
+import { showNewFeedForm } from './schedule-upload';
 import type { Feed } from '../types/api';
 
 function feedRow(feed: Feed, selectedId: number | null): string {
@@ -35,7 +36,9 @@ function feedRow(feed: Feed, selectedId: number | null): string {
       ${loadStatusBadge(feed.load)}
       <span class="text-xs opacity-50 ml-auto">${escHtml(owner)}</span>
     </div>
-    <p class="text-xs opacity-60 truncate">${escHtml(feed.static_feed_url)}</p>
+    <p class="text-xs opacity-60 truncate">${escHtml(
+      feed.static_feed_url ?? sourceLabel(feed)
+    )}</p>
   </button>`;
 }
 
@@ -48,27 +51,8 @@ function listMarkup(feeds: Feed[], selectedId: number | null): string {
   return feeds.map((feed) => feedRow(feed, selectedId)).join('');
 }
 
-const NEW_FEED_FORM = `
-  <details class="collapse collapse-arrow border border-base-300 mt-4">
-    <summary class="collapse-title text-sm font-semibold">New feed</summary>
-    <div class="collapse-content space-y-2">
-      <label class="form-control">
-        <span class="label-text text-xs">Name</span>
-        <input id="new-feed-name" class="input input-sm input-bordered w-full"
-               placeholder="my-agency" autocomplete="off" />
-        <span class="label-text-alt opacity-50">
-          Lowercase letters, digits, <code>-</code> and <code>_</code>. It appears
-          in this feed's public GTFS-RT URLs, so it cannot be changed casually.
-        </span>
-      </label>
-      <label class="form-control">
-        <span class="label-text text-xs">Static feed URL</span>
-        <input id="new-feed-url" class="input input-sm input-bordered w-full"
-               placeholder="https://example.com/gtfs.zip" autocomplete="off" />
-      </label>
-      <button id="new-feed-submit" class="btn btn-primary btn-sm">Create feed</button>
-    </div>
-  </details>`;
+const NEW_FEED_BUTTON = `
+  <button id="new-feed" class="btn btn-primary btn-sm w-full mt-4">New feed</button>`;
 
 export interface FeedSwitcherOptions {
   /** The feed currently selected, marked in the list. */
@@ -97,16 +81,14 @@ export async function showFeedSwitcher(
       <div id="feed-list" class="space-y-2">
         <p class="text-sm opacity-50 text-center py-6">Loading…</p>
       </div>
-      ${NEW_FEED_FORM}`,
+      ${NEW_FEED_BUTTON}`,
     actions: [{ label: 'Close', onClick: () => {} }],
     escapeAction: 0,
     boxClassName: 'max-w-lg',
     onMount: (close) => {
       const list = document.getElementById('feed-list')!;
       const showAll = document.getElementById('feed-show-all') as HTMLInputElement | null;
-      const nameInput = document.getElementById('new-feed-name') as HTMLInputElement;
-      const urlInput = document.getElementById('new-feed-url') as HTMLInputElement;
-      const submit = document.getElementById('new-feed-submit') as HTMLButtonElement;
+      const newFeed = document.getElementById('new-feed') as HTMLButtonElement;
 
       const pick = (feed: Feed): void => {
         chosen = feed;
@@ -136,28 +118,13 @@ export async function showFeedSwitcher(
 
       showAll?.addEventListener('change', () => void refresh());
 
-      submit.addEventListener('click', async () => {
-        const feed_name = nameInput.value.trim();
-        const static_feed_url = urlInput.value.trim();
-        if (!feed_name || !static_feed_url) {
-          notify.warning('A new feed needs both a name and a static feed URL.');
-          return;
-        }
-        submit.disabled = true;
-        try {
-          const created = await createFeed({ feed_name, static_feed_url });
-          // Created and selected in one step: nobody makes a feed in order to
-          // then not look at it. The first load is already queued server-side.
-          notify.success(`Created ${created.feed_name}`);
-          pick(created);
-        } catch (err) {
-          // 409 and 422 are both things the person can fix in the form, so the
-          // dialog stays open with what they typed still in it.
-          notify.error(
-            err instanceof ApiError ? err.message : `Could not create the feed: ${err}`
-          );
-          submit.disabled = false;
-        }
+      // The form owns its own errors and stays open on a 409 or a 422, so a
+      // resolved value here means a feed exists. Created and selected in one
+      // step: nobody makes a feed in order to then not look at it.
+      newFeed.addEventListener('click', () => {
+        void showNewFeedForm().then((created) => {
+          if (created) pick(created);
+        });
       });
 
       void refresh();

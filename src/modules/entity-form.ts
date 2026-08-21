@@ -39,7 +39,8 @@ export type FieldType =
   | 'number'
   | 'select'
   | 'datetime'
-  | 'checkbox';
+  | 'checkbox'
+  | 'file';
 
 export interface FormField {
   /** The request-body key, and what a 422 names the field by. */
@@ -56,6 +57,28 @@ export interface FormField {
   /** Read-only fields still render, because context is half of a form. */
   readonly?: boolean;
   autofocus?: boolean;
+  /** For `file`. Passed straight to the input's `accept`. */
+  accept?: string;
+  /**
+   * For `file`. Called whenever the chosen file changes, with the slot under
+   * the drop zone to render into.
+   *
+   * The form owns the input and the dirty tracking; what a particular file
+   * *means* is the caller's business, which for a schedule zip is a parse this
+   * module has no reason to know about. Rendering into a slot rather than
+   * returning markup lets that be async: the caller can put a spinner in and
+   * replace it when the answer arrives.
+   */
+  onFile?: (file: File | null, slot: HTMLElement) => void;
+  /**
+   * Show this field only while another one holds a given value.
+   *
+   * For a form that is really two forms sharing a header — a new feed is
+   * either a URL or a zip, and the field that does not apply is noise rather
+   * than a choice. A hidden field is still read and still submitted, so the
+   * caller decides what to do with it; nothing here guesses.
+   */
+  visibleWhen?: { field: string; equals: string };
 }
 
 export interface EntityFormOptions<T> {
@@ -70,8 +93,18 @@ export interface EntityFormOptions<T> {
    * "these two must match".
    */
   validate?: (values: Record<string, string>) => Record<string, string> | null;
-  /** The write itself. Whatever it resolves to is what the form resolves to. */
-  submit: (values: Record<string, string>) => Promise<T>;
+  /**
+   * The write itself. Whatever it resolves to is what the form resolves to.
+   *
+   * `files` carries what a `file` field is holding, keyed the same way. It is
+   * a second argument rather than a value in `values` because a `File` is not
+   * a string and pretending otherwise would break dirty tracking for every
+   * other field.
+   */
+  submit: (
+    values: Record<string, string>,
+    files: Record<string, File | null>
+  ) => Promise<T>;
   /** Which field a 409's message belongs under, if any. */
   conflictField?: string;
   /**
@@ -93,10 +126,30 @@ function readValues(root: HTMLElement, fields: FormField[]): Record<string, stri
       `[data-field="${CSS.escape(field.name)}"]`
     );
     if (!el) continue;
-    values[field.name] =
-      el instanceof HTMLInputElement && el.type === 'checkbox' ? String(el.checked) : el.value;
+    if (el instanceof HTMLInputElement && el.type === 'checkbox') {
+      values[field.name] = String(el.checked);
+    } else if (el instanceof HTMLInputElement && el.type === 'file') {
+      // The name, not the file: this is the string dirty tracking compares and
+      // `validate` reads, and "" is how a form says nothing was chosen.
+      values[field.name] = el.files?.[0]?.name ?? '';
+    } else {
+      values[field.name] = el.value;
+    }
   }
   return values;
+}
+
+/** The `File` each `file` field is holding, keyed by field name. */
+function readFiles(root: HTMLElement, fields: FormField[]): Record<string, File | null> {
+  const files: Record<string, File | null> = {};
+  for (const field of fields) {
+    if (field.type !== 'file') continue;
+    const el = root.querySelector<HTMLInputElement>(
+      `input[data-field="${CSS.escape(field.name)}"]`
+    );
+    files[field.name] = el?.files?.[0] ?? null;
+  }
+  return files;
 }
 
 function renderInput(field: FormField): string {
@@ -127,6 +180,20 @@ function renderInput(field: FormField): string {
         .join('')}
     </select>`;
   }
+  if (type === 'file') {
+    // A label wrapping a hidden input is the whole drop zone: clicking
+    // anywhere in it opens the picker without a click handler, and it stays
+    // keyboard-reachable because the input itself is still focusable.
+    return `<label class="flex flex-col items-center justify-center gap-1 cursor-pointer
+        rounded-lg border border-dashed border-base-300 hover:border-primary
+        bg-base-200 px-4 py-6 text-center" data-drop="${escHtml(field.name)}">
+      <input ${common} type="file" class="sr-only"${
+        field.accept ? ` accept="${escHtml(field.accept)}"` : ''
+      } />
+      <span class="text-xs opacity-70" data-drop-label>Drop a file here, or click to choose one</span>
+    </label>
+    <div class="pt-2 empty:hidden" data-preview="${escHtml(field.name)}"></div>`;
+  }
   if (type === 'checkbox') {
     return `<input ${common} type="checkbox" class="toggle toggle-sm"${
       value === 'true' ? ' checked' : ''
@@ -142,13 +209,21 @@ function renderInput(field: FormField): string {
 }
 
 function renderField(field: FormField): string {
+  // A `file` field's drop zone is itself a `<label>`, so this one is a plain
+  // block: a label inside a label swallows the inner one's clicks.
+  const tag = field.type === 'file' ? 'div' : 'label';
+  const when = field.visibleWhen;
   return `
-    <label class="form-control">
+    <${tag} class="form-control"${
+      when
+        ? ` data-when-field="${escHtml(when.field)}" data-when-equals="${escHtml(when.equals)}"`
+        : ''
+    }>
       <span class="label-text text-xs">${escHtml(field.label)}</span>
       ${renderInput(field)}
       ${field.help ? `<span class="label-text-alt opacity-50">${escHtml(field.help)}</span>` : ''}
       <span class="label-text-alt text-error hidden" data-error="${escHtml(field.name)}"></span>
-    </label>`;
+    </${tag}>`;
 }
 
 /**
@@ -199,6 +274,71 @@ export async function showEntityForm<T>(options: EntityFormOptions<T>): Promise<
 
       const initial = readValues(root, options.fields);
 
+      /**
+       * Show or hide the fields that only apply to one branch of the form.
+       *
+       * Re-run on every change rather than wired per controlling field: the
+       * condition names a field by string, and one pass over all of them is
+       * cheaper than tracking which one moved.
+       */
+      const syncVisibility = (): void => {
+        const now = readValues(root, options.fields);
+        root.querySelectorAll<HTMLElement>('[data-when-field]').forEach((el) => {
+          const on = now[el.dataset.whenField!] === el.dataset.whenEquals;
+          el.classList.toggle('hidden', !on);
+        });
+      };
+
+      /**
+       * The drop zones: a drop puts the file into the input, and every change
+       * of file tells the caller so it can preview it.
+       *
+       * `DataTransfer` is the only way to write a file input's `files`, and it
+       * is what makes drag-and-drop and the picker the same code path rather
+       * than two sources of truth the form has to reconcile.
+       */
+      for (const field of options.fields) {
+        if (field.type !== 'file') continue;
+        const zone = root.querySelector<HTMLElement>(
+          `[data-drop="${CSS.escape(field.name)}"]`
+        );
+        const input = root.querySelector<HTMLInputElement>(
+          `input[data-field="${CSS.escape(field.name)}"]`
+        );
+        const slot = root.querySelector<HTMLElement>(
+          `[data-preview="${CSS.escape(field.name)}"]`
+        );
+        if (!zone || !input || !slot) continue;
+
+        const label = zone.querySelector<HTMLElement>('[data-drop-label]')!;
+        const announce = (): void => {
+          const file = input.files?.[0] ?? null;
+          label.textContent = file
+            ? file.name
+            : 'Drop a file here, or click to choose one';
+          slot.replaceChildren();
+          field.onFile?.(file, slot);
+        };
+
+        input.addEventListener('change', announce);
+        zone.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          zone.classList.add('border-primary');
+        });
+        zone.addEventListener('dragleave', () => zone.classList.remove('border-primary'));
+        zone.addEventListener('drop', (e) => {
+          e.preventDefault();
+          zone.classList.remove('border-primary');
+          const dropped = e.dataTransfer?.files?.[0];
+          if (!dropped) return;
+          const transfer = new DataTransfer();
+          transfer.items.add(dropped);
+          input.files = transfer.files;
+          announce();
+          syncButtons();
+        });
+      }
+
       const clearErrors = (): void => {
         banner.classList.add('hidden');
         banner.textContent = '';
@@ -232,6 +372,7 @@ export async function showEntityForm<T>(options: EntityFormOptions<T>): Promise<
         const dirty = isDirty();
         saveBtn.disabled = !dirty && !options.allowPristine;
         revertBtn.disabled = !dirty;
+        syncVisibility();
       };
 
       /**
@@ -257,7 +398,7 @@ export async function showEntityForm<T>(options: EntityFormOptions<T>): Promise<
         }
 
         try {
-          result = await options.submit(values);
+          result = await options.submit(values, readFiles(root, options.fields));
           return false;
         } catch (err) {
           // The page is already reloading; there is nothing useful to show.
@@ -283,6 +424,12 @@ export async function showEntityForm<T>(options: EntityFormOptions<T>): Promise<
           if (!el) continue;
           if (el instanceof HTMLInputElement && el.type === 'checkbox') {
             el.checked = initial[field.name] === 'true';
+          } else if (el instanceof HTMLInputElement && el.type === 'file') {
+            // A file input's value can only be cleared, never restored, so
+            // Revert on one means "un-choose it" — which is what its initial
+            // state was in every form that has one.
+            el.value = '';
+            el.dispatchEvent(new Event('change'));
           } else {
             el.value = initial[field.name];
           }

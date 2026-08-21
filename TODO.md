@@ -1,3 +1,6 @@
+- Is there a way to handle the hell-gate trackers better? `Tracker columbia-county:SHOPPING_WK_758:20260821 is not in the loaded feed.`
+
+In NEXT_PLAN:
 - Lets fix feed import. Lets allow uploading a feed (lets use garage/s3 for this probably) and offer static feed hosting. This will improve the flow for manage.rt.gtfs.zone.
 
 - Lets change People -> Managers, call it add manager, move transfer ownership button to here

@@ -41,10 +41,42 @@ export interface LoadStatus {
   next_retry_at: string | null;
 }
 
+/** Mirrors railroad-club's `FeedSourceKind`. */
+export type FeedSourceKind = 'url' | 'hosted';
+
+/**
+ * One schedule zip somebody uploaded, as the feed page's history lists it.
+ *
+ * No `object_key`: where the bytes sit in the bucket is between cafe-car and
+ * schedule-foamer, and a client that knew it would be one refactor away from
+ * addressing the store directly. An upload is named by its id and reached
+ * through the feed's public URL.
+ */
+export interface GtfsUpload {
+  id: string;
+  sha256: string;
+  size_bytes: number;
+  original_filename: string;
+  uploaded_by_user_id: number | null;
+  uploaded_at: string;
+  /** Whether this is the one the feed is serving. Derived server-side. */
+  is_current: boolean;
+}
+
 export interface Feed {
   id: number;
   feed_name: string;
-  static_feed_url: string;
+  source_kind: FeedSourceKind;
+  /** Null on a hosted feed, which has no upstream URL to show. */
+  static_feed_url: string | null;
+  /**
+   * Where a consumer downloads the schedule: this feed's own permanent URL
+   * when hosted, the upstream one when linked. Null for neither, which the
+   * server treats as a feed with no schedule at all.
+   */
+  hosted_url: string | null;
+  /** The upload being served, or null on a linked feed. */
+  current_upload: GtfsUpload | null;
   owner_id: number;
   owner_name: string | null;
   /** Whether the caller *is* the owner. An admin on someone else's feed: false. */
@@ -58,9 +90,14 @@ export interface Feed {
   load: LoadStatus | null;
 }
 
+/**
+ * A new feed. A linked one needs its URL; a hosted one is created empty and
+ * gets its zip from the upload that follows, so sending a URL with it is a 422.
+ */
 export interface FeedCreate {
   feed_name: string;
-  static_feed_url: string;
+  source_kind: FeedSourceKind;
+  static_feed_url?: string | null;
 }
 
 export interface Tracker {
@@ -181,7 +218,13 @@ export interface Assignment {
 /** A feed edit. An absent field is an unchanged one, which is what PATCH means. */
 export interface FeedUpdate {
   feed_name?: string;
-  static_feed_url?: string;
+  /**
+   * Moves one way: a hosted feed goes back to a URL by naming one. The other
+   * direction is an upload, or activating one the feed already has, because
+   * hosting means serving specific bytes and a PATCH carries none.
+   */
+  source_kind?: FeedSourceKind;
+  static_feed_url?: string | null;
 }
 
 export interface TrackerCreate {

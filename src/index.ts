@@ -205,7 +205,7 @@ reloadBtn.addEventListener('click', async () => {
     // only once schedule-foamer picks the task up; re-reading the row keeps the
     // gap from looking like nothing happened.
     await appState.refreshFeed();
-    void session.loadStatic(feed.static_feed_url, feed.feed_name);
+    appState.reloadStatic();
   } catch (err) {
     if (!(err instanceof SessionExpiredError)) {
       notify.error(

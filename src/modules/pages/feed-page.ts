@@ -13,18 +13,27 @@
  * an older schedule than the one the map is drawing — and a page that merged
  * them would hide exactly that.
  *
- * The three actions are not equally available. Editing is open to any member,
- * matching the API; transferring and deleting are what `can_manage` gates, and
- * a member who cannot do them is not shown a button that would 403.
+ * The actions are not equally available. Editing the feed and replacing its
+ * schedule are open to any member, matching the API; transferring and deleting
+ * are what `can_manage` gates, and a member who cannot do them is not shown a
+ * button that would 403.
  */
 
 import { CONFIG } from '../../config';
-import type { Feed } from '../../types/api';
+import type { Feed, GtfsUpload } from '../../types/api';
 import type { MapDataIssues } from '../layer-manager';
 import type { RenderContext } from '../render-utils';
 import { escHtml, prop, propList, section } from '../render-utils';
-import { actionButton, isoWithAge, loadStatusBadge, trackerLiveness } from '../managed-render';
+import {
+  actionButton,
+  isoWithAge,
+  loadStatusBadge,
+  personLabel,
+  trackerLiveness,
+} from '../managed-render';
 import { resolveRealtimeUrl } from '../feed-url-resolve';
+import { isHosted, publicScheduleUrl, sourceLabel } from '../feed-source';
+import { formatBytes } from '../feed-download';
 import { renderIssueCard } from '../../utils/issue-card';
 
 /**
@@ -32,8 +41,8 @@ import { renderIssueCard } from '../../utils/issue-card';
  *
  * `resolve` is for the realtime rows alone: those are stored as bare paths so a
  * link works in whichever environment opens it, and only they resolve against
- * `RT_BASE`. A static feed URL is whatever its author typed and is shown as
- * typed.
+ * `RT_BASE`. A schedule URL is already absolute — whatever its author typed,
+ * or the one this app publishes — and is shown as it stands.
  */
 function urlRow(label: string, url: string, resolve = false): string {
   const href = resolve ? resolveRealtimeUrl(url) : url;
@@ -111,8 +120,8 @@ function renderContents(ctx: RenderContext): string {
       prop('Trips', String(feed.trips.size)),
       prop('Shapes', String(feed.shapes.size)),
     ])}
-    <p class="text-xs opacity-50">Parsed from <span class="font-mono">static_feed_url</span> by this
-    browser, not by the server.</p>`
+    <p class="text-xs opacity-50">Parsed from the feed's schedule zip by this browser, not by the
+    server.</p>`
   );
 }
 
@@ -218,6 +227,109 @@ function renderManaged(ctx: RenderContext): string {
   );
 }
 
+/** Who uploaded it, if the members list happens to name them. */
+function uploaderLabel(ctx: RenderContext, upload: GtfsUpload): string {
+  const id = upload.uploaded_by_user_id;
+  if (id === null) return 'someone no longer on this feed';
+  const member = ctx.session.people?.members.find((m) => m.user_id === id);
+  return member ? personLabel(member) : `user ${id}`;
+}
+
+/** One upload as a line: what it was, how big, when, and by whom. */
+function uploadLine(ctx: RenderContext, upload: GtfsUpload): string {
+  return `${escHtml(upload.original_filename)} · ${escHtml(
+    formatBytes(upload.size_bytes)
+  )} · ${isoWithAge(upload.uploaded_at)} · ${escHtml(uploaderLabel(ctx, upload))}`;
+}
+
+/**
+ * Where this feed's schedule comes from, and where a consumer gets it.
+ *
+ * The two kinds answer the same two questions differently: a linked feed shows
+ * the URL it is downloaded from, which is also the URL a consumer would use; a
+ * hosted feed shows the URL this app publishes, which is the only one anybody
+ * outside the stack is given for it.
+ */
+function renderSource(ctx: RenderContext, feed: Feed): string {
+  const hosted = isHosted(feed);
+  const published = publicScheduleUrl(feed);
+  const current = feed.current_upload;
+
+  const rows = [prop('Source', escHtml(sourceLabel(feed)))];
+  if (hosted) {
+    rows.push(
+      published
+        ? urlRow('Published at', published)
+        : prop('Published at', '<span class="opacity-40">nothing uploaded yet</span>')
+    );
+    rows.push(
+      current
+        ? prop('Serving', uploadLine(ctx, current))
+        : prop('Serving', '<span class="opacity-40">nothing uploaded yet</span>')
+    );
+  } else {
+    rows.push(urlRow('Downloaded from', feed.static_feed_url ?? '—'));
+  }
+
+  return section(
+    'Schedule source',
+    `${propList(rows)}
+    <div class="flex flex-wrap gap-2 pt-2">
+      ${actionButton(
+        'feed:replace-schedule',
+        '',
+        hosted ? 'Replace schedule' : 'Upload a schedule'
+      )}
+      ${published ? actionButton('feed:copy-schedule-url', '', 'Copy URL') : ''}
+    </div>`
+  );
+}
+
+/**
+ * The uploads this feed has kept, newest first, with the way back to any of
+ * them.
+ *
+ * Rendered for a feed that has any, not only for a hosted one: a feed switched
+ * back to a URL still has its history, and that history is the only way to
+ * undo the switch.
+ */
+function renderHistory(ctx: RenderContext, feed: Feed): string {
+  const uploads = ctx.session.uploads;
+  if (uploads === null) {
+    return isHosted(feed)
+      ? section('Upload history', '<p class="text-xs opacity-60">Loading…</p>')
+      : '';
+  }
+  if (uploads.length === 0) return '';
+
+  const shown = uploads.slice(0, CONFIG.UPLOAD_HISTORY_MAX);
+  const rows = shown
+    .map(
+      (upload) => `<li class="flex items-start gap-2 py-1">
+        <span class="text-xs flex-1 break-all">${uploadLine(ctx, upload)}</span>
+        ${
+          upload.is_current
+            ? '<span class="badge badge-xs badge-success">serving</span>'
+            : `<span class="flex gap-1">
+                 ${actionButton('upload:activate', upload.id, 'Serve')}
+                 ${actionButton('upload:delete', upload.id, 'Delete', 'btn-ghost btn-error')}
+               </span>`
+        }
+      </li>`
+    )
+    .join('');
+
+  return section(
+    'Upload history',
+    `<ul class="divide-y divide-base-300">${rows}</ul>
+     ${
+       uploads.length > shown.length
+         ? `<p class="text-xs opacity-50">${uploads.length - shown.length} older not shown.</p>`
+         : ''
+     }`
+  );
+}
+
 /**
  * The sibling apps, opened on this feed.
  *
@@ -227,13 +339,17 @@ function renderManaged(ctx: RenderContext): string {
  * zip through its `load` command.
  */
 function renderOpenIn(feed: Feed): string {
+  // The published URL rather than the upstream one, so a hosted feed opens in
+  // both apps at all: they run on somebody else's machine and have no way to
+  // reach an object this app is holding.
+  const schedule = publicScheduleUrl(feed) ?? '';
   const viz = new URLSearchParams({
-    static: feed.static_feed_url,
+    static: schedule,
     rt_vp: resolveRealtimeUrl(feed.vehicle_positions_url),
     rt_tu: resolveRealtimeUrl(feed.trip_updates_url),
     rt_al: resolveRealtimeUrl(feed.service_alerts_url),
   });
-  const editor = new URLSearchParams({ load: feed.static_feed_url });
+  const editor = new URLSearchParams({ load: schedule });
 
   return section(
     'Open in',
@@ -280,10 +396,10 @@ export function renderFeedPage(ctx: RenderContext, issues: MapDataIssues): strin
 
       ${renderLoad(feed)}
 
-      ${section(
-        'Properties',
-        propList([prop('Owner', escHtml(owner)), urlRow('Static feed', feed.static_feed_url)])
-      )}
+      ${section('Properties', propList([prop('Owner', escHtml(owner))]))}
+
+      ${renderSource(ctx, feed)}
+      ${renderHistory(ctx, feed)}
 
       ${section(
         'Published realtime',

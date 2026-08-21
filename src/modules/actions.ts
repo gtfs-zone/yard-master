@@ -23,6 +23,8 @@ import type {
   Alert,
   AlertWrite,
   Feed,
+  FeedSourceKind,
+  GtfsUpload,
   InformedEntityWrite,
   RuleWrite,
   Tracker,
@@ -32,6 +34,7 @@ import type {
 import type { AppState } from './app-state';
 import type { FeedSession } from './feed-session';
 import {
+  activateUpload,
   addMember,
   addRuleException,
   createAlert,
@@ -45,6 +48,7 @@ import {
   deleteRule,
   deleteRuleException,
   deleteTracker,
+  deleteUpload,
   getAlert,
   getProvisioning,
   removeMember,
@@ -57,6 +61,9 @@ import {
   updateTracker,
 } from './api-client';
 import { confirmAction, confirmTyped } from './confirm';
+import { isHosted, publicScheduleUrl, scheduleFetchUrl } from './feed-source';
+import { formatBytes } from './feed-download';
+import { putSchedule, scheduleZipField } from './schedule-upload';
 import type { FormField } from './entity-form';
 import { showEntityForm } from './entity-form';
 import {
@@ -125,6 +132,14 @@ export class Actions {
           return await this.removeFeed();
         case 'feed:transfer':
           return await this.transferFeed();
+        case 'feed:replace-schedule':
+          return await this.replaceSchedule();
+        case 'feed:copy-schedule-url':
+          return await this.copyScheduleUrl();
+        case 'upload:activate':
+          return await this.activateSchedule(arg);
+        case 'upload:delete':
+          return await this.removeUpload(arg);
         case 'tracker:new':
           return await this.newTracker();
         case 'tracker:bulk':
@@ -189,6 +204,13 @@ export class Actions {
     const feed = this.feedOrWarn();
     if (!feed) return;
 
+    // Hosting is only offered to a feed that has a zip to host. The server
+    // says the same thing — a PATCH carries no bytes, so it cannot be what
+    // makes a feed hosted — and offering the option to a feed with no uploads
+    // would be offering a guaranteed 422.
+    const canHost = feed.current_upload !== null;
+    const before = scheduleFetchUrl(feed);
+
     const updated = await showEntityForm<Feed>({
       title: `Edit ${feed.feed_name}`,
       conflictField: 'feed_name',
@@ -201,26 +223,145 @@ export class Actions {
           help: 'Appears in every public GTFS-RT URL this feed serves, so renaming it moves them.',
         },
         {
+          name: 'source_kind',
+          label: 'Schedule source',
+          type: 'select',
+          value: feed.source_kind,
+          options: [
+            { value: 'url', label: 'Link a URL' },
+            ...(canHost ? [{ value: 'hosted', label: 'Serve the uploaded zip' }] : []),
+          ],
+          help: canHost
+            ? 'Switching back to a URL leaves the uploads in place.'
+            : 'Upload a zip to host this feed. Replace schedule does that.',
+        },
+        {
           name: 'static_feed_url',
           label: 'Static feed URL',
           type: 'url',
           value: feed.static_feed_url,
+          visibleWhen: { field: 'source_kind', equals: 'url' },
           help: 'Changing it re-downloads the schedule, here and on the server.',
         },
       ],
-      submit: (values) =>
-        updateFeed(feed.id, {
+      validate: (values): Record<string, string> | null =>
+        values.source_kind === 'url' && !values.static_feed_url.trim()
+          ? { static_feed_url: 'A linked feed needs a static feed URL' }
+          : null,
+      submit: (values) => {
+        const kind = values.source_kind as FeedSourceKind;
+        return updateFeed(feed.id, {
           feed_name: values.feed_name.trim(),
-          static_feed_url: values.static_feed_url.trim(),
-        }),
+          source_kind: kind,
+          // Omitted for a hosted feed rather than sent as null: the server
+          // refuses a hosted feed that names a URL at all.
+          ...(kind === 'url' ? { static_feed_url: values.static_feed_url.trim() } : {}),
+        });
+      },
     });
     if (!updated) return;
 
-    const urlChanged = updated.static_feed_url !== feed.static_feed_url;
     // Owns the hash rewrite: `feed_name` is what a shareable link carries.
     this.app.adoptFeedRow(updated);
     notify.success(`Saved ${updated.feed_name}`);
-    if (urlChanged) void this.session.loadStatic(updated.static_feed_url, updated.feed_name);
+    if (scheduleFetchUrl(updated) !== before) this.app.reloadStatic();
+  }
+
+  /**
+   * Put a new zip on the feed, which is also how a linked feed becomes a
+   * hosted one.
+   *
+   * The upload is what flips `source_kind` and queues the load, so nothing
+   * here patches the feed: it re-reads the row the server wrote.
+   */
+  private async replaceSchedule(): Promise<void> {
+    const feed = this.feedOrWarn();
+    if (!feed) return;
+
+    const uploaded = await showEntityForm<GtfsUpload>({
+      title: isHosted(feed) ? 'Replace schedule' : 'Upload a schedule',
+      intro: isHosted(feed)
+        ? `The new zip becomes what this feed serves, and the one it is serving now stays in the
+           history so you can go back to it.`
+        : `Uploading a zip hosts this feed here: it stops being downloaded from
+           ${feed.static_feed_url ?? 'its URL'} and is served at its own permanent URL instead.`,
+      submitLabel: 'Upload',
+      fields: [scheduleZipField({ autofocus: true })],
+      validate: (values): Record<string, string> | null =>
+        values.file ? null : { file: 'Choose a schedule zip to upload' },
+      submit: (_values, files) => putSchedule(feed.id, files.file!),
+    });
+    if (!uploaded) return;
+
+    notify.success(`Uploaded ${uploaded.original_filename} (${formatBytes(uploaded.size_bytes)})`);
+    await this.app.refreshFeed();
+    await this.app.refreshUploads();
+    // Both halves re-read the new zip: the server has been asked to, and this
+    // browser draws from its own copy.
+    this.app.reloadStatic();
+  }
+
+  /** The public URL of the schedule, for pasting into whatever consumes it. */
+  private async copyScheduleUrl(): Promise<void> {
+    const feed = this.feedOrWarn();
+    if (!feed) return;
+    const url = publicScheduleUrl(feed);
+    if (!url) {
+      notify.warning('This feed has no schedule URL yet.');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      notify.success('Copied the schedule URL');
+    } catch {
+      // Denied permission, or an insecure origin. The URL is on screen already.
+      notify.warning('Could not copy. The URL is on the page, above this.');
+    }
+  }
+
+  /** Roll the feed back to an earlier upload. A pointer move *and* a re-load. */
+  private async activateSchedule(uploadId: string): Promise<void> {
+    const feed = this.feedOrWarn();
+    if (!feed) return;
+    const upload = this.session.uploads?.find((u) => u.id === uploadId);
+    if (!upload) return;
+
+    const confirmed = await confirmAction({
+      title: 'Serve this upload',
+      question: `${upload.original_filename} becomes the schedule this feed serves.`,
+      consequences: [
+        'The server re-reads it, so the published realtime feed matches it within a minute or two',
+        'The upload it is serving now stays in the history',
+      ],
+      confirmLabel: 'Serve it',
+    });
+    if (!confirmed) return;
+
+    await activateUpload(feed.id, upload.id);
+    notify.success(`Now serving ${upload.original_filename}`);
+    await this.app.refreshFeed();
+    await this.app.refreshUploads();
+    this.app.reloadStatic();
+  }
+
+  /** Forget one upload. The server refuses the one being served. */
+  private async removeUpload(uploadId: string): Promise<void> {
+    const feed = this.feedOrWarn();
+    if (!feed) return;
+    const upload = this.session.uploads?.find((u) => u.id === uploadId);
+    if (!upload) return;
+
+    const confirmed = await confirmAction({
+      title: 'Delete this upload',
+      question: `${upload.original_filename} is deleted from storage. It cannot be undone.`,
+      consequences: ['You will not be able to roll back to it'],
+      confirmLabel: 'Delete',
+    });
+    if (!confirmed) return;
+
+    await deleteUpload(feed.id, upload.id);
+    notify.success(`Deleted ${upload.original_filename}`);
+    await this.app.refreshUploads();
   }
 
   private async removeFeed(): Promise<void> {

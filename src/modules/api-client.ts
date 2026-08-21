@@ -32,6 +32,7 @@ import type {
   Feed,
   FeedCreate,
   FeedUpdate,
+  GtfsUpload,
   InformedEntity,
   InformedEntityWrite,
   Me,
@@ -136,10 +137,14 @@ async function request<T>(
   body?: unknown,
   signal?: AbortSignal
 ): Promise<T> {
+  // A schedule upload is the one write that is not JSON. `Content-Type` is
+  // left unset for it on purpose: only the browser can write the multipart
+  // boundary, and a hand-written header would name one the body does not use.
+  const isForm = body instanceof FormData;
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (method !== 'GET') {
     headers[CONFIG.CSRF_HEADER] = '1';
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    if (body !== undefined && !isForm) headers['Content-Type'] = 'application/json';
   }
 
   const response = await fetch(`${CONFIG.API_BASE}${path}`, {
@@ -149,7 +154,7 @@ async function request<T>(
     // stated anyway so a future change of origin fails loudly rather than
     // silently dropping the session.
     credentials: 'same-origin',
-    ...(body !== undefined && { body: JSON.stringify(body) }),
+    ...(body !== undefined && { body: isForm ? body : JSON.stringify(body) }),
     ...(signal && { signal }),
   });
 
@@ -206,6 +211,34 @@ export const listFeeds = (all = false) => api.get<Feed[]>(`/feeds${all ? '?all=1
 export const getFeed = (feedId: number) => api.get<Feed>(`/feeds/${feedId}`);
 
 export const createFeed = (body: FeedCreate) => api.post<Feed>('/feeds', body);
+
+/**
+ * Store a schedule zip, make it the feed's source and queue the load.
+ *
+ * Multipart rather than JSON, which is what `FormData` here selects: the
+ * request still goes through this helper, so it still carries the CSRF header
+ * and still handles an expired session. A rejected zip is a 422 naming `file`,
+ * which is what puts the message under the drop zone.
+ */
+export const uploadSchedule = (feedId: number, file: File) => {
+  const form = new FormData();
+  form.append('file', file);
+  return api.post<GtfsUpload>(`/feeds/${feedId}/uploads`, form);
+};
+
+/** This feed's upload history, newest first. Empty for a linked feed. */
+export const listUploads = (feedId: number) =>
+  api.get<GtfsUpload[]>(`/feeds/${feedId}/uploads`);
+
+/** Roll back to an earlier upload. A pointer move *and* a re-load. */
+export const activateUpload = (feedId: number, uploadId: string) =>
+  api.post<GtfsUpload>(
+    `/feeds/${feedId}/uploads/${encodeURIComponent(uploadId)}/activate`
+  );
+
+/** Forget one upload. Refused with a 409 for the one being served. */
+export const deleteUpload = (feedId: number, uploadId: string) =>
+  api.del<void>(`/feeds/${feedId}/uploads/${encodeURIComponent(uploadId)}`);
 
 /** Queues a re-download. 202 means asked for, not done. */
 export const reloadFeed = (feedId: number) =>
