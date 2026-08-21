@@ -124,6 +124,15 @@ export function monthLabel(date: ServiceDate): string {
   });
 }
 
+/** `Aug 2026`, for a header cell narrow enough to sit over a few weeks. */
+export function monthShortLabel(date: ServiceDate): string {
+  return asUtc(date).toLocaleDateString(undefined, {
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
 /** `Mon 17 August`, for the day agenda's heading. */
 export function dayLabel(date: ServiceDate): string {
   return asUtc(date).toLocaleDateString(undefined, {

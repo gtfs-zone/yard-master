@@ -84,6 +84,26 @@ export const CONFIG = {
   // "+n" count. Three fits the narrowest panel the grid is usable in.
   CALENDAR_DAY_CHIPS: 3,
 
+  // The timeline chart. One fixed-width cell per column, so a row is a set of
+  // equal boxes rather than a measured bar: nothing here needs a layout pass.
+  // Week cells are narrow because a three-year range is ~157 of them; a day
+  // cell has to hold a label, so it is wider.
+  TIMELINE_WEEK_CELL_PX: 20,
+  TIMELINE_DAY_CELL_PX: 40,
+  TIMELINE_ROW_PX: 28,
+
+  // The sticky label column, clamped off the longest row label at roughly one
+  // character per this many pixels plus room for the dot.
+  TIMELINE_LABEL_MIN_PX: 80,
+  TIMELINE_LABEL_MAX_PX: 300,
+  TIMELINE_LABEL_CHAR_PX: 7,
+  TIMELINE_LABEL_PAD_PX: 32,
+
+  // How much of a range the chart will draw before it truncates and says so. A
+  // feed with a stray year-3000 calendar row would otherwise render a hundred
+  // thousand cells and hang the panel.
+  TIMELINE_MAX_DAYS: 1096,
+
   // Realtime poll interval, read by the vendored poller. Per-device, so it is
   // deliberately not in the hash.
   RT_INTERVAL_KEY: 'ym.rt.interval',

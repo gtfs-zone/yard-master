@@ -314,15 +314,43 @@ a colour, shaded spans, per-day ticks and an optional cell renderer.
 `renderTimelineChart(rows, options)` returns a string;
 `attachTimelineListeners(root, onRowClick, onCellClick)` wires it.
 
-- [ ] `timeline-chart.ts` and its types
-- [ ] `CONFIG`: the week cell width, the row height, the range cap
-- [ ] The weekday-dot column and the tick glyphs
-- [ ] Its date arithmetic goes through `service-date.ts`, not a second set of
+- [x] `timeline-chart.ts` and its types
+- [x] `CONFIG`: the week cell width, the row height, the range cap
+- [x] The weekday-dot column and the tick glyphs
+- [x] Its date arithmetic goes through `service-date.ts`, not a second set of
       helpers
 
 **Gotcha.** `service-date.ts` is Monday-first; coloring-book's timeline is
 Sunday-first. Monday-first wins here, to agree with what already ships, and the
 module doc says so. The two must not disagree inside one chart.
+
+The chart draws columns, not weeks: `unit` is `'week'` over a range or `'day'`
+over one week, which is what phase 6 needs and is one branch rather than a
+second module. A column is a `{ start, end }` pair either way, so the shading,
+the ticks, the today marker and the cell renderer are written once; the only
+things that read `unit` are the column step, the cell width and whether a
+second header row of weekday names is emitted.
+
+Shading is `color-mix(in srgb, <color> 22%, transparent)` rather than
+coloring-book's `hexToRgba`, so a row can carry any CSS colour — a route colour
+out of the feed is a hex, but a tracker's status colour is a daisyUI variable.
+
+A removed tick does not widen the derived range. It marks a day the row does
+*not* run, so a service ending in June with a removed date in December would
+otherwise draw six empty months to reach a mark that says "nothing here".
+
+`CONFIG.TIMELINE_MAX_DAYS` is 1096, the reference's three years, but measured
+from the first drawn column rather than in milliseconds, since every date in
+this repo is a string. The truncation line names the last date drawn instead of
+just saying the range was cut.
+
+`monthShortLabel` was added to `service-date.ts` — `monthLabel` is `August
+2026`, which is too wide for a header cell sitting over four week columns.
+`weekdayFlags` is exported from the chart itself: both callers hold
+`monday`..`sunday` on an object (a `calendar.txt` row as `'1'`, a `TrackerRule`
+as a boolean) and the chart wants seven Monday-first booleans.
+
+Nothing renders it yet. Phase 5 is its first caller.
 
 ---
 
