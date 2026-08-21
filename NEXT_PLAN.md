@@ -457,15 +457,37 @@ existing separately.
 
 ## Phase 6: Managers
 
-- [ ] `people-page.ts` -> `managers-page.ts`, the page state renamed with it
-- [ ] "Add manager", and the copy throughout
-- [ ] Transfer ownership moves off the feed page onto this one
-- [ ] Invites keep their own wording — an invite is to a person, not a role
+- [x] `people-page.ts` -> `managers-page.ts`, the page state renamed with it
+- [x] "Add manager", and the copy throughout
+- [x] Transfer ownership moves off the feed page onto this one
+- [x] Invites keep their own wording — an invite is to a person, not a role
 
 **Gotchas.** Transfer is `can_manage`-gated and the merged feed page is not, so
 the gate moves with the button. The API keeps saying `members`; the type name
 stays `Member` so the mirror of `schemas.py` stays honest, and only the label
 changes.
+
+**What the pass turned up.** The rename went further than the page file,
+because "people" was the name of a whole layer and not just a label. The
+aggregate `People` became `Members`, `getPeople` became `getMembers`,
+`session.people` became `session.members` and `refreshPeople` became
+`refreshMembers` — all of which now agree with the `/feeds/{id}/members`
+endpoint they wrap. `Member` and `Invite` are untouched, so the mirror of
+`schemas.py` is still literal.
+
+Transfer did not just move, it landed somewhere better. On the feed page it sat
+between Edit and Delete with nothing to say who the feed could go to; on the
+managers page it is directly above the list its form is built from, which is
+also the list a reader has to consult before pressing it. `renderActions` on the
+feed page is down to Edit and Delete, and its header comment now says where
+Transfer went.
+
+The action id `person:add` became `manager:add`, but `member:remove` and
+`invite:revoke` stayed: those two name API objects rather than the role, and
+renaming them would have made the ids disagree with the endpoints they call.
+
+`urlToPageState` keeps a `case 'people'` falling through to `managers`, next to
+the `case 'feed'` phase 5 left, so neither rename breaks a saved link.
 
 ---
 
