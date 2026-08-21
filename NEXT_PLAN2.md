@@ -229,13 +229,36 @@ A new `src/modules/entity-row.ts`, this repo's own, with coloring-book's
 sublabel, a right-aligned outline badge, `hover:bg-base-200`. Built on
 `entityLink`, so the row is a real anchor and middle-click still works.
 
-- [ ] `entity-row.ts`: the row, and a section header of title plus count badge
-- [ ] Every list re-rendered through it: routes, stops, trackers, alerts, trips
+- [x] `entity-row.ts`: the row, and a section header of title plus count badge
+- [x] Every list re-rendered through it: routes, stops, trackers, alerts, trips
       on the route page, departures and platforms on the stop page, the trip
       page, the tracker page, the managers page, and `renderAlertList`
-- [ ] An explicit empty state per list
+- [x] An explicit empty state per list
 
 **Gotcha.** New file beside `render-utils.ts`, never inside it.
+
+A row has three shapes, not one. The whole row is the anchor where it can be;
+a row carrying buttons links only its label, because an `<a>` may not contain a
+`<button>`; a row naming nothing navigable is plain text. That is why the
+anchor is built in `entity-row.ts` against `ctx.href` plus `data-nav` rather
+than through `entityLink`, which takes a plain label and could not wrap a dot,
+two lines and a badge. `entityLink` is still what the label-only shape uses.
+
+The stop page's departures were a six-column `<table>`, not a list, so
+converting them meant choosing what stops being a column: the scheduled time
+and the platform became the sublabel, and the predicted time and delay became
+the right-hand badge. The zone moved out of two column headers into one line
+under the list.
+
+`cappedNote` moved out of `tree-page.ts` into the new module, since three pages
+now cut a list. `treeSection`'s hand-rolled count became `countBadge`, so the
+disclosure headers and the flat `rowSection` headers count the same way — which
+is what phase 3 needs when the disclosures go.
+
+Not converted, deliberately: the assignments page's own `<li>` markup, which
+phase 6 deletes; the alert page's informed-entity rows, which are a flat list
+of one object's fields rather than references to other objects; and
+`trip-picker.ts`'s result list, which is a picker, not a page's list.
 
 ---
 

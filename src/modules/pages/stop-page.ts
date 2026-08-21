@@ -6,6 +6,10 @@
    - "Vehicles here now" became "Trackers here now", and its renderer with it.
    - Departures link their trip through the new `trip` variant, which
      test-track has no page for.
+   - Every list on the page — departures, trackers here now, platforms and
+     sibling platforms — renders through this repo's `entity-row.ts` instead of
+     its own `<li>` or `<table>` markup, so a stop's lists look like every other
+     list in the app.
  */
 /**
  * The stop page. For a platform (or a plain stop) this is what serves it, what
@@ -26,6 +30,7 @@ import { alertsForStop } from '../alerts';
 import { zoneLabel } from '../feed-time';
 import type { RtIndex } from '../rt-index';
 import type { RenderContext } from '../render-utils';
+import { entityRow, entityRowList, rowSection } from '../entity-row';
 import {
   LOCATION_TYPE_LABELS,
   VEHICLE_STATUS_LABELS,
@@ -53,9 +58,15 @@ function platformLabel(stop: Stop): string {
 
 /** The muted "this came from a child stop" tag every aggregated row carries. */
 function fromChild(ctx: RenderContext, stopId: string): string {
+  return `<span class="opacity-50 text-xs whitespace-nowrap">@ ${escHtml(
+    childName(ctx, stopId),
+  )}</span>`;
+}
+
+/** The same name as plain text, for a row's sublabel. */
+function childName(ctx: RenderContext, stopId: string): string {
   const stop = ctx.session.staticFeed!.stops.get(stopId);
-  const label = stop ? platformLabel(stop) : stopId;
-  return `<span class="opacity-50 text-xs whitespace-nowrap">@ ${escHtml(label)}</span>`;
+  return stop ? platformLabel(stop) : stopId;
 }
 
 function aggregationNote(count: number): string {
@@ -138,40 +149,33 @@ function renderDepartures(
       ? feed.stopTimesByTrip.get(trip.trip_id)?.find(t => t.stop_id === p.stop_id)?.departure_time
       : undefined;
 
-    return `<tr>
-      <td class="whitespace-nowrap">${
-        route
-          ? routeBadge(ctx, route)
-          : `<span class="badge badge-ghost badge-sm">${escHtml(p.update.trip?.routeId ?? '?')}</span>`
-      }</td>
-      <td class="max-w-0 truncate">${entityLink(
-        ctx,
-        { type: 'trip', trip_id: p.trip_id, route_id: trip?.route_id },
-        trip?.headsign || p.trip_id,
-      )}</td>
-      ${isStation ? `<td class="whitespace-nowrap">${fromChild(ctx, p.stop_id)}</td>` : ''}
-      <td class="text-right whitespace-nowrap tabular-nums opacity-60">${escHtml(
-        formatScheduledTime(scheduled, false),
-      )}</td>
-      <td class="text-right whitespace-nowrap tabular-nums">${escHtml(
-        formatEpochTime(p.time, false),
-      )}</td>
-      <td class="text-right whitespace-nowrap">${formatDelay(p.delay)}</td>
-    </tr>`;
+    // Scheduled time, and the platform it leaves from where that is not the
+    // page's own stop. Both are what tells two departures of one route apart.
+    const detail = [
+      `sched ${formatScheduledTime(scheduled, false)}`,
+      isStation ? `@ ${childName(ctx, p.stop_id)}` : '',
+    ].filter(Boolean);
+
+    return entityRow(ctx, {
+      state: { type: 'trip', trip_id: p.trip_id, route_id: trip?.route_id },
+      leadHtml: route
+        ? routeBadge(ctx, route)
+        : `<span class="badge badge-ghost badge-sm">${escHtml(p.update.trip?.routeId ?? '?')}</span>`,
+      label: trip?.headsign || p.trip_id,
+      sublabel: detail.join(' · '),
+      badgeHtml: `<span class="text-xs flex items-center gap-2 whitespace-nowrap">
+        <span class="tabular-nums">${escHtml(formatEpochTime(p.time, false))}</span>
+        ${formatDelay(p.delay)}
+      </span>`,
+    });
   });
 
-  const body = `<table class="table table-xs">
-      <thead><tr>
-        <th>Route</th><th>Headsign</th>${isStation ? '<th>Platform</th>' : ''}
-        <th class="text-right">Sched ${escHtml(zoneLabel())}</th>
-        <th class="text-right">Pred ${escHtml(zoneLabel())}</th>
-        <th class="text-right">Delay</th>
-      </tr></thead>
-      <tbody>${rows.join('')}</tbody>
-    </table>`;
+  const body = `${entityRowList(rows, 'No trip updates reference this stop.')}
+    <p class="text-xs opacity-50">Predicted times are in ${escHtml(zoneLabel())}.</p>`;
 
-  return section(
+  return rowSection(
     'Upcoming departures',
+    upcoming.length,
     isStation ? `${aggregationNote(new Set(serviceIds).size)}${body}` : body,
   );
 }
@@ -187,21 +191,24 @@ function renderTrackersHere(
   const rows: string[] = [];
   for (const id of serviceIds) {
     for (const v of rt.vehiclesAtStop.get(id) ?? []) {
-      rows.push(`<li class="flex justify-between gap-2 items-center">
-        <span class="flex items-center gap-2 min-w-0">
-          ${entityLink(ctx, { type: 'tracker', tracker_id: v.trackerId }, vehicleDisplayName(ctx.session.staticFeed, v))}
-          ${isStation ? fromChild(ctx, id) : ''}
-        </span>
-        <span class="opacity-60 shrink-0">${escHtml(
-          VEHICLE_STATUS_LABELS[v.currentStatus ?? -1] ?? '',
-        )}</span>
-      </li>`);
+      rows.push(
+        entityRow(ctx, {
+          state: { type: 'tracker', tracker_id: v.trackerId },
+          label: vehicleDisplayName(ctx.session.staticFeed, v),
+          sublabel: isStation ? `@ ${childName(ctx, id)}` : undefined,
+          badge: VEHICLE_STATUS_LABELS[v.currentStatus ?? -1] ?? '',
+        }),
+      );
     }
   }
   if (rows.length === 0) return '';
-  return section(
+  return rowSection(
     'Trackers here now',
-    `${isStation ? aggregationNote(new Set(serviceIds).size) : ''}<ul class="space-y-1 text-xs">${rows.join('')}</ul>`,
+    rows.length,
+    `${isStation ? aggregationNote(new Set(serviceIds).size) : ''}${entityRowList(
+      rows,
+      'Nothing is reporting from this stop.',
+    )}`,
   );
 }
 
@@ -239,45 +246,44 @@ function renderPlatforms(ctx: RenderContext, stopId: string): string {
   const others = children.filter(s => s.location_type !== 0);
 
   const platformRow = (s: Stop): string => {
-    const routeIds = [...(feed.routesByStop.get(s.id) ?? [])];
-    const badges = routeIds
+    const badges = [...(feed.routesByStop.get(s.id) ?? [])]
       .map(id => {
         const route = feed.routes.get(id);
         return route ? routeBadge(ctx, route) : '';
       })
       .join('');
-    return `<li class="flex items-center justify-between gap-2 flex-wrap">
-      <span class="flex items-center gap-2 min-w-0">
-        ${entityLink(ctx, { type: 'stop', stop_id: s.id }, platformLabel(s))}
-        <span class="opacity-50 font-mono text-xs">${escHtml(s.id)}</span>
-      </span>
-      <span class="flex gap-1 flex-wrap">${badges}</span>
-    </li>`;
+    return entityRow(ctx, {
+      state: { type: 'stop', stop_id: s.id },
+      label: platformLabel(s),
+      sublabel: s.id,
+      badgeHtml: `<span class="flex gap-1 flex-wrap">${badges}</span>`,
+    });
   };
 
-  const boardableList = boardable.length
-    ? `<ul class="space-y-1 text-xs">${boardable.map(platformRow).join('')}</ul>`
-    : '<p class="text-xs opacity-60">No boardable platforms in this feed.</p>';
+  const boardableList = entityRowList(
+    boardable.map(platformRow),
+    'No boardable platforms in this feed.',
+  );
 
   const otherList = others.length
     ? `<details class="text-xs">
          <summary class="cursor-pointer opacity-60">${others.length} entrance${
            others.length === 1 ? '' : 's'
          } and generic node${others.length === 1 ? '' : 's'}</summary>
-         <ul class="space-y-1 mt-1">${others
-           .map(
-             s => `<li class="flex justify-between gap-2">
-               ${entityLink(ctx, { type: 'stop', stop_id: s.id }, s.name || s.id)}
-               <span class="opacity-50">${escHtml(
-                 LOCATION_TYPE_LABELS[s.location_type] ?? `type ${s.location_type}`,
-               )}</span>
-             </li>`,
-           )
-           .join('')}</ul>
+         ${entityRowList(
+           others.map(s =>
+             entityRow(ctx, {
+               state: { type: 'stop', stop_id: s.id },
+               label: s.name || s.id,
+               badge: LOCATION_TYPE_LABELS[s.location_type] ?? `type ${s.location_type}`,
+             }),
+           ),
+           '',
+         )}
        </details>`
     : '';
 
-  return section('Platforms', `${boardableList}${otherList}`);
+  return rowSection('Platforms', children.length, `${boardableList}${otherList}`);
 }
 
 /** For a platform: the parent's other platforms. Stations use renderPlatforms. */
@@ -290,16 +296,19 @@ function renderSiblingPlatforms(ctx: RenderContext, stop: Stop): string {
     .filter(Boolean);
   if (siblings.length === 0) return '';
 
-  return section(
+  return rowSection(
     'Sibling platforms',
-    `<ul class="space-y-1 text-xs">${siblings
-      .map(
-        s => `<li class="flex justify-between gap-2">
-          ${entityLink(ctx, { type: 'stop', stop_id: s.id }, s.name || s.id)}
-          <span class="opacity-50 font-mono">${escHtml(s.id)}</span>
-        </li>`,
-      )
-      .join('')}</ul>`,
+    siblings.length,
+    entityRowList(
+      siblings.map(s =>
+        entityRow(ctx, {
+          state: { type: 'stop', stop_id: s.id },
+          label: s.name || s.id,
+          sublabel: s.id,
+        }),
+      ),
+      'No sibling platforms.',
+    ),
   );
 }
 

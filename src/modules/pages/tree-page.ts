@@ -37,6 +37,12 @@ import type { MapDataIssues } from '../layer-manager';
 import type { RenderContext } from '../render-utils';
 import { entityLink, escHtml, prop, propList, routeBadge, section } from '../render-utils';
 import {
+  cappedNote,
+  countBadge,
+  entityRow,
+  entityRowList,
+} from '../entity-row';
+import {
   actionButton,
   isoWithAge,
   livenessBadge,
@@ -54,20 +60,12 @@ import { routeSortKey } from '../route-sort';
 function treeSection(key: string, title: string, count: number | string, body: string): string {
   return `
     <details class="rounded-lg border border-base-300" data-detail="tree:${escHtml(key)}">
-      <summary class="cursor-pointer px-3 py-2 text-sm font-semibold flex justify-between gap-2">
+      <summary class="cursor-pointer px-3 py-2 text-sm font-semibold flex items-center gap-2">
         <span>${escHtml(title)}</span>
-        <span class="opacity-50 tabular-nums font-normal">${escHtml(String(count))}</span>
+        ${count === '' ? '' : countBadge(count)}
       </summary>
       <div class="px-3 pb-3">${body}</div>
     </details>`;
-}
-
-/** The "not everything is listed" line, shown only when something was cut. */
-function cappedNote(total: number, shown: number): string {
-  if (total <= shown) return '';
-  return `<p class="text-xs opacity-50 mt-2">${escHtml(
-    `${total - shown} more not listed — use the search box.`
-  )}</p>`;
 }
 
 /**
@@ -220,27 +218,25 @@ function renderHistory(ctx: RenderContext, feed: Feed): string {
   if (uploads.length === 0) return '';
 
   const shown = uploads.slice(0, CONFIG.UPLOAD_HISTORY_MAX);
-  const rows = shown
-    .map(
-      (upload) => `<li class="flex items-start gap-2 py-1">
-        <span class="text-xs flex-1 break-all">${uploadLine(ctx, upload)}</span>
-        ${
-          upload.is_current
-            ? '<span class="badge badge-xs badge-success">serving</span>'
-            : `<span class="flex gap-1">
-                 ${actionButton('upload:activate', upload.id, 'Serve')}
-                 ${actionButton('upload:delete', upload.id, 'Delete', 'btn-ghost btn-error')}
-               </span>`
-        }
-      </li>`
-    )
-    .join('');
+  const rows = shown.map((upload) =>
+    entityRow(ctx, {
+      label: upload.original_filename,
+      sublabel: `${formatBytes(upload.size_bytes)} · ${uploaderLabel(ctx, upload)}`,
+      badgeHtml: upload.is_current
+        ? '<span class="badge badge-xs badge-success">serving</span>'
+        : `<span class="text-xs opacity-60">${isoWithAge(upload.uploaded_at)}</span>`,
+      actionsHtml: upload.is_current
+        ? ''
+        : `${actionButton('upload:activate', upload.id, 'Serve')}
+           ${actionButton('upload:delete', upload.id, 'Delete', 'btn-ghost btn-error')}`,
+    })
+  );
 
   return treeSection(
     'uploads',
     'Upload history',
     uploads.length,
-    `<ul class="divide-y divide-base-300">${rows}</ul>
+    `${entityRowList(rows, 'No uploads yet.')}
      ${
        uploads.length > shown.length
          ? `<p class="text-xs opacity-50">${uploads.length - shown.length} older not shown.</p>`
@@ -317,27 +313,23 @@ function renderRoutes(ctx: RenderContext): string {
   });
 
   const shown = routes.slice(0, CONFIG.TREE_LIST_MAX);
-  const rows = shown
-    .map(
-      (route) => `<li class="flex items-center gap-2 min-w-0">
-        ${routeBadge(ctx, route)}
-        <span class="min-w-0 truncate">${entityLink(
-          ctx,
-          { type: 'route', route_id: route.id },
-          route.long_name || route.short_name || route.id
-        )}</span>
-        <span class="ml-auto opacity-50 tabular-nums shrink-0">${escHtml(
-          String((feed.tripsByRoute.get(route.id) ?? []).length)
-        )}</span>
-      </li>`
-    )
-    .join('');
+  const rows = shown.map((route) => {
+    const trips = (feed.tripsByRoute.get(route.id) ?? []).length;
+    return entityRow(ctx, {
+      state: { type: 'route', route_id: route.id },
+      // The badge already carries the route's colour, so the row's dot would
+      // say the same thing twice.
+      leadHtml: routeBadge(ctx, route),
+      label: route.long_name || route.short_name || route.id,
+      badge: `${trips} trip${trips === 1 ? '' : 's'}`,
+    });
+  });
 
   return treeSection(
     'routes',
     'Routes',
     routes.length,
-    `<ul class="space-y-1 text-xs">${rows}</ul>${cappedNote(routes.length, shown.length)}`
+    `${entityRowList(rows, 'No routes in this feed.')}${cappedNote(routes.length, shown.length)}`
   );
 }
 
@@ -351,31 +343,21 @@ function renderStops(ctx: RenderContext): string {
   places.sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
 
   const shown = places.slice(0, CONFIG.TREE_LIST_MAX);
-  const rows = shown
-    .map((stop) => {
-      const children = feed.descendants(stop.id).length;
-      return `<li class="flex items-center gap-2 min-w-0">
-        <span class="min-w-0 truncate">${entityLink(
-          ctx,
-          { type: 'stop', stop_id: stop.id },
-          stop.name || stop.id
-        )}</span>
-        ${
-          children
-            ? `<span class="ml-auto opacity-50 tabular-nums shrink-0">${escHtml(
-                `${children} platform${children === 1 ? '' : 's'}`
-              )}</span>`
-            : ''
-        }
-      </li>`;
-    })
-    .join('');
+  const rows = shown.map((stop) => {
+    const children = feed.descendants(stop.id).length;
+    return entityRow(ctx, {
+      state: { type: 'stop', stop_id: stop.id },
+      label: stop.name || stop.id,
+      sublabel: stop.name ? stop.id : undefined,
+      ...(children ? { badge: `${children} platform${children === 1 ? '' : 's'}` } : {}),
+    });
+  });
 
   return treeSection(
     'stops',
     'Stops',
     places.length,
-    `<ul class="space-y-1 text-xs">${rows}</ul>${cappedNote(places.length, shown.length)}`
+    `${entityRowList(rows, 'No stops in this feed.')}${cappedNote(places.length, shown.length)}`
   );
 }
 
@@ -458,24 +440,17 @@ function renderTrackers(ctx: RenderContext): string {
     a.nickname.localeCompare(b.nickname)
   );
   const shown = trackers.slice(0, CONFIG.TREE_LIST_MAX);
-  const rows = shown
-    .map((tracker) => {
-      // Every tracker is listed, reporting or not. A tracker with no fix has
-      // no coordinates and so is not on the map at all, which makes this list
-      // the only place it exists — and seeing which ones are idle is how you
-      // decide what to assign.
-      return `<li class="flex items-center gap-2 min-w-0">
-        <span class="min-w-0 truncate">${entityLink(
-          ctx,
-          { type: 'tracker', tracker_id: tracker.id },
-          tracker.nickname
-        )}</span>
-        <span class="ml-auto shrink-0">${livenessBadge(
-          trackerLiveness(ctx.session, tracker.id)
-        )}</span>
-      </li>`;
+  // Every tracker is listed, reporting or not. A tracker with no fix has no
+  // coordinates and so is not on the map at all, which makes this list the only
+  // place it exists — and seeing which ones are idle is how you decide what to
+  // assign.
+  const rows = shown.map((tracker) =>
+    entityRow(ctx, {
+      state: { type: 'tracker', tracker_id: tracker.id },
+      label: tracker.nickname,
+      badgeHtml: livenessBadge(trackerLiveness(ctx.session, tracker.id)),
     })
-    .join('');
+  );
 
   // The create buttons live in the section rather than in the header block:
   // this is the list somebody is looking at when they notice one is missing.
@@ -487,38 +462,27 @@ function renderTrackers(ctx: RenderContext): string {
     'trackers',
     'Trackers',
     trackers.length,
-    (trackers.length
-      ? `<ul class="space-y-1 text-xs">${rows}</ul>${cappedNote(trackers.length, shown.length)}`
-      : '<p class="text-xs opacity-60">No trackers yet.</p>') + create
+    `${entityRowList(rows, 'No trackers yet.')}${cappedNote(trackers.length, shown.length)}${create}`
   );
 }
 
 function renderAlerts(ctx: RenderContext): string {
   const alerts = [...ctx.session.serviceAlerts.values()].sort((a, b) => b.id - a.id);
   const shown = alerts.slice(0, CONFIG.TREE_LIST_MAX);
-  const rows = shown
-    .map(
-      (alert) => `<li class="flex items-center gap-2 min-w-0">
-        <span class="min-w-0 truncate">${entityLink(
-          ctx,
-          { type: 'alert', alert_id: String(alert.id) },
-          alert.header_text || `Alert ${alert.id}`
-        )}</span>
-        <span class="ml-auto opacity-50 tabular-nums shrink-0">${escHtml(
-          `${alert.entity_count} entit${alert.entity_count === 1 ? 'y' : 'ies'}`
-        )}</span>
-      </li>`
-    )
-    .join('');
+  const rows = shown.map((alert) =>
+    entityRow(ctx, {
+      state: { type: 'alert', alert_id: String(alert.id) },
+      label: alert.header_text || `Alert ${alert.id}`,
+      badge: `${alert.entity_count} entit${alert.entity_count === 1 ? 'y' : 'ies'}`,
+    })
+  );
 
   return treeSection(
     'alerts',
     'Service alerts',
     alerts.length,
-    (alerts.length
-      ? `<ul class="space-y-1 text-xs">${rows}</ul>${cappedNote(alerts.length, shown.length)}`
-      : '<p class="text-xs opacity-60">No service alerts.</p>') +
-      `<div class="mt-2">${actionButton('alert:new', '', 'New alert')}</div>`
+    `${entityRowList(rows, 'No service alerts.')}${cappedNote(alerts.length, shown.length)}
+     <div class="mt-2">${actionButton('alert:new', '', 'New alert')}</div>`
   );
 }
 

@@ -43,14 +43,18 @@ has no counterpart to, because test-track edits nothing.
 `src/modules/pages/trip-page.ts`, `src/modules/pages/tree-page.ts`,
 `src/modules/pages/tracker-page.ts`,
 `src/modules/pages/managers-page.ts`, `src/modules/pages/assignments-page.ts`,
-`src/modules/managed-render.ts`, `src/modules/service-date.ts` and
+`src/modules/managed-render.ts`, `src/modules/service-date.ts`,
+`src/modules/entity-row.ts` and
 `src/modules/trip-picker.ts` are in neither tier and deliberately absent from
 the table: they are yard-master's own files with no upstream at all. test-track
 browses route, stop, vehicle and alert, and shows a feed status page when
 nothing is focused; this repo's hierarchy runs Route -> Trips -> Trip, its
 no-focus page is a browse tree, and the managed half of that tree — feeds,
 trackers, assignments, alerts and managers — has no counterpart upstream at all,
-because test-track owns none of those objects.
+because test-track owns none of those objects. `entity-row.ts` is the same
+kind of file for a different reason: coloring-book's
+`utils/entity-references.ts` is its visual model and nothing else, so there is
+no upstream to diff it against and nothing about it is checked.
 
 `src/gtfs-rt-spec/` is not vendored and is not in the table. Its *shape* is
 coloring-book's `src/gtfs-spec/` — the same `types.ts` / `files/*.ts` /
@@ -110,9 +114,9 @@ left alone.
 | `src/modules/route-sequence.ts` | `test-track` | `src/modules/route-sequence.ts` | fa12a57 | verbatim | Merges a route's trips into one ordered stop list per direction, with per-stop trip counts and repeat-visit handling. Born in coloring-book |
 | `src/modules/route-graph.ts` | `test-track` | `src/modules/route-graph.ts` | fa12a57 | verbatim | Assigns the strip's rows to lanes so branches and merges can be drawn. Born in coloring-book |
 | `src/modules/route-strip.ts` | `test-track` | `src/modules/route-strip.ts` | fa12a57 | verbatim | The strip's SVG rail: lane geometry, row paths, dots and the endpoint heuristics. `STRIP_ROW_CLASS` is what `panel-renderer.ts` delegates stop hovering off. Born in coloring-book |
-| `src/modules/pages/alert-page.ts` | `test-track` | `src/modules/pages/alert-page.ts` | fa12a57 | modified | `renderAlertList`, which the route, stop and trip pages all embed, plus both alert pages. See the banner's `@changes`: the page renders the managed `Alert` from the API, and test-track's decoded-entity page is kept underneath it as the fallback for an alert that is only in the live payload |
-| `src/modules/pages/route-page.ts` | `test-track` | `src/modules/pages/route-page.ts` | fa12a57 | modified | The route strip. See the banner's `@changes`: `vehicle` links became `tracker` links, the wording follows, and a Trips section lists the direction's trips |
-| `src/modules/pages/stop-page.ts` | `test-track` | `src/modules/pages/stop-page.ts` | fa12a57 | modified | The stop and station page. See the banner's `@changes`: `vehicle` links became `tracker` links and a departure's headsign links to its trip page |
+| `src/modules/pages/alert-page.ts` | `test-track` | `src/modules/pages/alert-page.ts` | fa12a57 | modified | `renderAlertList`, which the route, stop and trip pages all embed, plus both alert pages. See the banner's `@changes`: the page renders the managed `Alert` from the API, test-track's decoded-entity page is kept underneath it as the fallback for an alert that is only in the live payload, and the embedded list is drawn on `entity-row.ts` |
+| `src/modules/pages/route-page.ts` | `test-track` | `src/modules/pages/route-page.ts` | fa12a57 | modified | The route strip. See the banner's `@changes`: `vehicle` links became `tracker` links, the wording follows, a Trips section lists the direction's trips, and the page's two lists render through `entity-row.ts`. The strip itself is untouched |
+| `src/modules/pages/stop-page.ts` | `test-track` | `src/modules/pages/stop-page.ts` | fa12a57 | modified | The stop and station page. See the banner's `@changes`: `vehicle` links became `tracker` links, a departure's headsign links to its trip page, and every list on the page — departures included, which was a `<table>` — renders through `entity-row.ts` |
 | `src/modules/panel-renderer.ts` | `test-track` | `src/modules/panel-renderer.ts` | fa12a57 | modified | The panel dispatcher, its scroll/`<details>` restore and the shared ticker. See the banner's `@changes`: yard-master's session events (`change`, `vehicles`, `staticloaded`), no status page to hand back to, the nine-variant switch, and a `mapIssues` hook so the feed page can render the warning card |
 | `src/modules/feed-session.ts` | `test-track` | `src/feed-session.ts` | 56f120a | adopted | Not a copy: written here, and deliberately shaped so the vendored modules that read a `FeedSession` compile against it unchanged. test-track's owns a GTFS-RT poller; here the managed objects come from the API and the live half arrives on the SSE channel, so only the `staticFeed` / `vehicles` / `alerts` / `tripUpdates` surface is held in common. Listed so the seam is inventoried rather than invisible |
 | `src/utils/tooltip-position.ts` | `coloring-book` | `src/utils/tooltip-position.ts` | 6ee1372 | verbatim | The portal behind every spec tooltip: delegated document listeners, `position: fixed` off the trigger's rect, clamped to the viewport. A CSS tooltip is clipped by the scrollable modal body these labels live in, which is what this exists to sidestep. Its doc comment names coloring-book's own paths, which is what verbatim means |

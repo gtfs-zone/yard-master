@@ -17,6 +17,7 @@
 import type { Calendar, CalendarDate, Trip } from '../../gtfs-static';
 import type { PageState } from '../../types/page-state';
 import { alertsForTrip } from '../alerts';
+import { entityRow, entityRowList, rowSection } from '../entity-row';
 import { actionButton, describeRecurrence, formatWindow } from '../managed-render';
 import { zoneLabel } from '../feed-time';
 import type { Prediction, RtIndex } from '../rt-index';
@@ -182,19 +183,20 @@ function renderSchedule(ctx: RenderContext, rt: RtIndex, trip: Trip): string {
 function renderTrackers(ctx: RenderContext, rt: RtIndex, trip: Trip): string {
   const vehicles = rt.vehiclesByTrip.get(trip.trip_id) ?? [];
   if (vehicles.length === 0) return '';
-  return section(
+  return rowSection(
     'Reporting this trip',
-    `<ul class="space-y-1 text-xs">${vehicles
-      .map(
-        (v) => `<li>${entityLink(
-          ctx,
+    vehicles.length,
+    entityRowList(
+      vehicles.map((v) =>
+        entityRow(ctx, {
           // The tracker, not the vehicle: `key` is the tracker plus the trip
           // instance, and only `trackerId` addresses a page.
-          { type: 'tracker', tracker_id: v.trackerId },
-          vehicleDisplayName(ctx.session.staticFeed, v)
-        )}</li>`
-      )
-      .join('')}</ul>`
+          state: { type: 'tracker', tracker_id: v.trackerId },
+          label: vehicleDisplayName(ctx.session.staticFeed, v),
+        })
+      ),
+      'Nothing is reporting this trip.'
+    )
   );
 }
 
@@ -213,38 +215,21 @@ function renderAssignments(ctx: RenderContext, trip: Trip): string {
   }
 
   const rules = session.rulesForTrip(trip.trip_id);
-  const rows = rules
-    .map((rule) => {
-      const tracker = session.trackers.get(rule.tracker_id);
-      return `<li class="space-y-0.5 py-1">
-        <div class="flex items-center gap-2 min-w-0">
-          <span class="min-w-0 truncate">${
-            tracker
-              ? entityLink(ctx, { type: 'tracker', tracker_id: tracker.id }, tracker.nickname)
-              : escHtml(rule.tracker_id)
-          }</span>
-          <span class="ml-auto shrink-0 tabular-nums opacity-70">${escHtml(
-            formatWindow(rule.start_time, rule.end_time)
-          )}</span>
-        </div>
-        <div class="flex items-center gap-2 min-w-0">
-          <span class="opacity-50 min-w-0 truncate">${escHtml(describeRecurrence(rule))}</span>
-          <span class="ml-auto shrink-0 flex gap-1">
-            ${actionButton('assign:edit', String(rule.id), 'Edit')}
-            ${actionButton('assign:delete', String(rule.id), 'Delete', 'btn-outline btn-error')}
-          </span>
-        </div>
-      </li>`;
-    })
-    .join('');
+  const rows = rules.map((rule) => {
+    const tracker = session.trackers.get(rule.tracker_id);
+    return entityRow(ctx, {
+      ...(tracker ? { state: { type: 'tracker' as const, tracker_id: tracker.id } } : {}),
+      label: tracker ? tracker.nickname : rule.tracker_id,
+      sublabel: `${describeRecurrence(rule)} · ${formatWindow(rule.start_time, rule.end_time)}`,
+      actionsHtml: `${actionButton('assign:edit', String(rule.id), 'Edit')}
+        ${actionButton('assign:delete', String(rule.id), 'Delete', 'btn-outline btn-error')}`,
+    });
+  });
 
-  return section(
+  return rowSection(
     'Assignments',
-    `${
-      rules.length
-        ? `<ul class="text-xs">${rows}</ul>`
-        : '<p class="text-xs opacity-60">No tracker is assigned to this trip.</p>'
-    }
+    rules.length,
+    `${entityRowList(rows, 'No tracker is assigned to this trip.')}
      <div class="mt-2">${actionButton(
        'assign:new-for-trip',
        trip.trip_id,

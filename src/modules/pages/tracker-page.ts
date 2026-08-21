@@ -21,6 +21,7 @@ import type { Tracker } from '../../types/api';
 import type { PageState } from '../../types/page-state';
 import type { VehiclePosition } from '../../map-controller';
 import type { RenderContext } from '../render-utils';
+import { entityRow, entityRowList, rowSection } from '../entity-row';
 import {
   actionButton,
   describeRecurrence,
@@ -176,36 +177,22 @@ function renderAssignments(ctx: RenderContext, trackerId: string): string {
   }
 
   const rules = [...session.rules.values()].filter((r) => r.tracker_id === trackerId);
-  const rows = rules
-    .map((rule) => {
-      const trip = session.staticFeed?.trips.get(rule.trip_id);
-      return `<li class="space-y-0.5 py-1">
-        <div class="flex items-center gap-2 min-w-0">
-          <span class="min-w-0 truncate">${
-            trip
-              ? entityLink(
-                  ctx,
-                  { type: 'trip', trip_id: rule.trip_id, route_id: trip.route_id },
-                  trip.raw.trip_short_name?.trim() || trip.headsign || rule.trip_id
-                )
-              : `<span class="font-mono opacity-70">${escHtml(rule.trip_id)}</span>`
-          }</span>
-          <span class="ml-auto shrink-0 tabular-nums opacity-70">${escHtml(
-            formatWindow(rule.start_time, rule.end_time)
-          )}</span>
-        </div>
-        <p class="opacity-50">${escHtml(describeRecurrence(rule))}</p>
-      </li>`;
-    })
-    .join('');
+  const rows = rules.map((rule) => {
+    const trip = session.staticFeed?.trips.get(rule.trip_id);
+    return entityRow(ctx, {
+      // A trip the loaded schedule has lost has no page, so the row is its
+      // bare id rather than a link that would go nowhere.
+      ...(trip ? { state: { type: 'trip' as const, trip_id: rule.trip_id, route_id: trip.route_id } } : {}),
+      label: trip ? trip.raw.trip_short_name?.trim() || trip.headsign || rule.trip_id : rule.trip_id,
+      sublabel: describeRecurrence(rule),
+      badge: formatWindow(rule.start_time, rule.end_time),
+    });
+  });
 
-  return section(
+  return rowSection(
     'Assignments',
-    `${
-      rules.length
-        ? `<ul class="text-xs">${rows}</ul>`
-        : '<p class="text-xs opacity-60">This tracker is not assigned to anything.</p>'
-    }
+    rules.length,
+    `${entityRowList(rows, 'This tracker is not assigned to anything.')}
      <div class="mt-2 text-xs">${entityLink(
        ctx,
        { type: 'assignments' },

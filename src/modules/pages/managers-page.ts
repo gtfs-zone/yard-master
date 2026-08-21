@@ -23,38 +23,40 @@
 
 import type { Invite, Member } from '../../types/api';
 import type { RenderContext } from '../render-utils';
-import { escHtml, section } from '../render-utils';
+import { entityRow, entityRowList, rowSection } from '../entity-row';
 import { actionButton, formatIsoDate, personLabel } from '../managed-render';
 
-function managerRow(member: Member, isYou: boolean, canManage: boolean): string {
-  const secondary = member.display_name ? member.email : null;
-  return `<li class="flex items-start gap-2 text-xs">
-    <div class="min-w-0 flex-1">
-      <span class="font-medium">${escHtml(personLabel(member))}</span>
-      ${isYou ? '<span class="opacity-50"> (you)</span>' : ''}
-      ${secondary ? `<div class="opacity-60 break-all">${escHtml(secondary)}</div>` : ''}
-    </div>
-    ${
-      member.is_owner
-        ? '<span class="badge badge-primary badge-xs shrink-0">owner</span>'
-        : `<span class="opacity-50 shrink-0">added ${escHtml(formatIsoDate(member.created_at))}</span>`
-    }
-    ${
-      // The owner is not a membership row at all: they leave through a
-      // transfer, which is the button above this list.
+function managerRow(
+  ctx: RenderContext,
+  member: Member,
+  isYou: boolean,
+  canManage: boolean
+): string {
+  return entityRow(ctx, {
+    label: `${personLabel(member)}${isYou ? ' (you)' : ''}`,
+    // Only when the label is a name: repeating the address under itself says
+    // nothing.
+    sublabel: member.display_name ? member.email ?? undefined : undefined,
+    badgeHtml: member.is_owner
+      ? '<span class="badge badge-primary badge-xs">owner</span>'
+      : `<span class="text-xs opacity-50">added ${formatIsoDate(member.created_at)}</span>`,
+    // The owner is not a membership row at all: they leave through a transfer,
+    // which is the button above this list.
+    actionsHtml:
       canManage && !member.is_owner
         ? actionButton('member:remove', String(member.user_id), 'Remove', 'btn-ghost')
-        : ''
-    }
-  </li>`;
+        : '',
+  });
 }
 
-function inviteRow(invite: Invite, canManage: boolean): string {
-  return `<li class="flex items-start gap-2 text-xs">
-    <span class="min-w-0 flex-1 break-all">${escHtml(invite.email)}</span>
-    <span class="opacity-50 shrink-0">invited ${escHtml(formatIsoDate(invite.created_at))}</span>
-    ${canManage ? actionButton('invite:revoke', String(invite.id), 'Revoke', 'btn-ghost') : ''}
-  </li>`;
+function inviteRow(ctx: RenderContext, invite: Invite, canManage: boolean): string {
+  return entityRow(ctx, {
+    label: invite.email,
+    badgeHtml: `<span class="text-xs opacity-50">invited ${formatIsoDate(invite.created_at)}</span>`,
+    actionsHtml: canManage
+      ? actionButton('invite:revoke', String(invite.id), 'Revoke', 'btn-ghost')
+      : '',
+  });
 }
 
 export function renderManagersPage(ctx: RenderContext, meUserId: number | null): string {
@@ -83,20 +85,24 @@ export function renderManagersPage(ctx: RenderContext, meUserId: number | null):
           : ''
       }
 
-      ${section(
-        `Managers (${managers.length})`,
-        `<ul class="space-y-2">${managers
-          .map((m) => managerRow(m, m.user_id === meUserId, canManage))
-          .join('')}</ul>`
+      ${rowSection(
+        'Managers',
+        managers.length,
+        entityRowList(
+          managers.map((m) => managerRow(ctx, m, m.user_id === meUserId, canManage)),
+          'Nobody manages this feed.'
+        )
       )}
 
       ${
         members.invites.length
-          ? section(
-              `Pending invites (${members.invites.length})`,
-              `<ul class="space-y-2">${members.invites
-                .map((i) => inviteRow(i, canManage))
-                .join('')}</ul>
+          ? rowSection(
+              'Pending invites',
+              members.invites.length,
+              `${entityRowList(
+                members.invites.map((i) => inviteRow(ctx, i, canManage)),
+                'No pending invites.'
+              )}
                <p class="text-xs opacity-50">An invited address becomes a manager the first time
                somebody signs in with it.</p>`
             )

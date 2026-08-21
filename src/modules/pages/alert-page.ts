@@ -11,9 +11,10 @@
      columns are flat where a GTFS-RT `EntitySelector` nests the trip half. It
      carries a Remove button; the decoded-entity page below has none, because
      nothing there is a row this app can write.
-   - Everything the route, stop and trip pages embed — `renderAlertList`,
-     `statusBadge`, the translation and active-period renderers — is
-     test-track's, unchanged. */
+   - `renderAlertList`, which the route, stop and trip pages embed, renders
+     through this repo's `entity-row.ts` so an alert row looks like every other
+     row in the app. `statusBadge`, the translation and active-period renderers
+     are test-track's, unchanged. */
 /**
  * The alert page, plus the compact alert list every other page embeds.
  *
@@ -47,6 +48,7 @@ import {
   translations,
 } from '../alerts';
 import type { RenderContext } from '../render-utils';
+import { entityRow, entityRowList, rowSection } from '../entity-row';
 import { actionButton, formatIso } from '../managed-render';
 import {
   entityLink,
@@ -78,24 +80,20 @@ export function renderAlertList(
   title: string,
 ): string {
   if (records.length === 0) return '';
-  return section(
+  return rowSection(
     title,
-    `<ul class="space-y-1">${records
-      .map(record => {
-        const header = preferredText(record.alert.headerText) || `Alert ${record.id}`;
-        return `<li class="flex items-start gap-2">
-          ${statusBadge(record)}
-          <span class="text-xs flex-1 min-w-0">${entityLink(
-            ctx,
-            { type: 'alert', alert_id: record.id },
-            header,
-          )}</span>
-          <span class="text-xs opacity-50 shrink-0">${escHtml(
-            ALERT_LEVEL_LABELS[alertLevel(record)],
-          )}</span>
-        </li>`;
-      })
-      .join('')}</ul>`,
+    records.length,
+    entityRowList(
+      records.map(record =>
+        entityRow(ctx, {
+          state: { type: 'alert', alert_id: record.id },
+          leadHtml: statusBadge(record),
+          label: preferredText(record.alert.headerText) || `Alert ${record.id}`,
+          badge: ALERT_LEVEL_LABELS[alertLevel(record)],
+        }),
+      ),
+      '',
+    ),
   );
 }
 

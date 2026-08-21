@@ -8,6 +8,9 @@
      page, which test-track does not have.
    - User-facing "vehicle" wording became "tracker". The internal names keep
      saying vehicle: these really are `VehiclePosition`s on the vehicle layer.
+   - The Trips and Unplaced trackers lists render through this repo's
+     `entity-row.ts`, the one row shape every list in the app uses. The strip
+     itself is untouched: a vehicle chip sits in a rail row, not in a list.
  */
 /**
  * The route page: a vertical transit-map strip with live vehicles sitting in
@@ -47,6 +50,7 @@ import {
 } from '../route-strip';
 import type { RowDot } from '../route-strip';
 import type { RenderContext } from '../render-utils';
+import { entityRow, entityRowList, rowSection } from '../entity-row';
 import {
   OCCUPANCY_LABELS,
   ROUTE_TYPE_LABELS,
@@ -385,17 +389,20 @@ function renderCoverage(sequence: RouteSequence): string {
 
 function renderUnplaced(ctx: RenderContext, unplaced: Unplaced[]): string {
   if (unplaced.length === 0) return '';
-  return section(
+  return rowSection(
     'Unplaced trackers',
+    unplaced.length,
     `<p class="text-xs opacity-60">On this route but not positionable on the strip.</p>
-     <ul class="space-y-1">${unplaced
-       .map(
-         u => `<li class="text-xs flex justify-between gap-2">
-           ${entityLink(ctx, { type: 'tracker', tracker_id: u.vehicle.trackerId }, vehicleDisplayName(ctx.session.staticFeed, u.vehicle))}
-           <span class="opacity-60 text-right">${escHtml(u.reason)}</span>
-         </li>`,
-       )
-       .join('')}</ul>`,
+     ${entityRowList(
+       unplaced.map(u =>
+         entityRow(ctx, {
+           state: { type: 'tracker', tracker_id: u.vehicle.trackerId },
+           label: vehicleDisplayName(ctx.session.staticFeed, u.vehicle),
+           sublabel: u.reason,
+         }),
+       ),
+       '',
+     )}`,
   );
 }
 
@@ -420,20 +427,13 @@ function renderTrips(ctx: RenderContext, routeId: string, directionId: string): 
   const ordered = [...trips].sort((a, b) => departure(a.trip_id).localeCompare(departure(b.trip_id)));
   const shown = ordered.slice(0, CONFIG.ROUTE_TRIP_LIST_MAX);
 
-  const rows = shown
-    .map(
-      trip => `<li class="flex justify-between gap-2 items-baseline">
-        <span class="min-w-0 truncate">${entityLink(
-          ctx,
-          { type: 'trip', trip_id: trip.trip_id, route_id: routeId },
-          trip.raw.trip_short_name?.trim() || trip.headsign || trip.trip_id,
-        )}</span>
-        <span class="opacity-60 tabular-nums shrink-0">${escHtml(
-          formatScheduledTime(departure(trip.trip_id) || undefined, false),
-        )}</span>
-      </li>`,
-    )
-    .join('');
+  const rows = shown.map(trip =>
+    entityRow(ctx, {
+      state: { type: 'trip', trip_id: trip.trip_id, route_id: routeId },
+      label: trip.raw.trip_short_name?.trim() || trip.headsign || trip.trip_id,
+      badge: formatScheduledTime(departure(trip.trip_id) || undefined, false),
+    }),
+  );
 
   const more =
     ordered.length > shown.length
@@ -442,7 +442,11 @@ function renderTrips(ctx: RenderContext, routeId: string, directionId: string): 
         )}</p>`
       : '';
 
-  return section('Trips', `<ul class="space-y-1 text-xs">${rows}</ul>${more}`);
+  return rowSection(
+    'Trips',
+    ordered.length,
+    `${entityRowList(rows, 'No trips in this direction.')}${more}`,
+  );
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
