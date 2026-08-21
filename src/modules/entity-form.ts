@@ -28,9 +28,12 @@
  * `feed_name`). `conflictField` is how a caller says so.
  */
 
+import { CONFIG } from '../config';
 import { ApiError, SessionExpiredError } from './api-client';
 import { showModal } from './modal-utils';
 import { escHtml } from './render-utils';
+import type { SpecRef } from './spec-field';
+import { enumValueDescription, specLabelContent } from './spec-field';
 
 export type FieldType =
   | 'text'
@@ -38,9 +41,23 @@ export type FieldType =
   | 'url'
   | 'number'
   | 'select'
+  | 'combo'
   | 'datetime'
   | 'checkbox'
   | 'file';
+
+/**
+ * One row of a `select` or a `combo`.
+ *
+ * `detail` is the second line a combo row shows — a stop's name beside its id,
+ * a route's long name beside its short one. A `select` ignores it: an
+ * `<option>` is one line by construction.
+ */
+export interface FieldOption {
+  value: string;
+  label: string;
+  detail?: string;
+}
 
 export interface FormField {
   /** The request-body key, and what a 422 names the field by. */
@@ -49,14 +66,41 @@ export interface FormField {
   type?: FieldType;
   /** The value the form opens with. Null and undefined both mean empty. */
   value?: string | number | null;
-  /** For `select`. The empty value is offered as "—" unless one is supplied. */
-  options?: { value: string; label: string }[];
+  /** For `select` and `combo`. A select offers "—" for empty unless one is supplied. */
+  options?: FieldOption[];
+  /**
+   * For `combo`. Shown in the popup when the field has no options at all,
+   * which is what an unloaded schedule looks like: the id is still typeable,
+   * because the server does not check it against the zip either.
+   */
+  comboEmpty?: string;
   placeholder?: string;
   /** A line under the input, for the rule a person cannot guess. */
   help?: string;
   /** Read-only fields still render, because context is half of a form. */
   readonly?: boolean;
   autofocus?: boolean;
+  /**
+   * The GTFS-realtime message field this is, if it is one.
+   *
+   * The label then carries the reference's own description, the field's type
+   * and its presence, in a tooltip. See `spec-field.ts`.
+   */
+  spec?: SpecRef;
+  /**
+   * For `select`. Names the `RTEnumSpec` the options came from, so the row
+   * under the input can show what the chosen value means.
+   */
+  enumName?: string;
+  /**
+   * A button beside the input that opens a dialog of its own and puts what it
+   * returns into the field.
+   *
+   * For the values too numerous for a combo: a feed's trips are picked with
+   * `pickTrip`, which is a fuzzy search in its own modal rather than a list.
+   * Resolving to null leaves the field alone.
+   */
+  pick?: { label: string; run: (current: string) => Promise<string | null> };
   /** For `file`. Passed straight to the input's `accept`. */
   accept?: string;
   /**
@@ -168,6 +212,10 @@ function renderInput(field: FormField): string {
   if (type === 'select') {
     const options = field.options ?? [];
     const hasEmpty = options.some((o) => o.value === '');
+    // The description row is empty for most enums: the reference lists Cause,
+    // Effect and SeverityLevel as bare values with no Comment column. It is
+    // `empty:hidden` rather than conditional so the ones that do carry
+    // comments need nothing else here.
     return `<select ${common} class="select select-bordered select-sm w-full">
       ${hasEmpty ? '' : '<option value="">—</option>'}
       ${options
@@ -178,7 +226,26 @@ function renderInput(field: FormField): string {
             )}</option>`
         )
         .join('')}
-    </select>`;
+    </select>
+    ${
+      field.enumName
+        ? `<span class="label-text-alt opacity-60 pt-1 empty:hidden"
+             data-enum-note="${escHtml(field.name)}"></span>`
+        : ''
+    }`;
+  }
+  if (type === 'combo') {
+    // The popup is a sibling of the input inside the modal's own DOM, not a
+    // portal: the panel underneath re-renders constantly, and a list anchored
+    // outside the modal would be torn out from under whoever is using it.
+    return `<div class="relative" data-combo-wrap="${escHtml(field.name)}">
+      <input ${common} type="text" value="${escHtml(value)}" role="combobox"
+        aria-expanded="false" aria-autocomplete="list" autocomplete="off"
+        class="input input-bordered input-sm w-full" />
+      <ul class="hidden absolute left-0 right-0 top-full z-[60] mt-1 max-h-56 overflow-y-auto
+        rounded-box border border-base-300 bg-base-100 shadow-lg py-1"
+        role="listbox" data-combo="${escHtml(field.name)}"></ul>
+    </div>`;
   }
   if (type === 'file') {
     // A label wrapping a hidden input is the whole drop zone: clicking
@@ -214,16 +281,26 @@ function renderInput(field: FormField): string {
 function renderField(field: FormField): string {
   // A `file` field's drop zone is itself a `<label>`, so this one is a plain
   // block: a label inside a label swallows the inner one's clicks.
-  const tag = field.type === 'file' ? 'div' : 'label';
+  // A `combo` wraps its input in a positioning div, so its label is a block
+  // too: a `<label>` whose control is not its only focusable descendant sends
+  // clicks on the popup to the input instead.
+  const tag = field.type === 'file' || field.type === 'combo' ? 'div' : 'label';
   const when = field.visibleWhen;
+  const input = field.pick
+    ? `<div class="flex gap-2">
+         <div class="flex-1">${renderInput(field)}</div>
+         <button type="button" class="btn btn-sm btn-outline shrink-0"
+           data-pick="${escHtml(field.name)}">${escHtml(field.pick.label)}</button>
+       </div>`
+    : renderInput(field);
   return `
     <${tag} class="form-control"${
       when
         ? ` data-when-field="${escHtml(when.field)}" data-when-equals="${escHtml(when.equals)}"`
         : ''
     }>
-      <span class="label-text text-xs">${escHtml(field.label)}</span>
-      ${renderInput(field)}
+      <span class="label-text text-xs">${specLabelContent(field.label, field.spec)}</span>
+      ${input}
       ${field.help ? `<span class="label-text-alt opacity-50">${escHtml(field.help)}</span>` : ''}
       <span class="label-text-alt text-error hidden" data-error="${escHtml(field.name)}"></span>
     </${tag}>`;
@@ -342,6 +419,179 @@ export async function showEntityForm<T>(options: EntityFormOptions<T>): Promise<
         });
       }
 
+      /**
+       * The id combos.
+       *
+       * Free text is always allowed: the input's own value is the answer, and
+       * the list only ever fills it in. A feed can legitimately name an id the
+       * browser's copy of the zip does not carry — the zip may be stale, or it
+       * may never have loaded at all — and the server does not check the id
+       * against the schedule either.
+       */
+      for (const field of options.fields) {
+        if (field.type !== 'combo') continue;
+        const input = root.querySelector<HTMLInputElement>(
+          `input[data-field="${CSS.escape(field.name)}"]`
+        );
+        const list = root.querySelector<HTMLElement>(
+          `[data-combo="${CSS.escape(field.name)}"]`
+        );
+        if (!input || !list) continue;
+
+        const all = field.options ?? [];
+        let shown: FieldOption[] = [];
+        let active = -1;
+
+        const rowsFor = (query: string): FieldOption[] => {
+          const needle = query.trim().toLowerCase();
+          const out: FieldOption[] = [];
+          for (const option of all) {
+            if (
+              !needle ||
+              option.value.toLowerCase().includes(needle) ||
+              option.label.toLowerCase().includes(needle) ||
+              (option.detail ?? '').toLowerCase().includes(needle)
+            ) {
+              out.push(option);
+              if (out.length === CONFIG.COMBO_RESULT_LIMIT) break;
+            }
+          }
+          return out;
+        };
+
+        const paint = (): void => {
+          list.innerHTML = shown.length
+            ? shown
+                .map(
+                  (option, i) => `<li>
+                    <button type="button" data-combo-value="${escHtml(option.value)}"
+                      class="w-full text-left px-3 py-1.5 text-xs hover:bg-base-200 ${
+                        i === active ? 'bg-base-200' : ''
+                      }">
+                      <span class="block truncate">${escHtml(option.label)}</span>
+                      ${
+                        option.detail
+                          ? `<span class="block truncate opacity-60">${escHtml(
+                              option.detail
+                            )}</span>`
+                          : ''
+                      }
+                    </button>
+                  </li>`
+                )
+                .join('')
+            : `<li class="px-3 py-2 text-xs opacity-60">${escHtml(
+                all.length ? 'Nothing in this feed matches that.' : field.comboEmpty ?? ''
+              )}</li>`;
+        };
+
+        const close = (): void => {
+          list.classList.add('hidden');
+          input.setAttribute('aria-expanded', 'false');
+          active = -1;
+        };
+
+        const open = (): void => {
+          shown = rowsFor(input.value);
+          if (!shown.length && !all.length && !field.comboEmpty) return;
+          active = -1;
+          paint();
+          list.classList.remove('hidden');
+          input.setAttribute('aria-expanded', 'true');
+        };
+
+        const choose = (value: string): void => {
+          input.value = value;
+          close();
+          // `change`, not `input`: setting `.value` in script fires neither, and
+          // the `input` listener above is what opens the list — dispatching one
+          // here would reopen the popup the moment a row closed it. `change`
+          // reaches `syncButtons` all the same.
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        };
+
+        // `click`, not `focus`: the first field of a form is autofocused, and a
+        // list of every stop in the feed unfurling over the fields below it the
+        // moment the dialog opens is noise. Typing or ArrowDown opens it too.
+        input.addEventListener('click', open);
+        input.addEventListener('input', open);
+        input.addEventListener('blur', close);
+        input.addEventListener('keydown', (event) => {
+          const isOpen = !list.classList.contains('hidden');
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            if (!isOpen) {
+              open();
+              return;
+            }
+            // -1 is "nothing chosen", and the wrap runs through it, so
+            // Up from the first row returns to what was typed.
+            const step = event.key === 'ArrowDown' ? 1 : -1;
+            const slots = shown.length + 1;
+            active = ((active + 1 + step + slots) % slots) - 1;
+            paint();
+            list.querySelectorAll('button')[active]?.scrollIntoView({ block: 'nearest' });
+          } else if (event.key === 'Enter' && isOpen && active >= 0) {
+            // Stopped rather than left to bubble: the modal's own Enter
+            // handling must not see the key that picked a row.
+            event.preventDefault();
+            event.stopPropagation();
+            choose(shown[active].value);
+          } else if (event.key === 'Escape' && isOpen) {
+            // Same reason: Escape closes the popup here, not the whole form.
+            event.preventDefault();
+            event.stopPropagation();
+            close();
+          }
+        });
+        // `mousedown` rather than `click`, prevented: a click on a row would
+        // otherwise blur the input and close the list out from under it.
+        list.addEventListener('mousedown', (event) => {
+          const button = (event.target as HTMLElement | null)?.closest<HTMLElement>(
+            '[data-combo-value]'
+          );
+          if (!button) return;
+          event.preventDefault();
+          choose(button.dataset.comboValue!);
+        });
+      }
+
+      /**
+       * The `pick` buttons: a dialog of the caller's own, whose answer lands in
+       * the field. A dismissed dialog leaves what was already typed.
+       */
+      for (const field of options.fields) {
+        if (!field.pick) continue;
+        const button = root.querySelector<HTMLButtonElement>(
+          `[data-pick="${CSS.escape(field.name)}"]`
+        );
+        const input = root.querySelector<HTMLInputElement>(
+          `input[data-field="${CSS.escape(field.name)}"]`
+        );
+        if (!button || !input) continue;
+        button.addEventListener('click', async () => {
+          const picked = await field.pick!.run(input.value.trim());
+          if (picked === null) return;
+          input.value = picked;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+      }
+
+      /** The chosen enum value's meaning, under the select that offers it. */
+      const syncEnumNotes = (): void => {
+        for (const field of options.fields) {
+          if (!field.enumName) continue;
+          const note = root.querySelector<HTMLElement>(
+            `[data-enum-note="${CSS.escape(field.name)}"]`
+          );
+          const el = root.querySelector<HTMLSelectElement>(
+            `select[data-field="${CSS.escape(field.name)}"]`
+          );
+          if (!note || !el) continue;
+          note.textContent = el.value ? enumValueDescription(field.enumName, el.value) : '';
+        }
+      };
+
       const clearErrors = (): void => {
         banner.classList.add('hidden');
         banner.textContent = '';
@@ -376,6 +626,7 @@ export async function showEntityForm<T>(options: EntityFormOptions<T>): Promise<
         saveBtn.disabled = !dirty && !options.allowPristine;
         revertBtn.disabled = !dirty;
         syncVisibility();
+        syncEnumNotes();
       };
 
       /**

@@ -64,8 +64,17 @@ import { confirmAction, confirmTyped } from './confirm';
 import { isHosted, publicScheduleUrl, scheduleFetchUrl } from './feed-source';
 import { formatBytes } from './feed-download';
 import { putSchedule, scheduleZipField } from './schedule-upload';
-import type { FormField } from './entity-form';
+import { rtEnum } from '../gtfs-rt-spec/index';
+import type { FieldOption, FormField } from './entity-form';
 import { showEntityForm } from './entity-form';
+import {
+  agencyOptions,
+  directionOptions,
+  NO_SCHEDULE,
+  routeOptions,
+  routeTypeOptions,
+  stopOptions,
+} from './entity-id-options';
 import {
   ALERT_CAUSES,
   ALERT_EFFECTS,
@@ -84,11 +93,22 @@ import { showModal } from './modal-utils';
 import { notify } from './notification-system';
 import { escHtml } from './render-utils';
 
-/** The empty option plus one per enumeration value, labelled for reading. */
-function enumOptions(values: readonly string[]): { value: string; label: string }[] {
+/**
+ * The empty option plus one per enumeration value, labelled for reading.
+ *
+ * The label comes from the spec's curated `label` where there is one, so
+ * `SIGNIFICANT_DELAYS` reads as `Significant delays` in exactly the wording
+ * `src/gtfs-rt-spec/` records. `enumLabel` is the fallback for a value the
+ * reference has since dropped but a stored alert still carries.
+ */
+function enumOptions(values: readonly string[], enumName: string): FieldOption[] {
+  const spec = rtEnum(enumName);
   return [
     { value: '', label: '—' },
-    ...values.map((v) => ({ value: v, label: enumLabel(v) })),
+    ...values.map((v) => ({
+      value: v,
+      label: spec?.values.find((e) => e.value === v)?.label ?? enumLabel(v),
+    })),
   ];
 }
 
@@ -605,6 +625,7 @@ export class Actions {
       {
         name: 'header_text',
         label: 'Header',
+        spec: { message: 'Alert', field: 'header_text' },
         value: alert?.header_text ?? '',
         autofocus: true,
         help: 'The one line a rider sees. Shown in every consumer of this feed.',
@@ -612,34 +633,52 @@ export class Actions {
       {
         name: 'description_text',
         label: 'Description',
+        spec: { message: 'Alert', field: 'description_text' },
         type: 'textarea',
         value: alert?.description_text ?? '',
       },
-      { name: 'url', label: 'More information URL', type: 'url', value: alert?.url ?? '' },
+      {
+        name: 'url',
+        label: 'More information URL',
+        spec: { message: 'Alert', field: 'url' },
+        type: 'url',
+        value: alert?.url ?? '',
+      },
       {
         name: 'cause',
         label: 'Cause',
+        spec: { message: 'Alert', field: 'cause' },
         type: 'select',
+        enumName: 'Cause',
         value: alert?.cause ?? '',
-        options: enumOptions(ALERT_CAUSES),
+        options: enumOptions(ALERT_CAUSES, 'Cause'),
       },
       {
         name: 'effect',
         label: 'Effect',
+        spec: { message: 'Alert', field: 'effect' },
         type: 'select',
+        enumName: 'Effect',
         value: alert?.effect ?? '',
-        options: enumOptions(ALERT_EFFECTS),
+        options: enumOptions(ALERT_EFFECTS, 'Effect'),
       },
       {
         name: 'severity_level',
         label: 'Severity',
+        spec: { message: 'Alert', field: 'severity_level' },
         type: 'select',
+        enumName: 'SeverityLevel',
         value: alert?.severity_level ?? '',
-        options: enumOptions(ALERT_SEVERITIES),
+        options: enumOptions(ALERT_SEVERITIES, 'SeverityLevel'),
       },
+      // The two halves of the alert's one `active_period`, which is why these
+      // name TimeRange rather than Alert: the API flattens the repeated field
+      // to a single range, and the reference's prose about `start` and `end`
+      // is what a person filling these in needs.
       {
         name: 'active_period_start',
         label: 'Active from',
+        spec: { message: 'TimeRange', field: 'start' },
         type: 'datetime',
         value: toLocalInput(alert?.active_period_start),
         help: 'In your own timezone. Leave both blank to publish it for as long as it exists.',
@@ -647,6 +686,7 @@ export class Actions {
       {
         name: 'active_period_end',
         label: 'Active until',
+        spec: { message: 'TimeRange', field: 'end' },
         type: 'datetime',
         value: toLocalInput(alert?.active_period_end),
       },
@@ -727,6 +767,102 @@ export class Actions {
     }
   }
 
+  /**
+   * The informed-entity form's fields, every one of them a real EntitySelector
+   * or TripDescriptor field.
+   *
+   * The ids are combos over the schedule this browser has parsed rather than
+   * text boxes, because a mistyped `stop_id` is an alert that silently informs
+   * nobody. Free text is still accepted throughout: the zip may be stale or
+   * absent, and the server does not check an id against it either.
+   */
+  private entityFields(): FormField[] {
+    const feed = this.session.staticFeed;
+    const routes = routeOptions(feed);
+    const directions = directionOptions(feed);
+    return [
+      {
+        name: 'agency_id',
+        label: 'Agency id',
+        spec: { message: 'EntitySelector', field: 'agency_id' },
+        type: 'combo',
+        options: agencyOptions(feed),
+        comboEmpty: NO_SCHEDULE,
+        autofocus: true,
+      },
+      {
+        name: 'route_id',
+        label: 'Route id',
+        spec: { message: 'EntitySelector', field: 'route_id' },
+        type: 'combo',
+        options: routes,
+        comboEmpty: NO_SCHEDULE,
+      },
+      {
+        name: 'route_type',
+        label: 'Route type',
+        spec: { message: 'EntitySelector', field: 'route_type' },
+        type: 'combo',
+        options: routeTypeOptions(feed),
+        comboEmpty: NO_SCHEDULE,
+      },
+      {
+        name: 'direction_id',
+        label: 'Direction id',
+        spec: { message: 'EntitySelector', field: 'direction_id' },
+        type: 'combo',
+        options: directions,
+        comboEmpty: NO_SCHEDULE,
+        help: 'Only means something alongside a route id.',
+      },
+      {
+        name: 'stop_id',
+        label: 'Stop id',
+        spec: { message: 'EntitySelector', field: 'stop_id' },
+        type: 'combo',
+        options: stopOptions(feed),
+        comboEmpty: NO_SCHEDULE,
+      },
+      {
+        name: 'trip_id',
+        label: 'Trip id',
+        spec: { message: 'TripDescriptor', field: 'trip_id' },
+        // Not a combo: a feed holds tens of thousands of trips, and telling two
+        // runs of the same route apart needs the route and the departure time
+        // that `pickTrip`'s search already shows.
+        pick: { label: 'Choose', run: (current) => pickTrip(this.session, current || null) },
+      },
+      {
+        name: 'trip_route_id',
+        label: 'Trip route id',
+        spec: { message: 'TripDescriptor', field: 'route_id' },
+        type: 'combo',
+        options: routes,
+        comboEmpty: NO_SCHEDULE,
+      },
+      {
+        name: 'trip_direction_id',
+        label: 'Trip direction id',
+        spec: { message: 'TripDescriptor', field: 'direction_id' },
+        type: 'combo',
+        options: directions,
+        comboEmpty: NO_SCHEDULE,
+      },
+      {
+        name: 'trip_start_time',
+        label: 'Trip start time',
+        spec: { message: 'TripDescriptor', field: 'start_time' },
+        placeholder: 'HH:MM:SS',
+      },
+      {
+        name: 'trip_start_date',
+        label: 'Trip start date',
+        spec: { message: 'TripDescriptor', field: 'start_date' },
+        placeholder: 'YYYYMMDD',
+      },
+    ];
+  }
+
   private async addEntity(alertId: string): Promise<void> {
     const alert = this.session.serviceAlerts.get(alertId);
     if (!alert) return;
@@ -736,23 +872,7 @@ export class Actions {
       intro:
         'Name at least one of agency, route, route type, stop or trip. Nothing here is checked against the schedule: an id can be published before the zip carrying it is loaded.',
       submitLabel: 'Add',
-      fields: [
-        { name: 'agency_id', label: 'Agency id', autofocus: true },
-        { name: 'route_id', label: 'Route id' },
-        { name: 'route_type', label: 'Route type', type: 'number' },
-        {
-          name: 'direction_id',
-          label: 'Direction id',
-          type: 'number',
-          help: 'Only means something alongside a route id.',
-        },
-        { name: 'stop_id', label: 'Stop id' },
-        { name: 'trip_id', label: 'Trip id' },
-        { name: 'trip_route_id', label: 'Trip route id' },
-        { name: 'trip_direction_id', label: 'Trip direction id', type: 'number' },
-        { name: 'trip_start_time', label: 'Trip start time', placeholder: 'HH:MM:SS' },
-        { name: 'trip_start_date', label: 'Trip start date', placeholder: 'YYYYMMDD' },
-      ],
+      fields: this.entityFields(),
       submit: (values) => {
         const body: InformedEntityWrite = {
           agency_id: orNull(values.agency_id),

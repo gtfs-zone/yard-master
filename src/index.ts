@@ -21,6 +21,7 @@ import { buildSearchEntries } from './modules/search-entries';
 import { PanelRenderer } from './modules/panel-renderer';
 import { Actions } from './modules/actions';
 import { isServiceDate } from './modules/service-date';
+import { initFieldTooltipPortal } from './utils/tooltip-position';
 
 // ─── Shell ────────────────────────────────────────────────────────────────────
 const version = document.getElementById('app-version');
@@ -30,6 +31,10 @@ const appContainer = document.querySelector<HTMLElement>('.app-container')!;
 restorePanelWidth(appContainer);
 
 notify.initialize();
+
+// The spec tooltips on every form label. Delegated at the document, so it is
+// registered once here rather than per modal.
+initFieldTooltipPortal();
 
 const themeController = new ThemeController();
 themeController.initialize();

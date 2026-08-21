@@ -33,9 +33,12 @@ those rows resolve against test-track too and the coloring-book origin is
 recorded in the note. Nothing ever flows the other way: a change wanted upstream
 is made upstream and re-vendored.
 
-The exception is `modal-utils.ts`. coloring-book's copy is a superset of
-test-track's older one, and `notification-system.ts` imports `renderCloseIcon`
-from the newer form, so that one row still names coloring-book.
+The exceptions all name coloring-book. `modal-utils.ts` is one: coloring-book's
+copy is a superset of test-track's older one, and `notification-system.ts`
+imports `renderCloseIcon` from the newer form. `tooltip-position.ts` and
+`spec-markup.ts` are the other two, and for the same underlying reason as the
+RT spec below — spec-driven form labels are a coloring-book idea that test-track
+has no counterpart to, because test-track edits nothing.
 
 `src/modules/pages/trip-page.ts`, `src/modules/pages/tree-page.ts`,
 `src/modules/pages/tracker-page.ts`,
@@ -111,3 +114,5 @@ left alone.
 | `src/modules/pages/stop-page.ts` | `test-track` | `src/modules/pages/stop-page.ts` | fa12a57 | modified | The stop and station page. See the banner's `@changes`: `vehicle` links became `tracker` links and a departure's headsign links to its trip page |
 | `src/modules/panel-renderer.ts` | `test-track` | `src/modules/panel-renderer.ts` | fa12a57 | modified | The panel dispatcher, its scroll/`<details>` restore and the shared ticker. See the banner's `@changes`: yard-master's session events (`change`, `vehicles`, `staticloaded`), no status page to hand back to, the nine-variant switch, and a `mapIssues` hook so the feed page can render the warning card |
 | `src/modules/feed-session.ts` | `test-track` | `src/feed-session.ts` | 56f120a | adopted | Not a copy: written here, and deliberately shaped so the vendored modules that read a `FeedSession` compile against it unchanged. test-track's owns a GTFS-RT poller; here the managed objects come from the API and the live half arrives on the SSE channel, so only the `staticFeed` / `vehicles` / `alerts` / `tripUpdates` surface is held in common. Listed so the seam is inventoried rather than invisible |
+| `src/utils/tooltip-position.ts` | `coloring-book` | `src/utils/tooltip-position.ts` | 6ee1372 | verbatim | The portal behind every spec tooltip: delegated document listeners, `position: fixed` off the trigger's rect, clamped to the viewport. A CSS tooltip is clipped by the scrollable modal body these labels live in, which is what this exists to sidestep. Its doc comment names coloring-book's own paths, which is what verbatim means |
+| `src/utils/spec-markup.ts` | `coloring-book` | `src/utils/spec-markup.ts` | 6ee1372 | modified | Renders a verbatim reference description as HTML: `<br>`, backticks, bold, links, bullets and tables. See the banner's `@changes`: image support removed with the three schedule SVGs it resolved against, `escHtml` from this repo's `render-utils`, and the anchor base pointed at the realtime reference |
