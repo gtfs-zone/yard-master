@@ -582,11 +582,11 @@ static feed — a searchable list of what is actually in this feed, with free te
 still allowed, because a feed can legitimately reference an id the browser's
 copy of the zip does not have yet.
 
-- [ ] `modules/spec-field.ts`: the label, tooltip and presence badge
-- [ ] `entity-form.ts`: `FormField` gains a spec reference and a `combo` type
-- [ ] The combo: filter as you type, keyboard selection, free text allowed
-- [ ] `actions.ts`: the alert and entity forms take their fields from the spec
-- [ ] Dropdown sources from `session.staticFeed`, and a sane empty state when
+- [x] `modules/spec-field.ts`: the label, tooltip and presence badge
+- [x] `entity-form.ts`: `FormField` gains a spec reference and a `combo` type
+- [x] The combo: filter as you type, keyboard selection, free text allowed
+- [x] `actions.ts`: the alert and entity forms take their fields from the spec
+- [x] Dropdown sources from `session.staticFeed`, and a sane empty state when
       the zip has not loaded
 
 **Gotchas.** The forms live in a modal over a panel that re-renders constantly;
@@ -595,6 +595,59 @@ underneath the person using it. Tooltip positioning near the viewport edge is
 what coloring-book's `tooltip-position.ts` solves — take that, do not re-derive
 it. `direction_id` and `route_type` are enums with real spec descriptions and
 should get the same treatment as cause and effect.
+
+**What the pass turned up.** `trip_id` did not become a combo. `trip-picker.ts`
+already answers the same question over fifty thousand trips, with the route and
+first departure that are the only things telling two runs of a route apart, so
+`entity-form` grew a generic `pick` affordance instead: a button beside the
+input that runs a dialog of the caller's own and puts the answer in the field.
+Nothing about it is trip-shaped, and it is the shape any future "too many to
+list" id wants.
+
+`direction_id` and `route_type` are the gotcha's one wrong note. They are
+*schedule* enums, and this repo has no schedule spec — the realtime reference
+types them `uint32` and `int32` and lists no values, so there was nothing to
+derive the way cause and effect are derived. They take their values from the
+loaded feed instead: `route_type` offers the distinct types `routes.txt`
+actually uses with a count each, and `direction_id` offers 0 and 1 with the
+busiest headsigns in each direction as examples, labelled `e.g.` because the
+form does not know which route is being named yet. One hand-list survives, in
+`entity-id-options.ts`: the twelve `route_type` *names*. It labels values that
+came from the feed and never supplies one, so a feed using an extended route
+type shows the bare number rather than being told it does not exist.
+
+The tooltips needed a markup renderer rather than escaping. The verbatim
+descriptions carry 73 `<br>`s between them, and the reference's bold runs and
+backticked field names would otherwise read as literal asterisks. coloring-book
+already solves both halves, so `tooltip-position.ts` is vendored verbatim and
+`spec-markup.ts` modified — image support removed with the three schedule SVGs
+it resolved against, and the anchor base pointed at the realtime reference.
+Those are the second and third rows in `VENDORED.md` naming coloring-book
+rather than test-track, for the same underlying reason as the RT spec itself:
+test-track edits nothing, so it has no spec-driven forms to vendor from.
+
+`vendor-check` strips the banner with `/^\s*\/\*[\s\S]*?\*\/\n?/`, which
+consumes exactly one newline after it. A blank line between the banner and the
+file's own doc comment therefore reports DRIFT on a `verbatim` row. The banner
+butts directly against the file, the way `modal-utils.ts` already does.
+
+The enum description row has no consumer in the alert forms, which phase 7
+predicted: `Cause`, `Effect` and `SeverityLevel` are listed in the reference as
+bare values, so their descriptions are empty by construction and the curated
+label is the whole row. It is three lines and `empty:hidden`, and the enums that
+do carry comments render through it unchanged, so it stays. What did change is
+where the labels come from: `enumOptions` now reads the spec's curated `label`,
+with `enumLabel` demoted to the fallback for a stored value the reference has
+since dropped.
+
+Two event details decide whether the combo is usable. Choosing a row dispatches
+`change` rather than `input`, because `input` is what opens the popup and
+dispatching one would reopen the list the instant a selection closed it. And the
+popup opens on `click` rather than `focus`: the first field of a form is
+autofocused, and a list of every stop in the feed unfurling over the fields
+below it the moment the dialog opens is noise. Escape and Enter inside an open
+popup are both stopped from bubbling, or the modal's document-level handler
+closes the whole form on the key that was meant to close a list.
 
 ---
 
