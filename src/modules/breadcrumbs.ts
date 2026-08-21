@@ -5,6 +5,10 @@
    - The variant set is yard-master's. `vehicle` became `tracker` and resolves
      against `session.trackers` (the API list) rather than only against the
      live map, so a tracker that has never reported a fix still has a label.
+   - `routes`, `stops`, `trackers` and `alerts` added: the four list pages, one
+     hop off the feed root. An object page keeps its own parent rather than
+     hanging off its list — a trip under its route reads better in a narrow
+     panel than a four-crumb trail through Routes.
    - `managers` and `assignments` added. They are managed objects with no GTFS
      parent, so each is one hop off the feed root. A calendar day hangs off the
      month, so `assignments` with a date is two.
@@ -128,6 +132,18 @@ export function buildBreadcrumbs(session: FeedSession, state: PageState): Breadc
     case 'managers':
       return [home(session), { label: 'Managers', pageState: state }];
 
+    case 'routes':
+      return [home(session), { label: 'Routes', pageState: state }];
+
+    case 'stops':
+      return [home(session), { label: 'Stops', pageState: state }];
+
+    case 'trackers':
+      return [home(session), { label: 'Trackers', pageState: state }];
+
+    case 'alerts':
+      return [home(session), { label: 'Service alerts', pageState: state }];
+
     case 'assignments':
       return [
         home(session),
@@ -203,6 +219,12 @@ export function validateState(session: FeedSession, state: PageState): boolean {
     case 'home':
     case 'managers':
     case 'assignments':
+    // The list pages name no object, so there is nothing to validate. Each
+    // renders its own "still downloading" or empty state.
+    case 'routes':
+    case 'stops':
+    case 'trackers':
+    case 'alerts':
       return true;
     case 'route':
       return session.staticFeed?.routes.has(state.route_id) ?? false;

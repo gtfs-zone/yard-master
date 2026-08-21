@@ -105,10 +105,10 @@ const appState = new AppState(session, {
   },
   onFocusChange: (state) => {
     panel.show(state, appState.breadcrumbs);
-    // The sheet stays open on `home`, because `home` is the browse tree and it
+    // The sheet stays open on `home`, because `home` is the feed page and it
     // is the only way into an object with no map feature to tap. A closed
     // sheet hides its own drag handle, so closing it here would strand a phone
-    // with no way back to the tree.
+    // with no way back to the feed.
     if (session.feed) bottomSheet.open('half');
     else bottomSheet.close();
     // After the sheet moves, so the camera knows how much of the map is covered.

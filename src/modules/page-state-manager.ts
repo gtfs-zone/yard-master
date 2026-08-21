@@ -9,6 +9,9 @@
    - A tracker appears in the hash as `tracker=<Tracker.id>`. The surrogate is
      not a secret and is unique; `device_key` is the credential and never
      reaches a URL, and nickname is a label that may repeat.
+   - The four list variants (`routes`, `stops`, `trackers`, `alerts`) name no
+     object, so they carry the `type` param and nothing else. `tree` and `feed`
+     are read as aliases of home, for hashes written before this page settled.
    - Added `syncHash()`. `adoptState` is deliberately silent, but a focus
      restored from a link still has to survive the feed params being written
      around it, and this module is the only thing allowed to touch the hash. */
@@ -224,6 +227,10 @@ export class PageStateManager {
         if (pageState.route_id) params.set('route', pageState.route_id);
         break;
       case 'managers':
+      case 'routes':
+      case 'stops':
+      case 'trackers':
+      case 'alerts':
         break;
       case 'alert':
         params.set('alert', pageState.alert_id);
@@ -244,9 +251,20 @@ export class PageStateManager {
     const get = (key: string) => params.get(key) ?? undefined;
 
     switch (params.get('type')) {
-      // A hash written before the feed page was merged into home.
+      // Two hashes written before this page settled: `feed` is from before the
+      // feed page was merged into home, `tree` from when home was a browse
+      // tree rather than the feed itself.
       case 'feed':
+      case 'tree':
         return { type: 'home' };
+      case 'routes':
+        return { type: 'routes' };
+      case 'stops':
+        return { type: 'stops' };
+      case 'trackers':
+        return { type: 'trackers' };
+      case 'alerts':
+        return { type: 'alerts' };
       // `people` is what this page was called before it became Managers.
       case 'people':
       case 'managers':

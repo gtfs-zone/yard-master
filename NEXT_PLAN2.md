@@ -272,15 +272,33 @@ links to what hangs off it. The `<details>` go, and so does the
 Each list becomes a page with its own breadcrumb, which is also what lets it be
 complete rather than capped.
 
-- [ ] `page-state.ts`: `trackers`, `alerts`, `routes`, `stops`. `home` stays
+- [x] `page-state.ts`: `trackers`, `alerts`, `routes`, `stops`. `home` stays
       the feed itself
-- [ ] `panel-renderer.ts` and `breadcrumbs.ts`: the four new cases
-- [ ] `pages/tree-page.ts` becomes `pages/feed-page.ts`, flat
-- [ ] Four list pages on phase 2's row, each carrying the create button that
+- [x] `panel-renderer.ts` and `breadcrumbs.ts`: the four new cases
+- [x] `pages/tree-page.ts` becomes `pages/feed-page.ts`, flat
+- [x] Four list pages on phase 2's row, each carrying the create button that
       used to live in its accordion
-- [ ] `TREE_LIST_MAX` retired from the list pages; keep a cap only where a page
+- [x] `TREE_LIST_MAX` retired from the list pages; keep a cap only where a page
       genuinely cannot render fifty thousand rows, and say so
-- [ ] `urlToPageState` keeps a `tree` alias to home, beside `feed` and `people`
+- [x] `urlToPageState` keeps a `tree` alias to home, beside `feed` and `people`
+
+The four list pages are one file, `pages/list-pages.ts`: they are the same page
+four times, and the only thing that differs is where the rows come from. Only
+Stops kept a cap, as `CONFIG.STOP_LIST_MAX` (1000) — the panel rebuilds every
+row on each realtime poll, so a regional feed's tens of thousands of places is
+the one list that genuinely cannot be rendered whole. `TREE_LIST_MAX` was left
+with a single caller, the assignments page's rule list, and renamed
+`RULE_LIST_MAX` since there is no tree any more.
+
+Object pages keep their own parents rather than hanging off their list page: a
+trip under its route reads better in a narrow panel than a four-crumb trail
+through Routes. Only the list pages themselves are one hop off the feed.
+
+The feed page counts the managers on its link out to them, so `home` now
+prefetches `members` alongside the upload history rather than leaving the badge
+blank until somebody opens the managers page. A count that has not arrived
+renders no badge at all, since a `0` for "not fetched" is the one that gets
+believed.
 
 **Gotcha.** The feed page renders from the API and the list pages render from
 the zip. A routes or stops page opened before the zip has parsed says

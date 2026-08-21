@@ -7,8 +7,11 @@
      from the API, `route`, `stop` and `trip` come from the in-browser GTFS.
      Dropped `vehicle`; kept `alert`, which here is a managed object rather
      than a decoded GTFS-RT entity.
-   - `home` is the feed itself: its properties, its schedule source and the
-     browse tree, all on one page. There is no separate `feed` variant.
+   - `home` is the feed itself: its own properties, flat, plus the links to
+     what hangs off it. There is no separate `feed` variant.
+   - `routes`, `stops`, `trackers` and `alerts` are the four list pages the
+     feed page used to hold as disclosures. Each names no object, so each is
+     told apart by the hash's `type` param alone.
    - `tracker` is keyed by `Tracker.id`, the surrogate. It is not the Traccar
      credential (that is `device_key`, which never leaves the properties panel)
      and it is genuinely unique, which nickname is not.
@@ -30,6 +33,10 @@
  */
 export type PageState =
   | { type: 'home' }
+  | { type: 'routes' }
+  | { type: 'stops' }
+  | { type: 'trackers' }
+  | { type: 'alerts' }
   | { type: 'tracker'; tracker_id: string }
   | { type: 'assignments'; date?: string }
   | { type: 'managers' }
@@ -59,6 +66,10 @@ export function isPageState(value: unknown): value is PageState {
 
   switch (state.type) {
     case 'home':
+    case 'routes':
+    case 'stops':
+    case 'trackers':
+    case 'alerts':
     case 'managers':
       return true;
 

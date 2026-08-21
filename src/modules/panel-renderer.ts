@@ -6,13 +6,14 @@
      and `staticloaded` replace test-track's `vehicles` / `tripUpdates` /
      `alerts`.
    - No `active` flag and no `hide()`. test-track hands the panel back to a
-     status page when nothing is focused; here `home` is the browse tree, so
+     status page when nothing is focused; here `home` is the feed itself, so
      the panel always has something to render.
    - `setBreadcrumbs` added: the trail is rebuilt outside this class and can
      arrive after the page it belongs to, without a scroll reset.
-   - The dispatcher covers yard-master's eight variants: `home` renders the
-     feed and its tree, `trip` is this repo's own page, `vehicle` is gone, and
-     the managed variants render this repo's own pages, the calendar included.
+   - The dispatcher covers yard-master's variants: `home` renders the feed
+     itself, four list pages hang off it, `trip` is this repo's own page,
+     `vehicle` is gone, and the managed variants render this repo's own pages,
+     the calendar included.
    - `meUserId` added to the hooks: the managers page marks the signed-in row,
      and `RenderContext` is a verbatim type that has no business growing a
      field for it.
@@ -46,7 +47,13 @@ import { renderManagersPage } from './pages/managers-page';
 import { renderRoutePage } from './pages/route-page';
 import { renderStopPage } from './pages/stop-page';
 import { renderTrackerPage } from './pages/tracker-page';
-import { renderTreePage } from './pages/tree-page';
+import { renderFeedPage } from './pages/feed-page';
+import {
+  renderAlertsPage,
+  renderRoutesPage,
+  renderStopsPage,
+  renderTrackersPage,
+} from './pages/list-pages';
 import { renderTripPage } from './pages/trip-page';
 
 export interface PanelRendererHooks {
@@ -141,7 +148,7 @@ export class PanelRenderer {
     this.queueRender();
   }
 
-  /** Render `state`. `home` is the browse tree, so there is always a page. */
+  /** Render `state`. `home` is the feed itself, so there is always a page. */
   show(state: PageState, breadcrumbs: BreadcrumbItem[]): void {
     this.clearHoveredStop();
     this.state = state;
@@ -256,7 +263,15 @@ export class PanelRenderer {
     const index = this.rtIndex;
     switch (this.state.type) {
       case 'home':
-        return renderTreePage(ctx, this.hooks.mapIssues());
+        return renderFeedPage(ctx, this.hooks.mapIssues());
+      case 'routes':
+        return renderRoutesPage(ctx);
+      case 'stops':
+        return renderStopsPage(ctx);
+      case 'trackers':
+        return renderTrackersPage(ctx);
+      case 'alerts':
+        return renderAlertsPage(ctx);
       case 'route':
         return renderRoutePage(ctx, index, this.state);
       case 'stop':

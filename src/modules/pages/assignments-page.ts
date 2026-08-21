@@ -241,7 +241,7 @@ function renderOtherRules(
   if (rules.length === 0) return '';
 
   const rows = rules
-    .slice(0, CONFIG.TREE_LIST_MAX)
+    .slice(0, CONFIG.RULE_LIST_MAX)
     .map((rule) => {
       const tracker = ctx.session.trackers.get(rule.tracker_id);
       const removed = exceptionOn(rule, date)?.exception_type === 'removed';

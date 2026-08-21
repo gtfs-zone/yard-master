@@ -413,7 +413,7 @@ export class AppState {
   }
 
   /**
-   * The feed's managed objects: everything the browse tree counts.
+   * The feed's managed objects: everything the feed page counts.
    *
    * All three in parallel and all three eagerly, because the tree shows a count
    * for each and a count that arrives one page visit later is worse than three
@@ -512,15 +512,25 @@ export class AppState {
       // nowhere else: everything above this line keys alerts by string.
       const id = Number(state.alert_id);
       if (Number.isFinite(id)) load = async () => session.setAlertDetail(await getAlert(id));
-    } else if (
-      state.type === 'home' &&
-      session.uploads === null &&
-      session.feed &&
-      isHosted(session.feed)
-    ) {
+    } else if (state.type === 'home' && session.feed) {
       // A linked feed has no history worth a request; a hosted one's is the
       // rollback list, so it is fetched when the page that shows it opens.
-      load = async () => this.refreshUploads();
+      const feed = session.feed;
+      const needsUploads = session.uploads === null && isHosted(feed);
+      // The feed page counts the managers on its link out to them, so the
+      // count is fetched with the page that shows it rather than only by the
+      // page it points at.
+      const needsMembers = !session.members;
+      if (needsUploads || needsMembers) {
+        load = async () => {
+          await Promise.all([
+            needsUploads ? this.refreshUploads() : Promise.resolve(),
+            needsMembers
+              ? getMembers(feed.id).then((m) => session.setMembers(m))
+              : Promise.resolve(),
+          ]);
+        };
+      }
     } else if (state.type === 'managers' && !session.members && session.feed) {
       const feedId = session.feed.id;
       load = async () => session.setMembers(await getMembers(feedId));

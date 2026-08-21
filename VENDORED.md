@@ -40,8 +40,8 @@ imports `renderCloseIcon` from the newer form. `tooltip-position.ts` and
 RT spec below — spec-driven form labels are a coloring-book idea that test-track
 has no counterpart to, because test-track edits nothing.
 
-`src/modules/pages/trip-page.ts`, `src/modules/pages/tree-page.ts`,
-`src/modules/pages/tracker-page.ts`,
+`src/modules/pages/trip-page.ts`, `src/modules/pages/feed-page.ts`,
+`src/modules/pages/list-pages.ts`, `src/modules/pages/tracker-page.ts`,
 `src/modules/pages/managers-page.ts`, `src/modules/pages/assignments-page.ts`,
 `src/modules/managed-render.ts`, `src/modules/service-date.ts`,
 `src/modules/entity-row.ts` and
@@ -49,9 +49,10 @@ has no counterpart to, because test-track edits nothing.
 the table: they are yard-master's own files with no upstream at all. test-track
 browses route, stop, vehicle and alert, and shows a feed status page when
 nothing is focused; this repo's hierarchy runs Route -> Trips -> Trip, its
-no-focus page is a browse tree, and the managed half of that tree — feeds,
-trackers, assignments, alerts and managers — has no counterpart upstream at all,
-because test-track owns none of those objects. `entity-row.ts` is the same
+no-focus page is the feed itself with a list page per kind of object hanging
+off it, and the managed half of that hierarchy — feeds, trackers, assignments,
+alerts and managers — has no counterpart upstream at all, because test-track
+owns none of those objects. `entity-row.ts` is the same
 kind of file for a different reason: coloring-book's
 `utils/entity-references.ts` is its visual model and nothing else, so there is
 no upstream to diff it against and nothing about it is checked.

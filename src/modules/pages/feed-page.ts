@@ -1,15 +1,18 @@
 /**
- * The feed page: everything about the selected feed, and the way into every
- * object hanging off it.
+ * The feed page: everything the API knows about the selected feed, and the way
+ * into every object hanging off it.
  *
  * yard-master's own page. test-track shows a feed status page here; this repo
- * is a manager, so the no-focus page is the feed itself plus a hierarchy. The
- * header block is the feed row the API owns — its identity, where its schedule
- * comes from, what the loader last made of it, and what this reader may do to
- * it. The managed half (trackers, assignments, alerts, managers) comes from the
- * API, and the GTFS half below the divider comes from the in-browser zip. The
- * two are independent: the managed half renders the moment a feed is selected,
- * while the zip is still downloading, or never arrives at all.
+ * is a manager, so the no-focus page is the feed itself. It is the feed row the
+ * API owns — its identity, where its schedule comes from, what the loader last
+ * made of it, and what this reader may do to it — followed by a flat block of
+ * links to the lists that hang off it.
+ *
+ * Nothing is behind a disclosure. This page used to be an accordion whose rows
+ * disagreed with each other: Trackers and Alerts opened in place while
+ * Assignments and Managers navigated. Every list is a page now, so every row
+ * here does the same thing, and a list is complete on its own page rather than
+ * capped inside a section of this one.
  *
  * The two halves of a feed are reported separately on purpose. `load` is what
  * *cafe-car* last made of the zip, which is what the published GTFS-RT feed is
@@ -23,29 +26,18 @@
  * `can_manage` gates, and a member who cannot do it is not shown a button that
  * would 403. Transferring is `can_manage`-gated too, and lives on the managers
  * page next to the list of people it can hand the feed to.
- *
- * Section bodies are `<details>` so the panel renderer's open-detail tracking
- * survives a re-render. Long sections are capped: a large feed has tens of
- * thousands of stops, and paging through them is what the search box is for.
  */
 
 import { CONFIG } from '../../config';
-import type { Stop } from '../../gtfs-static';
 import type { Feed, GtfsUpload } from '../../types/api';
 import type { PageState } from '../../types/page-state';
 import type { MapDataIssues } from '../layer-manager';
 import type { RenderContext } from '../render-utils';
-import { entityLink, escHtml, prop, propList, routeBadge, section } from '../render-utils';
-import {
-  cappedNote,
-  countBadge,
-  entityRow,
-  entityRowList,
-} from '../entity-row';
+import { escHtml, prop, propList, section } from '../render-utils';
+import { entityRow, entityRowList, rowSection } from '../entity-row';
 import {
   actionButton,
   isoWithAge,
-  livenessBadge,
   loadStatusBadge,
   personLabel,
   trackerLiveness,
@@ -54,19 +46,6 @@ import { resolveRealtimeUrl } from '../feed-url-resolve';
 import { isHosted, publicScheduleUrl, sourceLabel } from '../feed-source';
 import { formatBytes } from '../feed-download';
 import { renderIssueCard } from '../../utils/issue-card';
-import { routeSortKey } from '../route-sort';
-
-/** A collapsible section: a header with a count, and a list under it. */
-function treeSection(key: string, title: string, count: number | string, body: string): string {
-  return `
-    <details class="rounded-lg border border-base-300" data-detail="tree:${escHtml(key)}">
-      <summary class="cursor-pointer px-3 py-2 text-sm font-semibold flex items-center gap-2">
-        <span>${escHtml(title)}</span>
-        ${count === '' ? '' : countBadge(count)}
-      </summary>
-      <div class="px-3 pb-3">${body}</div>
-    </details>`;
-}
 
 /**
  * An external link, shown as the URL itself so it can be read and copied.
@@ -212,7 +191,7 @@ function renderHistory(ctx: RenderContext, feed: Feed): string {
   const uploads = ctx.session.uploads;
   if (uploads === null) {
     return isHosted(feed)
-      ? treeSection('uploads', 'Upload history', '', '<p class="text-xs opacity-60">Loading…</p>')
+      ? section('Upload history', '<p class="text-xs opacity-60">Loading…</p>')
       : '';
   }
   if (uploads.length === 0) return '';
@@ -232,8 +211,7 @@ function renderHistory(ctx: RenderContext, feed: Feed): string {
     })
   );
 
-  return treeSection(
-    'uploads',
+  return rowSection(
     'Upload history',
     uploads.length,
     `${entityRowList(rows, 'No uploads yet.')}
@@ -266,10 +244,8 @@ function renderOpenIn(feed: Feed): string {
   });
   const editor = new URLSearchParams({ load: schedule });
 
-  return treeSection(
-    'urls',
+  return section(
     'URLs',
-    '',
     `${propList([
       urlRow('Vehicle positions', feed.vehicle_positions_url, true),
       urlRow('Trip updates', feed.trip_updates_url, true),
@@ -300,76 +276,13 @@ function renderActions(feed: Feed): string {
 
 // ─── The GTFS half ───────────────────────────────────────────────────────────
 
-function renderRoutes(ctx: RenderContext): string {
-  const feed = ctx.session.staticFeed!;
-  const routes = [...feed.routes.values()].sort((a, b) => {
-    // Same key the map paints by, so the panel's order and the map's stacking
-    // agree about which routes are the important ones. Descending: the highest
-    // key paints on top and reads first.
-    const keyA = routeSortKey(a.raw.route_type, (feed.tripsByRoute.get(a.id) ?? []).length);
-    const keyB = routeSortKey(b.raw.route_type, (feed.tripsByRoute.get(b.id) ?? []).length);
-    if (keyA !== keyB) return keyB - keyA;
-    return (a.short_name || a.long_name || a.id).localeCompare(b.short_name || b.long_name || b.id);
-  });
-
-  const shown = routes.slice(0, CONFIG.TREE_LIST_MAX);
-  const rows = shown.map((route) => {
-    const trips = (feed.tripsByRoute.get(route.id) ?? []).length;
-    return entityRow(ctx, {
-      state: { type: 'route', route_id: route.id },
-      // The badge already carries the route's colour, so the row's dot would
-      // say the same thing twice.
-      leadHtml: routeBadge(ctx, route),
-      label: route.long_name || route.short_name || route.id,
-      badge: `${trips} trip${trips === 1 ? '' : 's'}`,
-    });
-  });
-
-  return treeSection(
-    'routes',
-    'Routes',
-    routes.length,
-    `${entityRowList(rows, 'No routes in this feed.')}${cappedNote(routes.length, shown.length)}`
-  );
-}
-
-/**
- * Stops, one row per *place*. A station's platforms hang off its own page, so
- * listing them here would bury the places under their own parts.
- */
-function renderStops(ctx: RenderContext): string {
-  const feed = ctx.session.staticFeed!;
-  const places: Stop[] = [...feed.stops.values()].filter((s) => !s.parent_station);
-  places.sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
-
-  const shown = places.slice(0, CONFIG.TREE_LIST_MAX);
-  const rows = shown.map((stop) => {
-    const children = feed.descendants(stop.id).length;
-    return entityRow(ctx, {
-      state: { type: 'stop', stop_id: stop.id },
-      label: stop.name || stop.id,
-      sublabel: stop.name ? stop.id : undefined,
-      ...(children ? { badge: `${children} platform${children === 1 ? '' : 's'}` } : {}),
-    });
-  });
-
-  return treeSection(
-    'stops',
-    'Stops',
-    places.length,
-    `${entityRowList(rows, 'No stops in this feed.')}${cappedNote(places.length, shown.length)}`
-  );
-}
-
-/** What this browser parsed out of the zip, beyond the lists above. */
+/** What this browser parsed out of the zip. */
 function renderContents(ctx: RenderContext): string {
   const feed = ctx.session.staticFeed;
   if (!feed) return '';
 
-  return treeSection(
-    'contents',
+  return section(
     'In this browser',
-    '',
     `${propList([
       prop('Agencies', String(feed.agencies.length)),
       prop('Routes', String(feed.routes.size)),
@@ -424,65 +337,78 @@ function renderIssues(ctx: RenderContext, issues: MapDataIssues): string {
   ]);
 }
 
-// ─── The managed half ────────────────────────────────────────────────────────
+// ─── The links out ───────────────────────────────────────────────────────────
 
-/** A section that is one link rather than a list: no count, no disclosure. */
-function treeLink(ctx: RenderContext, state: PageState, title: string, note: string): string {
-  return `
-    <div class="rounded-lg border border-base-300 px-3 py-2 text-sm font-semibold flex justify-between gap-2">
-      ${entityLink(ctx, state, title, 'link link-hover')}
-      <span class="opacity-50 font-normal text-xs self-center">${escHtml(note)}</span>
-    </div>`;
+/**
+ * A count, or the reason there is not one yet.
+ *
+ * A list that has not been fetched shows nothing rather than a zero: "no
+ * trackers" and "the trackers have not arrived" are different facts, and a
+ * badge that says 0 for both is the one that gets believed.
+ */
+function browseRow(
+  ctx: RenderContext,
+  state: PageState,
+  label: string,
+  count: number | null,
+  sublabel?: string
+): string {
+  return entityRow(ctx, {
+    state,
+    label,
+    ...(sublabel ? { sublabel } : {}),
+    ...(count === null ? {} : { badge: String(count) }),
+  });
 }
 
-function renderTrackers(ctx: RenderContext): string {
-  const trackers = [...ctx.session.trackers.values()].sort((a, b) =>
-    a.nickname.localeCompare(b.nickname)
-  );
-  const shown = trackers.slice(0, CONFIG.TREE_LIST_MAX);
-  // Every tracker is listed, reporting or not. A tracker with no fix has no
-  // coordinates and so is not on the map at all, which makes this list the only
-  // place it exists — and seeing which ones are idle is how you decide what to
-  // assign.
-  const rows = shown.map((tracker) =>
-    entityRow(ctx, {
-      state: { type: 'tracker', tracker_id: tracker.id },
-      label: tracker.nickname,
-      badgeHtml: livenessBadge(trackerLiveness(ctx.session, tracker.id)),
-    })
-  );
+/** The managed objects hanging off this feed, one row each. */
+function renderManagedLinks(ctx: RenderContext): string {
+  const session = ctx.session;
+  const members = session.members;
 
-  // The create buttons live in the section rather than in the header block:
-  // this is the list somebody is looking at when they notice one is missing.
-  const create = `<div class="flex flex-wrap gap-2 mt-2">
-    ${actionButton('tracker:new', '', 'New tracker')}
-  </div>`;
-
-  return treeSection(
-    'trackers',
-    'Trackers',
-    trackers.length,
-    `${entityRowList(rows, 'No trackers yet.')}${cappedNote(trackers.length, shown.length)}${create}`
+  return section(
+    'In this feed',
+    entityRowList(
+      [
+        browseRow(ctx, { type: 'trackers' }, 'Trackers', session.trackers.size),
+        browseRow(
+          ctx,
+          { type: 'assignments' },
+          'Assignments',
+          null,
+          'Which tracker runs which trip'
+        ),
+        browseRow(ctx, { type: 'alerts' }, 'Service alerts', session.serviceAlerts.size),
+        browseRow(
+          ctx,
+          { type: 'managers' },
+          'Managers',
+          members ? members.members.length : null,
+          members && members.invites.length
+            ? `${members.invites.length} invited`
+            : undefined
+        ),
+      ],
+      ''
+    )
   );
 }
 
-function renderAlerts(ctx: RenderContext): string {
-  const alerts = [...ctx.session.serviceAlerts.values()].sort((a, b) => b.id - a.id);
-  const shown = alerts.slice(0, CONFIG.TREE_LIST_MAX);
-  const rows = shown.map((alert) =>
-    entityRow(ctx, {
-      state: { type: 'alert', alert_id: String(alert.id) },
-      label: alert.header_text || `Alert ${alert.id}`,
-      badge: `${alert.entity_count} entit${alert.entity_count === 1 ? 'y' : 'ies'}`,
-    })
-  );
+/**
+ * The two GTFS lists. Both render before the zip does, without a count, so the
+ * way into a list is never hidden by a download; the status line above them is
+ * what says why the counts are missing.
+ */
+function renderScheduleLinks(ctx: RenderContext): string {
+  const feed = ctx.session.staticFeed;
+  const places = feed ? [...feed.stops.values()].filter((s) => !s.parent_station).length : null;
 
-  return treeSection(
-    'alerts',
-    'Service alerts',
-    alerts.length,
-    `${entityRowList(rows, 'No service alerts.')}${cappedNote(alerts.length, shown.length)}
-     <div class="mt-2">${actionButton('alert:new', '', 'New alert')}</div>`
+  return entityRowList(
+    [
+      browseRow(ctx, { type: 'routes' }, 'Routes', feed ? feed.routes.size : null),
+      browseRow(ctx, { type: 'stops' }, 'Stops', places),
+    ],
+    ''
   );
 }
 
@@ -509,8 +435,7 @@ function renderFleet(ctx: RenderContext): string {
     else silent += 1;
   }
 
-  return treeSection(
-    'fleet',
+  return rowSection(
     'Fleet',
     `${reporting} reporting`,
     `${propList([
@@ -531,21 +456,6 @@ function renderFleet(ctx: RenderContext): string {
   );
 }
 
-function renderManaged(ctx: RenderContext): string {
-  const members = ctx.session.members;
-  const managerNote = members
-    ? `${members.members.length} manager${members.members.length === 1 ? '' : 's'}${
-        members.invites.length ? `, ${members.invites.length} invited` : ''
-      }`
-    : '';
-  return `
-    ${renderTrackers(ctx)}
-    ${treeLink(ctx, { type: 'assignments' }, 'Assignments', '')}
-    ${renderAlerts(ctx)}
-    ${treeLink(ctx, { type: 'managers' }, 'Managers', managerNote)}
-    ${renderFleet(ctx)}`;
-}
-
 /**
  * Where the zip is up to. The managed half of the page works without it, so
  * "still downloading" and "did not load" are states this page renders in, not
@@ -564,7 +474,7 @@ function renderStaticStatus(ctx: RenderContext): string {
   return '';
 }
 
-export function renderTreePage(ctx: RenderContext, issues: MapDataIssues): string {
+export function renderFeedPage(ctx: RenderContext, issues: MapDataIssues): string {
   const session = ctx.session;
   const feed = session.feed;
   if (!feed) {
@@ -575,10 +485,8 @@ export function renderTreePage(ctx: RenderContext, issues: MapDataIssues): strin
     ? 'you'
     : `${feed.owner_name ?? `user ${feed.owner_id}`}${feed.can_manage ? ' (you may manage it)' : ''}`;
 
-  const gtfs = session.staticFeed ? `${renderRoutes(ctx)}${renderStops(ctx)}` : '';
-
   return `
-    <div class="space-y-3">
+    <div class="space-y-4">
       <div class="space-y-1">
         <h2 class="text-lg font-semibold leading-tight">${escHtml(feed.feed_name)}</h2>
         <div class="flex items-center gap-2 text-xs opacity-70">
@@ -590,20 +498,16 @@ export function renderTreePage(ctx: RenderContext, issues: MapDataIssues): strin
       ${renderActions(feed)}
       ${renderLoad(feed)}
       ${renderSource(ctx, feed)}
+      ${renderHistory(ctx, feed)}
+      ${renderOpenIn(feed)}
 
-      <div class="space-y-2">
-        ${renderHistory(ctx, feed)}
-        ${renderOpenIn(feed)}
-      </div>
-
-      <div class="space-y-2">${renderManaged(ctx)}</div>
+      ${renderManagedLinks(ctx)}
+      ${renderFleet(ctx)}
 
       <div class="divider text-xs opacity-60 my-1">Schedule</div>
       ${renderStaticStatus(ctx)}
-      <div class="space-y-2">
-        ${gtfs}
-        ${renderContents(ctx)}
-      </div>
+      ${renderScheduleLinks(ctx)}
+      ${renderContents(ctx)}
       ${renderIssues(ctx, issues)}
     </div>`;
 }

@@ -68,10 +68,13 @@ export const CONFIG = {
   // thousands; the page says how many it left out.
   ROUTE_TRIP_LIST_MAX: 200,
 
-  // Stops listed in the tree's Stops section before it is capped, and the
-  // routes/stops/trips a tree section shows a count for. A large feed has tens
-  // of thousands of stops and the panel is not the place to page through them.
-  TREE_LIST_MAX: 200,
+  // Rules listed on the assignments page before the list is capped.
+  RULE_LIST_MAX: 200,
+
+  // Places listed on the stops page before it is capped. The only list page
+  // that caps: a large feed has tens of thousands of stops, and the panel
+  // rebuilds every row on each realtime poll.
+  STOP_LIST_MAX: 1000,
 
   // Neutral fill for a vehicle whose trip/route cannot be resolved against the
   // static feed.

@@ -464,8 +464,13 @@ export class MapController {
       case 'assignments':
       case 'managers':
       case 'alert':
-        // Managed pages with no geometry of their own. Nothing to highlight or
-        // fly to; the camera stays where the reader left it.
+      case 'routes':
+      case 'stops':
+      case 'trackers':
+      case 'alerts':
+        // Pages with no geometry of their own: a managed object, or a list of
+        // objects rather than one of them. Nothing to highlight or fly to; the
+        // camera stays where the reader left it.
         this.clearTrip();
         this.layers.setFocus(null);
         return;
