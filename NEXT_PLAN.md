@@ -216,19 +216,52 @@ Retention keeps the newest `KEEP_UPLOADS` (default 10) per feed and the current
 one always, sweeping on each successful upload. Feed delete drops the whole
 `feeds/{feed_id}/` prefix.
 
-- [ ] `api/schemas.py`: `GtfsUploadOut`, and `FeedOut` gains `source_kind`,
+- [x] `api/schemas.py`: `GtfsUploadOut`, and `FeedOut` gains `source_kind`,
       `hosted_url`, `current_upload`
-- [ ] `api/uploads.py`: the four endpoints, gated by `AccessibleFeed`
-- [ ] Zip validation, shared with nothing — it is about the request, not the load
-- [ ] `feed_urls.py`: `feed_static_url(feed)`, next to `feed_rt_urls`
-- [ ] `routers/gtfs_rt.py` or a new `routers/static_feed.py`:
+- [x] `api/uploads.py`: the four endpoints, gated by `AccessibleFeed`
+- [x] Zip validation, shared with nothing — it is about the request, not the load
+- [x] `feed_urls.py`: `feed_static_url(feed)`, next to `feed_rt_urls`
+- [x] `routers/gtfs_rt.py` or a new `routers/static_feed.py`:
       `GET`/`HEAD /{feed_name}/gtfs.zip` with ETag and 304
-- [ ] `create_feed` and `update_feed` accept `source_kind`, and reject a
+- [x] `create_feed` and `update_feed` accept `source_kind`, and reject a
       `'url'` feed with no URL and a `'hosted'` feed with one
-- [ ] `delete_feed` deletes the object prefix
-- [ ] Retention sweep, its setting, and a test that the current upload survives it
-- [ ] Tests: upload, reject a non-zip, reject an incomplete zip, rollback,
+- [x] `delete_feed` deletes the object prefix
+- [x] Retention sweep, its setting, and a test that the current upload survives it
+- [x] Tests: upload, reject a non-zip, reject an incomplete zip, rollback,
       delete-current refused, the public route's 200/304/404
+
+**What the pass turned up.** The validator checks the required files at the zip
+*root*, not by basename, because `schedule_foamer.gtfs_loader` opens
+`"agency.txt"` and nothing else. A feed nested one directory down would load as
+*empty* rather than fail, which is the worse of the two outcomes, so a nested
+zip is refused with a message that names the directory it found.
+
+Retention and "the current one always" only ever disagree at `KEEP_UPLOADS = 0`:
+every ordinary sweep runs straight after an upload, which has just made the
+newest one current. That is what the survival test sets, since nothing else
+exercises the guard.
+
+`static_feed_url` going nullable reached four readers, not one:
+`routers/catalog.py`, `admin/links.py`'s viz and editor deep links, and
+`/internal/feed_urls`. All four now go through `feed_static_url`, so a hosted
+feed shows its own public URL everywhere the upstream one used to appear, and
+`/internal/feed_urls` selects whole rows rather than the one column.
+
+A store failure had to become a JSON answer. An unhandled `ObjectStoreError` is
+a plain-text 500, and a non-JSON response is exactly how yard-master recognises
+an expired session: it would reload the page instead of showing what went
+wrong. Every store call in a request path answers 503 with a JSON body; the
+retention sweep suppresses instead, because a store that cannot delete must not
+turn a stored zip into an error.
+
+`uploaded_at` comes back timezone-aware from Postgres and naive from SQLite, and
+`format_datetime(usegmt=True)` refuses a naive one, so `Last-Modified` is
+normalized rather than trusted.
+
+The two tables' foreign-key cycle broke the *test teardown*, not the schema:
+SQLite cannot ALTER away the `use_alter` constraint, so `drop_all` failed with
+a foreign-key error the moment any test left a hosted feed behind. `conftest`
+drops with `PRAGMA foreign_keys=OFF` and turns it back on for the test.
 
 **Gotchas.** FastAPI's `UploadFile` spools to disk past a threshold, so the cap
 has to be enforced while reading, not by trusting `content-length`. The public
