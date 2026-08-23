@@ -1,5 +1,5 @@
 /**
- * The four list pages: Routes, Stops, Trackers and Service alerts.
+ * The list pages: Routes, Stops, Services, Trackers and Service alerts.
  *
  * yard-master's own pages. Each of these was a `<details>` section on the feed
  * page, capped at 200 rows with a note pointing at the search box. They
@@ -7,12 +7,16 @@
  * create button sits on the list it creates into rather than inside a
  * disclosure somebody has to open first.
  *
- * One file because they are the same page four times: a title with a count, a
+ * One file because they are the same page over and over: a title with a count, a
  * create button where the API has one, and a list of `entity-row.ts` rows. The
  * only thing that differs is where the rows come from — Trackers and Alerts
  * come from the API and render the moment a feed is selected, while Routes and
  * Stops come from the zip this browser is still parsing, which is why only
- * those two carry a schedule-status line.
+ * those carry a schedule-status line.
+ *
+ * Services is the exception to the row shape: a service is a pattern of dates,
+ * and a list of ids says nothing about it, so the page is the timeline chart
+ * with one row per service and the label as the link.
  */
 
 import { CONFIG } from '../../config';
@@ -22,6 +26,12 @@ import { escHtml, routeBadge } from '../render-utils';
 import { cappedNote, countBadge, entityRow, entityRowList } from '../entity-row';
 import { actionButton, livenessBadge, trackerLiveness } from '../managed-render';
 import { routeSortKey } from '../route-sort';
+import {
+  renderServiceChart,
+  serviceCatalog,
+  serviceChartLegend,
+  sortServices,
+} from '../service-catalog';
 
 /** The title line every list page shares: name, count, and what creates one. */
 function listHeader(title: string, count: number | string, actionsHtml = ''): string {
@@ -157,5 +167,36 @@ export function renderAlertsPage(ctx: RenderContext): string {
     <div class="space-y-4">
       ${listHeader('Service alerts', alerts.length, actionButton('alert:new', '', 'New alert'))}
       ${entityRowList(rows, 'No service alerts.')}
+    </div>`;
+}
+
+/**
+ * Services, as the waterfall.
+ *
+ * Ordered by when they start rather than by id, so the chart cascades: a feed's
+ * services are usually a handful of overlapping windows, and reading which one
+ * takes over from which is the whole reason to draw them together.
+ *
+ * Capped like the stops page, and for the same reason: a chart row is a whole
+ * table row of cells, and a feed whose every day is its own service would
+ * render hundreds of thousands of them on every realtime poll.
+ */
+export function renderServicesPage(ctx: RenderContext): string {
+  const feed = ctx.session.staticFeed;
+  if (!feed) {
+    return `<div class="space-y-4">${listHeader('Services', 0)}${scheduleStatus(ctx)}</div>`;
+  }
+
+  const services = sortServices([...serviceCatalog(feed).values()]);
+  const shown = services.slice(0, CONFIG.SERVICE_LIST_MAX);
+
+  return `
+    <div class="space-y-4">
+      ${listHeader('Services', services.length)}
+      ${renderServiceChart(ctx, shown, {
+        emptyMessage: 'This feed has no calendar.txt and no calendar_dates.txt.',
+      })}
+      ${cappedNote(services.length, shown.length)}
+      ${serviceChartLegend()}
     </div>`;
 }

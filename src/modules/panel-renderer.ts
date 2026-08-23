@@ -11,7 +11,7 @@
    - `setBreadcrumbs` added: the trail is rebuilt outside this class and can
      arrive after the page it belongs to, without a scroll reset.
    - The dispatcher covers yard-master's variants: `home` renders the feed
-     itself, four list pages hang off it, `trip` is this repo's own page,
+     itself, the list pages hang off it, `trip` is this repo's own page,
      `vehicle` is gone, and the managed variants render this repo's own pages,
      the calendar included.
    - `meUserId` added to the hooks: the managers page marks the signed-in row,
@@ -51,9 +51,11 @@ import { renderFeedPage } from './pages/feed-page';
 import {
   renderAlertsPage,
   renderRoutesPage,
+  renderServicesPage,
   renderStopsPage,
   renderTrackersPage,
 } from './pages/list-pages';
+import { renderServicePage } from './pages/service-page';
 import { renderTripPage } from './pages/trip-page';
 
 export interface PanelRendererHooks {
@@ -272,6 +274,10 @@ export class PanelRenderer {
         return renderTrackersPage(ctx);
       case 'alerts':
         return renderAlertsPage(ctx);
+      case 'services':
+        return renderServicesPage(ctx);
+      case 'service':
+        return renderServicePage(ctx, this.state);
       case 'route':
         return renderRoutePage(ctx, index, this.state);
       case 'stop':

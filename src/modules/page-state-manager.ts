@@ -231,6 +231,10 @@ export class PageStateManager {
       case 'stops':
       case 'trackers':
       case 'alerts':
+      case 'services':
+        break;
+      case 'service':
+        params.set('service', pageState.service_id);
         break;
       case 'alert':
         params.set('alert', pageState.alert_id);
@@ -265,6 +269,12 @@ export class PageStateManager {
         return { type: 'trackers' };
       case 'alerts':
         return { type: 'alerts' };
+      case 'services':
+        return { type: 'services' };
+      case 'service': {
+        const service_id = get('service');
+        return service_id === undefined ? { type: 'home' } : { type: 'service', service_id };
+      }
       // `people` is what this page was called before it became Managers.
       case 'people':
       case 'managers':

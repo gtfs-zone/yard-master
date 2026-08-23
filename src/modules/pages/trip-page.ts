@@ -14,7 +14,7 @@
  * silently rewrite 25:10:00 as 01:10 the wrong day.
  */
 
-import type { Calendar, CalendarDate, Trip } from '../../gtfs-static';
+import type { Trip } from '../../gtfs-static';
 import type { PageState } from '../../types/page-state';
 import { alertsForTrip } from '../alerts';
 import { entityRow, entityRowList, rowSection } from '../entity-row';
@@ -36,69 +36,51 @@ import {
   section,
   vehicleDisplayName,
 } from '../render-utils';
+import {
+  renderServiceChart,
+  serviceCatalog,
+  serviceChartLegend,
+  weekdaysLabel,
+} from '../service-catalog';
 import { renderAlertList } from './alert-page';
 
-const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-/** "2024-03-01" from the GTFS "20240301", which is the only form the zip has. */
-function formatServiceDate(date: string): string {
-  return /^\d{8}$/.test(date) ? `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6)}` : date;
-}
-
-// ─── Service ──────────────────────────────────────────────────────────────────
-
 /**
- * What days the trip runs, from `calendar.txt` and `calendar_dates.txt`.
+ * When this trip runs: the service it points at, drawn as its own chart row.
  *
- * A feed may use either file alone: a service with no `calendar` row runs only
- * on the dates `calendar_dates` adds, so an absent row is reported rather than
- * treated as "runs every day".
+ * The weekly pattern, the window and the exceptions used to be spelled out
+ * here in prose and two date lists. They are one row of the waterfall now, the
+ * same row the service page and the route page draw, and the `service_id` is a
+ * link to the object that owns the rest of the detail.
  */
-function renderService(
-  trip: Trip,
-  calendar: Calendar | undefined,
-  exceptions: CalendarDate[],
-): string {
-  const days = calendar
-    ? DAY_LABELS.filter((_, i) => calendar.days[i]).join(', ') || 'no weekdays'
-    : '';
+function renderService(ctx: RenderContext, trip: Trip): string {
+  const feed = ctx.session.staticFeed!;
+  const service = serviceCatalog(feed).get(trip.service_id);
 
-  const added = exceptions.filter((d) => d.exception_type === 1);
-  const removed = exceptions.filter((d) => d.exception_type === 2);
-
-  const dateList = (label: string, dates: CalendarDate[]): string =>
-    dates.length === 0
-      ? ''
-      : `<details class="text-xs" data-detail="svc:${escHtml(label)}">
-           <summary class="cursor-pointer opacity-60">${escHtml(
-             `${dates.length} ${label}`
-           )}</summary>
-           <ul class="mt-1 flex flex-wrap gap-x-3 gap-y-1 tabular-nums">${dates
-             .map((d) => `<li>${escHtml(formatServiceDate(d.date))}</li>`)
-             .join('')}</ul>
-         </details>`;
+  if (!service) {
+    return section(
+      'Service',
+      `<p class="text-xs opacity-60">${escHtml(
+        `This trip names service_id ${trip.service_id}, which is in neither calendar.txt nor calendar_dates.txt.`
+      )}</p>`
+    );
+  }
 
   return section(
     'Service',
     `${propList([
-      prop('service_id', `<span class="font-mono">${escHtml(trip.service_id)}</span>`),
-      calendar
-        ? prop('Runs', escHtml(days))
-        : prop(
-            'Runs',
-            '<span class="opacity-60">no calendar.txt row — only the added dates below</span>'
-          ),
-      calendar
-        ? prop(
-            'Window',
-            escHtml(
-              `${formatServiceDate(calendar.start_date)} to ${formatServiceDate(calendar.end_date)}`
-            )
-          )
-        : '',
+      prop(
+        'service_id',
+        entityLink(
+          ctx,
+          { type: 'service', service_id: service.id },
+          service.id,
+          'link link-hover font-mono'
+        )
+      ),
+      prop('Runs', escHtml(weekdaysLabel(service.days))),
     ])}
-     ${dateList('added dates', added)}
-     ${dateList('removed dates', removed)}`
+     ${renderServiceChart(ctx, [service])}
+     ${serviceChartLegend()}`
   );
 }
 
@@ -250,8 +232,6 @@ export function renderTripPage(
   if (!feed || !trip) return missing(`Trip ${state.trip_id}`);
 
   const route = feed.routes.get(trip.route_id);
-  const calendar = feed.calendar.find((c) => c.service_id === trip.service_id);
-  const exceptions = feed.calendarDates.filter((d) => d.service_id === trip.service_id);
   const shape = feed.shapes.get(trip.shape_id);
   const shortName = trip.raw.trip_short_name?.trim();
 
@@ -273,7 +253,7 @@ export function renderTripPage(
       ${renderAlertList(ctx, alertsForTrip(ctx.session, trip.trip_id, trip.route_id), 'Alerts')}
       ${renderTrackers(ctx, rt, trip)}
       ${renderAssignments(ctx, trip)}
-      ${renderService(trip, calendar, exceptions)}
+      ${renderService(ctx, trip)}
       ${renderSchedule(ctx, rt, trip)}
 
       ${section(

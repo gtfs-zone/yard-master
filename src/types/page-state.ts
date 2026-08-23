@@ -9,9 +9,11 @@
      than a decoded GTFS-RT entity.
    - `home` is the feed itself: its own properties, flat, plus the links to
      what hangs off it. There is no separate `feed` variant.
-   - `routes`, `stops`, `trackers` and `alerts` are the four list pages the
-     feed page used to hold as disclosures. Each names no object, so each is
-     told apart by the hash's `type` param alone.
+   - `routes`, `stops`, `trackers`, `alerts` and `services` are the list pages
+     the feed page used to hold as disclosures. Each names no object, so each
+     is told apart by the hash's `type` param alone.
+   - `service` is a `service_id` out of `calendar.txt`/`calendar_dates.txt`,
+     which neither upstream browses as an object at all.
    - `tracker` is keyed by `Tracker.id`, the surrogate. It is not the Traccar
      credential (that is `device_key`, which never leaves the properties panel)
      and it is genuinely unique, which nickname is not.
@@ -37,6 +39,8 @@ export type PageState =
   | { type: 'stops' }
   | { type: 'trackers' }
   | { type: 'alerts' }
+  | { type: 'services' }
+  | { type: 'service'; service_id: string }
   | { type: 'tracker'; tracker_id: string }
   | { type: 'assignments'; date?: string }
   | { type: 'managers' }
@@ -70,8 +74,12 @@ export function isPageState(value: unknown): value is PageState {
     case 'stops':
     case 'trackers':
     case 'alerts':
+    case 'services':
     case 'managers':
       return true;
+
+    case 'service':
+      return typeof state.service_id === 'string';
 
     case 'tracker':
       return typeof state.tracker_id === 'string';

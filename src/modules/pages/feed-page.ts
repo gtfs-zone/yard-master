@@ -46,6 +46,7 @@ import { resolveRealtimeUrl } from '../feed-url-resolve';
 import { isHosted, publicScheduleUrl, sourceLabel } from '../feed-source';
 import { formatBytes } from '../feed-download';
 import { renderIssueCard } from '../../utils/issue-card';
+import { serviceIds } from '../service-catalog';
 
 /**
  * An external link, shown as the URL itself so it can be read and copied.
@@ -395,7 +396,7 @@ function renderManagedLinks(ctx: RenderContext): string {
 }
 
 /**
- * The two GTFS lists. Both render before the zip does, without a count, so the
+ * The GTFS lists. All three render before the zip does, without a count, so the
  * way into a list is never hidden by a download; the status line above them is
  * what says why the counts are missing.
  */
@@ -407,6 +408,13 @@ function renderScheduleLinks(ctx: RenderContext): string {
     [
       browseRow(ctx, { type: 'routes' }, 'Routes', feed ? feed.routes.size : null),
       browseRow(ctx, { type: 'stops' }, 'Stops', places),
+      browseRow(
+        ctx,
+        { type: 'services' },
+        'Services',
+        feed ? serviceIds(feed).size : null,
+        'What runs on which days'
+      ),
     ],
     ''
   );

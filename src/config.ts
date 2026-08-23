@@ -76,6 +76,11 @@ export const CONFIG = {
   // rebuilds every row on each realtime poll.
   STOP_LIST_MAX: 1000,
 
+  // Services drawn on the services page before the chart is capped. A chart
+  // row is a whole table row of cells, so a feed with thousands of one-day
+  // services would render hundreds of thousands of them.
+  SERVICE_LIST_MAX: 200,
+
   // Neutral fill for a vehicle whose trip/route cannot be resolved against the
   // static feed.
   VEHICLE_UNMATCHED_COLOR: '#94a3b8',

@@ -6,6 +6,8 @@
    - "Vehicles here now" became "Trackers here now", and its renderer with it.
    - Departures link their trip through the new `trip` variant, which
      test-track has no page for.
+   - A Service calendar section draws the services of the trips calling here on
+     this repo's timeline chart.
    - Every list on the page — departures, trackers here now, platforms and
      sibling platforms — renders through this repo's `entity-row.ts` instead of
      its own `<li>` or `<table>` markup, so a stop's lists look like every other
@@ -24,7 +26,7 @@
  */
 
 import type { AlertRecord } from '../../gtfs-rt';
-import type { Stop } from '../../gtfs-static';
+import type { Stop, Trip } from '../../gtfs-static';
 import type { PageState } from '../../types/page-state';
 import { alertsForStop } from '../alerts';
 import { zoneLabel } from '../feed-time';
@@ -47,6 +49,12 @@ import {
   section,
   vehicleDisplayName,
 } from '../render-utils';
+import {
+  renderServiceChart,
+  serviceChartLegend,
+  servicesForTrips,
+} from '../service-catalog';
+import { CONFIG } from '../../config';
 import { renderAlertList } from './alert-page';
 
 const MAX_DEPARTURES = 20;
@@ -312,6 +320,43 @@ function renderSiblingPlatforms(ctx: RenderContext, stop: Stop): string {
   );
 }
 
+/**
+ * When anything calls here, as the waterfall.
+ *
+ * Over every trip that stops here rather than over the departures board: the
+ * board is one day's worth, and this is the question of which days there is a
+ * service at all. A station aggregates over its platforms, exactly as its
+ * routes and departures do.
+ */
+function renderServices(ctx: RenderContext, stopIds: string[]): string {
+  const feed = ctx.session.staticFeed!;
+  const trips: Trip[] = [];
+  for (const stopId of stopIds) {
+    for (const tripId of feed.stopTrips.get(stopId) ?? []) {
+      const trip = feed.trips.get(tripId);
+      if (trip) trips.push(trip);
+    }
+  }
+
+  const services = servicesForTrips(feed, trips);
+  if (services.length === 0) return '';
+
+  const shown = services.slice(0, CONFIG.SERVICE_LIST_MAX);
+  return rowSection(
+    'Service calendar',
+    services.length,
+    `${renderServiceChart(ctx, shown)}
+     ${
+       services.length > shown.length
+         ? `<p class="text-xs opacity-50">${escHtml(
+             `${services.length - shown.length} more services not drawn.`,
+           )}</p>`
+         : ''
+     }
+     ${serviceChartLegend()}`,
+  );
+}
+
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export function renderStopPage(
@@ -361,6 +406,7 @@ export function renderStopPage(
       ${renderDepartures(ctx, rt, serviceIds, isStation)}
       ${renderTrackersHere(ctx, rt, serviceIds, isStation)}
       ${isStation ? renderPlatforms(ctx, stop.id) : renderSiblingPlatforms(ctx, stop)}
+      ${renderServices(ctx, serviceIds)}
 
       ${section(
         'Properties',

@@ -8,6 +8,8 @@
      page, which test-track does not have.
    - User-facing "vehicle" wording became "tracker". The internal names keep
      saying vehicle: these really are `VehiclePosition`s on the vehicle layer.
+   - A Service calendar section draws the route's services on this repo's
+     timeline chart, shaded in the route's own colour.
    - The Trips and Unplaced trackers lists render through this repo's
      `entity-row.ts`, the one row shape every list in the app uses. The strip
      itself is untouched: a vehicle chip sits in a rail row, not in a list.
@@ -51,6 +53,11 @@ import {
 import type { RowDot } from '../route-strip';
 import type { RenderContext } from '../render-utils';
 import { entityRow, entityRowList, rowSection } from '../entity-row';
+import {
+  renderServiceChart,
+  serviceChartLegend,
+  servicesForTrips,
+} from '../service-catalog';
 import {
   OCCUPANCY_LABELS,
   ROUTE_TYPE_LABELS,
@@ -449,6 +456,35 @@ function renderTrips(ctx: RenderContext, routeId: string, directionId: string): 
   );
 }
 
+/**
+ * When this route runs, as the waterfall.
+ *
+ * Both directions, not the tab's: a route's calendar is a property of the route
+ * and splitting it by direction would draw the same spans twice. The route's
+ * own colour shades the spans, so the section reads as part of this page rather
+ * than as a chart that happens to be on it.
+ */
+function renderServices(ctx: RenderContext, route: Route): string {
+  const feed = ctx.session.staticFeed!;
+  const services = servicesForTrips(feed, feed.tripsByRoute.get(route.id) ?? []);
+  if (services.length === 0) return '';
+
+  const shown = services.slice(0, CONFIG.SERVICE_LIST_MAX);
+  return rowSection(
+    'Service calendar',
+    services.length,
+    `${renderServiceChart(ctx, shown, { color: route.color })}
+     ${
+       services.length > shown.length
+         ? `<p class="text-xs opacity-50">${escHtml(
+             `${services.length - shown.length} more services not drawn.`,
+           )}</p>`
+         : ''
+     }
+     ${serviceChartLegend()}`,
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 function renderDirectionTabs(
@@ -513,6 +549,7 @@ export function renderRoutePage(
       ${renderStrip(ctx, rt, route, sequence, active, placed)}
       ${renderUnplaced(ctx, unplaced)}
       ${renderTrips(ctx, route.id, active)}
+      ${renderServices(ctx, route)}
 
       ${section(
         'Route',

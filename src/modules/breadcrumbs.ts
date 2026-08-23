@@ -5,10 +5,11 @@
    - The variant set is yard-master's. `vehicle` became `tracker` and resolves
      against `session.trackers` (the API list) rather than only against the
      live map, so a tracker that has never reported a fix still has a label.
-   - `routes`, `stops`, `trackers` and `alerts` added: the four list pages, one
-     hop off the feed root. An object page keeps its own parent rather than
-     hanging off its list — a trip under its route reads better in a narrow
-     panel than a four-crumb trail through Routes.
+   - `routes`, `stops`, `trackers`, `alerts` and `services` added: the list
+     pages, one hop off the feed root. A `service` hangs off the services list,
+     which is the only parent it has. Every other object page keeps its own
+     parent rather than hanging off its list — a trip under its route reads
+     better in a narrow panel than a four-crumb trail through Routes.
    - `managers` and `assignments` added. They are managed objects with no GTFS
      parent, so each is one hop off the feed root. A calendar day hangs off the
      month, so `assignments` with a date is two.
@@ -32,6 +33,7 @@
 
 import type { BreadcrumbItem, PageState } from '../types/page-state';
 import type { FeedSession } from './feed-session';
+import { serviceIds } from './service-catalog';
 import { dayLabel, isServiceDate } from './service-date';
 
 function home(session: FeedSession): BreadcrumbItem {
@@ -144,6 +146,16 @@ export function buildBreadcrumbs(session: FeedSession, state: PageState): Breadc
     case 'alerts':
       return [home(session), { label: 'Service alerts', pageState: state }];
 
+    case 'services':
+      return [home(session), { label: 'Services', pageState: state }];
+
+    case 'service':
+      return [
+        home(session),
+        { label: 'Services', pageState: { type: 'services' } },
+        { label: state.service_id, pageState: state },
+      ];
+
     case 'assignments':
       return [
         home(session),
@@ -225,7 +237,14 @@ export function validateState(session: FeedSession, state: PageState): boolean {
     case 'stops':
     case 'trackers':
     case 'alerts':
+    case 'services':
       return true;
+    case 'service': {
+      // Both files: a service can be named by calendar_dates alone. Like every
+      // GTFS variant this answers false until the zip is in.
+      const feed = session.staticFeed;
+      return feed ? serviceIds(feed).has(state.service_id) : false;
+    }
     case 'route':
       return session.staticFeed?.routes.has(state.route_id) ?? false;
     case 'stop':

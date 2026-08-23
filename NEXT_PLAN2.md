@@ -360,11 +360,47 @@ A `{ type: 'service'; service_id }` page over the loaded zip's `calendar.txt`
 and `calendar_dates.txt`, rendering the chart with one row per service. This is
 the reference use, and the thing the assignments page is being made to match.
 
-- [ ] `pages/service-page.ts` and the page state
-- [ ] Services reachable from the phase 3 hierarchy
-- [ ] Route and stop pages embed the chart filtered to their own services, the
+- [x] `pages/service-page.ts` and the page state
+- [x] Services reachable from the phase 3 hierarchy
+- [x] Route and stop pages embed the chart filtered to their own services, the
       way coloring-book's do
-- [ ] `trip-page.ts`'s hand-rolled service block is replaced by it
+- [x] `trip-page.ts`'s hand-rolled service block is replaced by it
+
+Two page states, not one: `service` needed somewhere to be reached from, and a
+list of bare `service_id`s says nothing about a service, so `services` is a
+fifth list page that *is* the chart — one row per service, the label the link.
+It is the only list page whose rows are not `entity-row.ts` rows, for that
+reason. It sorts by window start rather than by id so the chart cascades, and
+caps at `CONFIG.SERVICE_LIST_MAX` (200) because a chart row is a whole table
+row of cells.
+
+`src/modules/service-catalog.ts` is where the two calendar files are put back
+together, since four pages now ask the same question. It is seeded from both
+files: a service named only by `calendar_dates.txt` is real and runs on exactly
+the dates it lists. It deliberately does not walk trips — the panel rebuilds on
+every realtime poll and a feed has tens of thousands of them — so the service
+page, the one page that needs them, asks with `tripsForService` and derives its
+route list from the same pass.
+
+A window is only shaded where the service runs on at least one weekday. A
+`calendar.txt` row with every day off runs on its added dates alone, and
+shading its window would claim a year of service that is not there.
+
+The chart grew `TimelineRow.labelHtml`, which is how a row navigates: a `<tr>`
+is not something an `<a>` can wrap, so the label carries `entityLink`'s anchor
+and the panel's existing `data-nav` delegation does the rest, with no
+per-render listener. `cursor-pointer` moved out of the rendered row class and
+into `attachTimelineListeners`, so a chart nobody wired up stops advertising a
+click that does nothing.
+
+A service has no colour of its own, so the accent is the default and a caller
+with a better one passes it: the route page shades its services in the route's
+own colour. The stop page aggregates over its platforms' trips, the same way
+its routes and departures do.
+
+`service` is one hop off the services list rather than off the feed — it is the
+only parent a service has. `validateState` checks it against both calendar
+files, so it answers false until the zip is in, like every other GTFS variant.
 
 ---
 
