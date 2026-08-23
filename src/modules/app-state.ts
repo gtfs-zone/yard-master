@@ -136,6 +136,9 @@ export class AppState {
    */
   private assignmentWindow: { from: ServiceDate; to: ServiceDate } | null = null;
 
+  /** The expansion request in flight, so two widenings do not race. */
+  private assignmentLoad: Promise<void> | null = null;
+
   constructor(session: FeedSession, hooks: AppStateHooks) {
     this.session = session;
     this.hooks = hooks;
@@ -370,6 +373,32 @@ export class AppState {
     await this.fetchInto('assignments', () => listAssignments(feed.id, from, to), (rows) =>
       this.session.setAssignments(from, to, rows)
     );
+  }
+
+  /**
+   * Make sure a window is expanded, widening the held one rather than replacing
+   * it.
+   *
+   * The calendar modal asks for whatever month it is showing while the
+   * assignments page may be sitting behind it on another set of weeks, and a
+   * narrower window would leave that page with empty cells and no request out
+   * to fill them. Widening keeps both covered; navigating the page back out of
+   * the union is what shrinks it again.
+   */
+  async ensureAssignments(from: ServiceDate, to: ServiceDate): Promise<void> {
+    // A request already out lands first, so its window is the one this widens.
+    await this.assignmentLoad;
+    const held = this.assignmentWindow;
+    if (held && held.from <= from && held.to >= to) return;
+
+    const wanted = {
+      from: held && held.from < from ? held.from : from,
+      to: held && held.to > to ? held.to : to,
+    };
+    this.assignmentLoad = this.refreshAssignments(wanted.from, wanted.to).finally(() => {
+      this.assignmentLoad = null;
+    });
+    await this.assignmentLoad;
   }
 
   /**

@@ -110,6 +110,14 @@ export const CONFIG = {
   // thousand cells and hang the panel.
   TIMELINE_MAX_DAYS: 1096,
 
+  // The calendar modal. A month cell is a few lines tall, so it stacks this
+  // many chips and then says how many it left out.
+  CALENDAR_CELL_CHIPS: 4,
+
+  // How far past today an open-ended rule is drawn on the calendar's timeline.
+  // A rule with no end_date runs forever; a chart has to stop somewhere.
+  CALENDAR_OPEN_END_DAYS: 180,
+
   // Realtime poll interval, read by the vendored poller. Per-device, so it is
   // deliberately not in the hash.
   RT_INTERVAL_KEY: 'ym.rt.interval',

@@ -488,11 +488,48 @@ rule is deliberately not offered from a cell.
 A nav button beside About, opening one modal with a month grid and the
 waterfall, showing GTFS services and the tracker assignments on each day.
 
-- [ ] The nav button and its count badge
-- [ ] `src/modules/calendar-modal.ts`: tabs for Month grid and Timeline, the
+- [x] The nav button and its count badge
+- [x] `src/modules/calendar-modal.ts`: tabs for Month grid and Timeline, the
       grid built from `service-date.monthGrid`
-- [ ] Day cells stack a chip per active service and per assignment; a chip
+- [x] Day cells stack a chip per active service and per assignment; a chip
       click closes the modal and navigates
+
+The modal is mounted on `document.body`, outside the panel host, so
+`PanelRenderer`'s `data-nav` delegation never sees a click inside it. The modal
+delegates `[data-nav]` itself, closing before it navigates: the chips and both
+charts stay ordinary `entityLink` anchors, so middle-click and
+copy-link-address work exactly as they do in the panel, and nothing needed a
+second link vocabulary.
+
+The badge counts today's assignments, and is hidden while the answer is not
+known — no feed, or an expansion window that does not reach today — because a
+0 would claim nothing runs when nothing was asked. Selecting a feed now expands
+today's week for that reason alone.
+
+`AppState.ensureAssignments` is the one new method: it **widens** the held
+window rather than replacing it. The modal asks for whatever month it shows
+while the assignments page may be sitting behind it on other weeks, and a
+narrower window would leave that page with empty cells and no request out to
+fill them. The focus path still fetches its own narrow window, which is what
+shrinks the union again once the reader navigates out of it. An in-flight
+promise is held so two widenings cannot race and land in the wrong order.
+
+`serviceRunsOn` was added to `service-catalog.ts`: `calendar_dates.txt` wins
+outright and the weekly pattern inside its window only answers where the
+exceptions say nothing, so a `calendar_dates`-only service runs on its added
+dates and nowhere else. The Timeline tab draws two charts in the week unit —
+the services, and one row per `TrackerRule` — since a rule is already the chart
+row's shape: a date range as the span, seven weekday booleans as the dots, its
+exceptions as the ticks. An open-ended rule is drawn to
+`CONFIG.CALENDAR_OPEN_END_DAYS` (180) past today and says so in its tooltip,
+because a span has to name a last date. `CONFIG.CALENDAR_CELL_CHIPS` (4) caps
+a month cell, with the overflow as a `+n more` link into that day's
+assignments — the same idea as the deleted `CALENDAR_DAY_CHIPS`, which a month
+grid genuinely needs and a waterfall does not.
+
+The modal redraws on `change`, `assignments` and `staticloaded` the way the
+panel does, so an expansion that arrives after it opened fills the grid in
+place, and drops those listeners when it closes.
 
 ---
 

@@ -19,9 +19,10 @@ import { SearchController } from './modules/search-controller';
 import { buildSearchEntries } from './modules/search-entries';
 import { PanelRenderer } from './modules/panel-renderer';
 import { Actions } from './modules/actions';
-import { isServiceDate } from './modules/service-date';
+import { addDays, isServiceDate, startOfWeek, today } from './modules/service-date';
 import { initFieldTooltipPortal } from './utils/tooltip-position';
 import { showAboutModal } from './modules/about-modal';
+import { calendarBadgeCount, showCalendarModal } from './modules/calendar-modal';
 
 // ─── Shell ────────────────────────────────────────────────────────────────────
 const version = document.getElementById('app-version');
@@ -102,6 +103,13 @@ const appState = new AppState(session, {
     // takes it away again.
     if (feed) bottomSheet.open('half');
     else bottomSheet.close();
+    // This week, so the calendar button can say how much is running today
+    // before anybody opens it.
+    if (feed) {
+      const monday = startOfWeek(today());
+      void appState.ensureAssignments(monday, addDays(monday, 6));
+    }
+    syncCalendarBadge();
   },
   onFocusChange: (state) => {
     panel.show(state, appState.breadcrumbs);
@@ -180,6 +188,31 @@ async function openFeedSwitcher(): Promise<void> {
 }
 
 feedSwitcherBtn.addEventListener('click', () => void openFeedSwitcher());
+
+// ─── Calendar ─────────────────────────────────────────────────────────────────
+// Off the navbar rather than the panel, so it opens over whatever page the
+// reader is on. It navigates through the same `setFocus` the map and the panel
+// use, after closing itself.
+const calendarCount = document.getElementById('calendar-count')!;
+
+document.getElementById('calendar-btn')?.addEventListener('click', () => {
+  void showCalendarModal({
+    ctx: { session, href: (state) => appState.hrefFor(state) },
+    navigate: (state) => appState.setFocus(state),
+    ensureAssignments: (from, to) => appState.ensureAssignments(from, to),
+    ensureRules: () => (session.rules ? Promise.resolve() : appState.refreshRules()),
+  });
+});
+
+/** The badge: today's assignments, hidden while there are none to count. */
+function syncCalendarBadge(): void {
+  const count = calendarBadgeCount(session);
+  calendarCount.textContent = count === null ? '' : String(count);
+  calendarCount.classList.toggle('hidden', !count);
+}
+
+session.addEventListener('assignments', syncCalendarBadge);
+session.addEventListener('change', syncCalendarBadge);
 
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────

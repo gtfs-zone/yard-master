@@ -17,7 +17,7 @@ import type { Calendar, GTFSStatic, Trip } from '../gtfs-static';
 import type { RenderContext } from './render-utils';
 import { entityLink } from './render-utils';
 import type { ServiceDate } from './service-date';
-import { WEEKDAY_LABELS } from './service-date';
+import { WEEKDAY_LABELS, weekdayIndex } from './service-date';
 import type { TimelineRow } from './timeline-chart';
 import { renderTimelineChart } from './timeline-chart';
 
@@ -113,6 +113,23 @@ export function serviceCatalog(feed: GTFSStatic): Map<string, ServiceSummary> {
     service.removed.sort();
   }
   return services;
+}
+
+/**
+ * Whether a service runs on one date.
+ *
+ * The two files are read in the order GTFS gives them: `calendar_dates.txt`
+ * wins outright, and only where it says nothing does the weekly pattern inside
+ * its window answer. A service with no `calendar.txt` row therefore runs on its
+ * added dates and nowhere else.
+ */
+export function serviceRunsOn(service: ServiceSummary, date: ServiceDate): boolean {
+  if (service.removed.includes(date)) return false;
+  if (service.added.includes(date)) return true;
+  if (!service.calendar) return false;
+  if (service.start && date < service.start) return false;
+  if (service.end && date > service.end) return false;
+  return service.days[weekdayIndex(date)] === true;
 }
 
 /** The trips on a service, in feed order. One pass; nothing is indexed. */
