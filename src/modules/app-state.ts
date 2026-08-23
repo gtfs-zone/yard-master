@@ -362,7 +362,7 @@ export class AppState {
     );
   }
 
-  /** Expand the rules over one window, which is what the calendar draws. */
+  /** Expand the rules over one window, which is what the week charts draw. */
   async refreshAssignments(from: ServiceDate, to: ServiceDate): Promise<void> {
     const feed = this.session.feed;
     if (!feed) return;
@@ -378,8 +378,8 @@ export class AppState {
    * The rules are what an editor reads and the expansion is what the grid
    * draws, and a write to one changes the other: adding an exception changes
    * no rule field and moves a day off the calendar. The window is the one last
-   * asked for, so a write made from a trip page refreshes whichever month the
-   * calendar was left on.
+   * asked for, so a write made from a trip page refreshes whichever weeks the
+   * assignments page was left on.
    */
   async refreshCalendar(): Promise<void> {
     const window = this.assignmentWindow;
@@ -489,9 +489,9 @@ export class AppState {
         };
       }
     } else if (state.type === 'assignments') {
-      // Both halves: the rules an editor reads, and the month the grid draws.
-      // The expansion is re-fetched only when the visible grid runs outside the
-      // window already held, so stepping between days in one month is free.
+      // Both halves: the rules an editor reads, and the weeks the charts draw.
+      // The expansion is re-fetched only when the listed weeks run outside the
+      // window already held, so stepping between days in one page is free.
       const { from, to } = gridRange(anchorDate(state));
       const held = session.assignmentsRange;
       const covered = held !== null && held.from <= from && held.to >= to;

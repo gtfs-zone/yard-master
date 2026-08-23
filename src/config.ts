@@ -85,16 +85,17 @@ export const CONFIG = {
   // static feed.
   VEHICLE_UNMATCHED_COLOR: '#94a3b8',
 
-  // Assignment chips drawn in one calendar day cell before the rest become a
-  // "+n" count. Three fits the narrowest panel the grid is usable in.
-  CALENDAR_DAY_CHIPS: 3,
+  // Weeks listed on the assignments page, and so the window its expansion is
+  // fetched over. Six is a month and a half of planning without asking the
+  // server for a year of occurrences nobody is looking at.
+  ASSIGNMENT_WEEKS: 6,
 
   // The timeline chart. One fixed-width cell per column, so a row is a set of
   // equal boxes rather than a measured bar: nothing here needs a layout pass.
   // Week cells are narrow because a three-year range is ~157 of them; a day
-  // cell has to hold a label, so it is wider.
+  // cell has to hold a weekday header and a tracker nickname, so it is wider.
   TIMELINE_WEEK_CELL_PX: 20,
-  TIMELINE_DAY_CELL_PX: 40,
+  TIMELINE_DAY_CELL_PX: 64,
   TIMELINE_ROW_PX: 28,
 
   // The sticky label column, clamped off the longest row label at roughly one

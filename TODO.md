@@ -1,3 +1,5 @@
+- We need to discuse doing Sunday first instead of Monday first (toggle? TZ based?)
+
 - Is there a way to handle the hell-gate trackers better? `Tracker columbia-county:SHOPPING_WK_758:20260821 is not in the loaded feed.`
 
 In NEXT_PLAN:

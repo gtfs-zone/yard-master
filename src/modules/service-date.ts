@@ -101,6 +101,21 @@ export function sameMonth(a: ServiceDate, b: ServiceDate): boolean {
   return a.slice(0, 7) === b.slice(0, 7);
 }
 
+/** The Monday of the week a date falls in. */
+export function startOfWeek(date: ServiceDate): ServiceDate {
+  return addDays(date, -weekdayIndex(date));
+}
+
+/** `Mon 17 Aug`, for a week header and a day chip. */
+export function shortDayLabel(date: ServiceDate): string {
+  return asUtc(date).toLocaleDateString(undefined, {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  });
+}
+
 /** 0 for Monday, matching the order of `WEEKDAY_KEYS` and the rule columns. */
 export function weekdayIndex(date: ServiceDate): number {
   return (asUtc(date).getUTCDay() + 6) % 7;

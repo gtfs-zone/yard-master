@@ -79,7 +79,9 @@ import {
   ALERT_CAUSES,
   ALERT_EFFECTS,
   ALERT_SEVERITIES,
+  describeRecurrence,
   enumLabel,
+  formatWindow,
   fromLocalInput,
   parseRuleTime,
   personLabel,
@@ -87,11 +89,20 @@ import {
   toLocalInput,
 } from './managed-render';
 import { parseGtfsClock } from './feed-time';
-import { isServiceDate, today, WEEKDAY_KEYS, weekdayKey } from './service-date';
+import { dayLabel, isServiceDate, today, WEEKDAY_KEYS, weekdayKey } from './service-date';
 import { pickTrip, tripName } from './trip-picker';
 import { showModal } from './modal-utils';
 import { notify } from './notification-system';
 import { escHtml } from './render-utils';
+
+/** One line of the cell menu: what it writes, and the write itself. */
+interface MenuChoice {
+  label: string;
+  /** One sentence saying what this actually stores. */
+  detail: string;
+  className?: string;
+  run: () => Promise<void>;
+}
 
 /**
  * The empty option plus one per enumeration value, labelled for reading.
@@ -195,6 +206,8 @@ export class Actions {
           return await this.exceptOneDay(arg, 'added');
         case 'assign:unexcept':
           return await this.undoException(arg);
+        case 'assign:day':
+          return await this.editOneDay(arg);
         case 'manager:add':
           return await this.addManager();
         case 'member:remove':
@@ -1205,6 +1218,133 @@ export class Actions {
     await deleteRuleException(rule.id, exception.id);
     await this.app.refreshCalendar();
     notify.success(`${date} follows the rule again`);
+  }
+
+  /**
+   * The three writes one cell of the assignments chart can take.
+   *
+   * A cell is one trip on one date, and the model says exactly three things can
+   * be done to it: change the rule, which changes every week; remove this date,
+   * which skips one day; add this date, which runs one day. A fourth entry
+   * creates a rule where there is none, because an empty cell has nothing to
+   * except.
+   *
+   * "Every other week" is deliberately not offered. `TrackerRule` cannot say it,
+   * and a control that silently wrote forty exception rows would be lying about
+   * what was stored.
+   *
+   * `arg` is `date:trip_id`. The date is first and ten characters wide because a
+   * `trip_id` may itself contain a colon.
+   */
+  private async editOneDay(arg: string): Promise<void> {
+    const date = arg.slice(0, 10);
+    const tripId = arg.slice(11);
+    if (!isServiceDate(date) || !tripId) return;
+
+    const rules = [...(this.session.rules?.values() ?? [])].filter(
+      (rule) => rule.trip_id === tripId
+    );
+    const runningIds = new Set(
+      this.session.assignmentsOn(date)
+        .filter((a) => a.trip_id === tripId)
+        .map((a) => a.rule_id)
+    );
+
+    const trip = this.session.staticFeed?.trips.get(tripId);
+    const choices: MenuChoice[] = [];
+
+    for (const rule of rules) {
+      const nickname = this.session.trackers.get(rule.tracker_id)?.nickname ?? rule.tracker_id;
+      const exception = rule.exceptions.find((e) => e.date === date);
+      const running = runningIds.has(rule.id);
+
+      if (exception) {
+        // The date already differs from the recurrence, so the write that
+        // matters is putting it back rather than excepting it twice.
+        choices.push({
+          label: running ? `Stop running ${nickname} on this date` : `Un-skip ${nickname}`,
+          detail: 'Drops the exception, so this date follows the rule again.',
+          run: () => this.undoException(`${rule.id}:${date}`),
+        });
+      } else if (running) {
+        choices.push({
+          label: `Skip ${nickname} on this date`,
+          detail: 'One removed exception. Every other date the rule covers is untouched.',
+          run: () => this.exceptOneDay(`${rule.id}:${date}`, 'removed'),
+        });
+      } else {
+        choices.push({
+          label: `Run ${nickname} on this date`,
+          detail: 'One added exception. The rule\u2019s weekdays are untouched.',
+          run: () => this.exceptOneDay(`${rule.id}:${date}`, 'added'),
+        });
+      }
+
+      choices.push({
+        label: `Edit ${nickname}\u2019s rule\u2026`,
+        detail: `${describeRecurrence(rule)} \u00b7 ${formatWindow(rule.start_time, rule.end_time)}. Changing it changes every week.`,
+        run: () => this.editAssignment(String(rule.id)),
+      });
+    }
+
+    choices.push({
+      label: 'Assign a tracker to this trip\u2026',
+      detail: 'A new rule, starting on this date.',
+      className: 'btn-primary',
+      run: () => this.newAssignment(date, tripId),
+    });
+
+    await this.chooseAndRun(
+      trip ? `${tripName(trip)} on ${dayLabel(date)}` : `${tripId} on ${dayLabel(date)}`,
+      choices
+    );
+  }
+
+  /**
+   * A modal of one-line choices, run after it closes.
+   *
+   * The buttons are in the body rather than the action bar: there are as many
+   * as the cell has rules, each carries a sentence saying what it writes, and
+   * `showModal`'s footer is for confirm/cancel.
+   */
+  private async chooseAndRun(title: string, choices: MenuChoice[]): Promise<void> {
+    // A holder rather than a bare `let`: the assignment happens inside the
+    // mount handler, which the compiler's flow analysis does not follow.
+    const picked: { choice?: MenuChoice } = {};
+
+    await showModal({
+      title: escHtml(title),
+      body: `<ul class="space-y-2">${choices
+        .map(
+          (choice, i) => `<li>
+            <button type="button" data-choice="${i}"
+              class="btn btn-sm btn-block justify-start text-left ${choice.className ?? 'btn-outline'}">
+              ${escHtml(choice.label)}
+            </button>
+            <p class="text-xs opacity-60 mt-1">${escHtml(choice.detail)}</p>
+          </li>`
+        )
+        .join('')}</ul>`,
+      actions: [{ label: 'Cancel', onClick: () => {} }],
+      escapeAction: 0,
+      boxClassName: 'max-w-md',
+      onMount: (close) => {
+        const boxes = document.querySelectorAll<HTMLElement>('.modal-open .modal-box');
+        const box = boxes[boxes.length - 1];
+        box.addEventListener('click', (event) => {
+          const button = (event.target as HTMLElement | null)?.closest<HTMLElement>(
+            '[data-choice]'
+          );
+          if (!button) return;
+          picked.choice = choices[Number(button.dataset.choice)];
+          close();
+        });
+      },
+    });
+
+    // Run after the modal is gone, so a choice that opens its own dialog does
+    // not stack one on top of another.
+    await picked.choice?.run();
   }
 
   // ─── Managers ──────────────────────────────────────────────────────────────

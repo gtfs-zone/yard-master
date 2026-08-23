@@ -1,13 +1,20 @@
 /**
- * The assignments calendar: a month of tracker-to-trip assignments, and the
- * agenda for whichever day is selected.
+ * The assignments page: the weeks a feed is planned over, each openable, each
+ * a waterfall of trips against days.
  *
  * yard-master's own page, and the feature the rest of the app was shaped
- * around. Hand-rolled rather than a calendar library: what is drawn is one
- * month of a GTFS-shaped recurrence, which is `calendar.txt` plus
- * `calendar_dates.txt`, and no library models that.
+ * around. It is drawn with `timeline-chart.ts` in its `day` unit, which is the
+ * same chart the services page draws in weeks: one row per object, one column
+ * per date, the shading saying when it runs. Before this the page invented a
+ * month grid, its own selection styling and its own conflict highlight, none of
+ * which appeared anywhere else in the family.
  *
- * Two things this page never does itself:
+ * A row is a trip a rule already touches in that week — a feed has tens of
+ * thousands of trips and almost none of them are assigned, so the rows come
+ * from the rules rather than from the schedule — and a cell carries whichever
+ * tracker is running that trip that day.
+ *
+ * Three things this page never does itself:
  *
  * - **Expand a rule.** The occurrences come from `GET /feeds/{id}/assignments`,
  *   which shares its expansion with the resolver that decides what a tracker is
@@ -16,8 +23,10 @@
  *   silently.
  * - **Resolve a trip.** An assignment names a `trip_id`, and the loaded
  *   schedule may not contain it: a feed can be reloaded out from under a rule.
- *   Such an assignment still renders, as its bare id, because it is still real
- *   and still needs deleting or repointing.
+ *   Such a row still renders, as its bare id, because it is still real and
+ *   still needs deleting or repointing.
+ * - **Write anything.** A cell opens `assign:day`, which is where the three
+ *   writes a day can take live: edit the rule, skip this date, run this date.
  *
  * Every date here is a service date in feed-local time — the date a window
  * *starts* — so an overnight run appears once, on the day it started, with an
@@ -27,304 +36,351 @@
 import { CONFIG } from '../../config';
 import type { Assignment, TrackerRule } from '../../types/api';
 import type { PageState } from '../../types/page-state';
+import { cappedNote, entityRow, entityRowList, rowSection } from '../entity-row';
 import type { RenderContext } from '../render-utils';
 import { entityLink, escHtml, prop, propList, section } from '../render-utils';
 import { actionButton, describeRecurrence, formatWindow } from '../managed-render';
+import { renderTriangleIcon } from '../modal-utils';
+import { tripName } from '../trip-picker';
+import { renderTimelineChart, type TimelineRow } from '../timeline-chart';
 import {
-  addMonths,
-  dayLabel,
+  addDays,
   dayOfMonth,
   isServiceDate,
-  monthGrid,
-  monthLabel,
-  sameMonth,
-  startOfMonth,
+  shortDayLabel,
+  startOfWeek,
   today,
   WEEKDAY_LABELS,
+  weekdayIndex,
   type ServiceDate,
 } from '../service-date';
 
-/** The days one page of the calendar covers, padding included. */
+/** The days the listed weeks cover, which is the window that is fetched. */
 export function gridRange(anchor: ServiceDate): { from: ServiceDate; to: ServiceDate } {
-  const days = monthGrid(anchor);
-  return { from: days[0], to: days[days.length - 1] };
+  const from = startOfWeek(anchor);
+  return { from, to: addDays(from, CONFIG.ASSIGNMENT_WEEKS * 7 - 1) };
 }
 
-/** The month a state is looking at: its selected day, or today's month. */
+/** The week a state is looking at: its selected day's, or this one. */
 export function anchorDate(state: Extract<PageState, { type: 'assignments' }>): ServiceDate {
   return isServiceDate(state.date) ? state.date : today();
 }
 
+/** A rule is in a week when its own range overlaps it. Open-ended runs on. */
+function touchesWeek(rule: TrackerRule, from: ServiceDate, to: ServiceDate): boolean {
+  return rule.start_date <= to && (rule.end_date === null || rule.end_date >= from);
+}
+
+// ─── One week's worth of rows ─────────────────────────────────────────────────
+
+interface WeekData {
+  start: ServiceDate;
+  end: ServiceDate;
+  days: ServiceDate[];
+  /** Every occurrence in the week, for the summary count. */
+  assignments: Assignment[];
+  /** trip_id -> date -> the trackers running it that day. */
+  byTrip: Map<string, Map<ServiceDate, Assignment[]>>;
+  /** trip_id -> date -> the exception a rule on that trip carries. */
+  exceptions: Map<string, Map<ServiceDate, 'added' | 'removed'>>;
+  /** Row order: the trips any rule touches, plus any the expansion names. */
+  trips: string[];
+  /** Trip/date pairs claimed by two different trackers. */
+  conflicts: number;
+}
+
+function weekData(ctx: RenderContext, start: ServiceDate): WeekData {
+  const end = addDays(start, 6);
+  const days: ServiceDate[] = [];
+  for (let day = start; day <= end; day = addDays(day, 1)) days.push(day);
+
+  const assignments: Assignment[] = [];
+  const byTrip = new Map<string, Map<ServiceDate, Assignment[]>>();
+  let conflicts = 0;
+
+  for (const day of days) {
+    for (const assignment of ctx.session.assignmentsOn(day)) {
+      assignments.push(assignment);
+      const dates = byTrip.get(assignment.trip_id) ?? new Map<ServiceDate, Assignment[]>();
+      const cell = dates.get(day) ?? [];
+      cell.push(assignment);
+      dates.set(day, cell);
+      byTrip.set(assignment.trip_id, dates);
+      // Counted on the second *distinct* tracker only: one tracker held by two
+      // overlapping rules is redundant, not contradictory.
+      if (cell.length > 1 && new Set(cell.map((a) => a.tracker_id)).size === 2) conflicts++;
+    }
+  }
+
+  // A rule the week does not run adds its trip anyway, so the row is there to
+  // add a date to. This is the other half of the exception model: "run it after
+  // all" has to live somewhere a cell is not already filled.
+  const exceptions = new Map<string, Map<ServiceDate, 'added' | 'removed'>>();
+  const trips = new Set(byTrip.keys());
+  for (const rule of ctx.session.rules?.values() ?? []) {
+    if (!touchesWeek(rule, start, end)) continue;
+    trips.add(rule.trip_id);
+    for (const exception of rule.exceptions) {
+      if (exception.date < start || exception.date > end) continue;
+      const dates = exceptions.get(rule.trip_id) ?? new Map<ServiceDate, 'added' | 'removed'>();
+      dates.set(exception.date, exception.exception_type);
+      exceptions.set(rule.trip_id, dates);
+    }
+  }
+
+  return {
+    start,
+    end,
+    days,
+    assignments,
+    byTrip,
+    exceptions,
+    trips: sortTrips(ctx, [...trips]),
+    conflicts,
+  };
+}
+
 /**
- * Trips that two different trackers are both assigned to on one day.
+ * Row order: first departure, then id.
  *
- * The same tracker holding a trip twice is not a conflict — an overlapping pair
- * of rules on one tracker is redundant, not contradictory — but two trackers
- * on one trip means two vehicles claiming the same run in the published feed,
- * and only a person can say which one is right.
+ * Sorted on the raw clock string, since GTFS times are zero-padded and may run
+ * past 24:00, which makes lexicographic order departure order.
  */
-function conflictedTrips(assignments: Assignment[]): Set<string> {
-  const trackersByTrip = new Map<string, Set<string>>();
-  for (const a of assignments) {
-    const trackers = trackersByTrip.get(a.trip_id) ?? new Set<string>();
-    trackers.add(a.tracker_id);
-    trackersByTrip.set(a.trip_id, trackers);
-  }
-  const conflicts = new Set<string>();
-  for (const [tripId, trackers] of trackersByTrip) {
-    if (trackers.size > 1) conflicts.add(tripId);
-  }
-  return conflicts;
+function sortTrips(ctx: RenderContext, trips: string[]): string[] {
+  const feed = ctx.session.staticFeed;
+  const departure = (tripId: string): string =>
+    feed?.stopTimesByTrip.get(tripId)?.[0]?.departure_time ?? '';
+  return trips.sort((a, b) => departure(a).localeCompare(departure(b)) || a.localeCompare(b));
 }
 
-/** A trip as a link, or as its bare id when the loaded feed has lost it. */
-function tripLink(ctx: RenderContext, tripId: string): string {
-  const trip = ctx.session.staticFeed?.trips.get(tripId);
-  if (!trip) {
-    return `<span class="font-mono opacity-70" title="Not in the loaded schedule">${escHtml(
-      tripId
-    )}</span>`;
-  }
-  const routeId = trip.route_id;
-  return entityLink(
-    ctx,
-    { type: 'trip', trip_id: tripId, ...(routeId ? { route_id: routeId } : {}) },
-    trip.raw.trip_short_name?.trim() || trip.headsign || tripId
-  );
+/** The button that fills a cell. Clicking it is `assign:day` on that date. */
+function cellButton(tripId: string, date: ServiceDate, inner: string): string {
+  // The date is first and fixed-width, because a trip_id may itself contain a
+  // colon and the action splits this back apart on offset, not on separator.
+  return `<button type="button" data-action="assign:day"
+    data-arg="${escHtml(`${date}:${tripId}`)}"
+    class="flex h-5 w-full items-center justify-center gap-0.5 rounded px-0.5
+           hover:bg-base-content/10">${inner}</button>`;
 }
 
-// ─── The grid ─────────────────────────────────────────────────────────────────
-
-function renderNav(anchor: ServiceDate, ctx: RenderContext): string {
-  const jump = (date: ServiceDate, label: string, extra = ''): string =>
-    entityLink(ctx, { type: 'assignments', date }, label, `btn btn-xs btn-ghost ${extra}`);
-
-  return `
-    <div class="flex items-center justify-between gap-2">
-      ${jump(startOfMonth(addMonths(anchor, -1)), '‹')}
-      <span class="text-sm font-semibold">${escHtml(monthLabel(anchor))}</span>
-      <span class="flex gap-1">
-        ${jump(today(), 'Today')}
-        ${jump(startOfMonth(addMonths(anchor, 1)), '›')}
-      </span>
-    </div>`;
+/** The tick that says a date was changed by hand rather than by the weekdays. */
+function exceptionGlyph(kind: 'added' | 'removed' | undefined): string {
+  if (!kind) return '';
+  const added = kind === 'added';
+  return `<span class="inline-flex shrink-0 ${added ? 'text-success' : 'text-error'}"
+    >${renderTriangleIcon(`h-2.5 w-2.5 ${added ? '-rotate-90' : 'rotate-90'}`)}</span>`;
 }
 
-function renderDay(
-  ctx: RenderContext,
-  day: ServiceDate,
-  anchor: ServiceDate,
-  selected: ServiceDate | null
-): string {
-  const assignments = ctx.session.assignmentsOn(day);
-  const conflicts = conflictedTrips(assignments);
-  const outside = !sameMonth(day, anchor) ? 'opacity-40' : '';
-  const isToday = day === today();
-  const isSelected = day === selected;
+function weekRows(ctx: RenderContext, week: WeekData): TimelineRow[] {
+  const feed = ctx.session.staticFeed;
 
-  const shown = assignments.slice(0, CONFIG.CALENDAR_DAY_CHIPS);
-  const chips = shown
-    .map(
-      (a) => `<span class="block truncate text-[10px] leading-tight rounded px-1 ${
-        conflicts.has(a.trip_id) ? 'bg-warning/30' : 'bg-base-300'
-      }">${escHtml(a.tracker_nickname)}</span>`
+  return week.trips.map((tripId) => {
+    const trip = feed?.trips.get(tripId);
+    const route = trip ? feed?.routes.get(trip.route_id) : undefined;
+    const label = trip ? tripName(trip) : tripId;
+
+    return {
+      key: tripId,
+      label,
+      labelHtml: trip
+        ? entityLink(
+            ctx,
+            { type: 'trip', trip_id: tripId, ...(trip.route_id ? { route_id: trip.route_id } : {}) },
+            label,
+            'link link-hover'
+          )
+        : `<span class="font-mono opacity-70">${escHtml(tripId)}</span>`,
+      ...(route ? { color: route.color } : {}),
+      // Nothing is shaded by span here: a day either has a tracker on it or it
+      // does not, and that is what the cell renderer paints.
+      spans: [],
+      title: trip ? label : `${tripId} is not in the loaded schedule`,
+    };
+  });
+}
+
+function renderWeekChart(ctx: RenderContext, week: WeekData): string {
+  const rows = weekRows(ctx, week);
+
+  return renderTimelineChart(rows, {
+    unit: 'day',
+    from: week.start,
+    to: week.end,
+    emptyMessage: 'No rule touches this week.',
+    cellRenderer: (row, column) => {
+      const date = column.start;
+      const running = week.byTrip.get(row.key)?.get(date) ?? [];
+      const trackers = new Set(running.map((a) => a.tracker_id));
+      const glyph = exceptionGlyph(week.exceptions.get(row.key)?.get(date));
+
+      // Two rules on one tracker is one nickname, not a count: only a second
+      // *tracker* is worth spending the cell on.
+      const label =
+        trackers.size === 0
+          ? ''
+          : trackers.size === 1
+            ? running[0].tracker_nickname
+            : `${trackers.size} trackers`;
+      const tooltip = running.length
+        ? running
+            .map((a) => `${a.tracker_nickname} ${formatWindow(a.start_time, a.end_time)}`)
+            .join(' · ')
+        : `Nothing runs this trip on ${date}`;
+
+      return {
+        html: cellButton(
+          row.key,
+          date,
+          `${glyph}<span class="truncate">${escHtml(label)}</span>`
+        ),
+        // The row draws no spans, so the shading is the cell's alone: a day
+        // with a tracker on it is painted in the trip's route colour, and an
+        // empty one is left as background.
+        ...(running.length ? { color: row.color ?? 'var(--color-primary)' } : {}),
+        tooltip,
+        conflict: trackers.size > 1,
+      };
+    },
+  });
+}
+
+/** The seven days of a week as links, which is how the map's day is chosen. */
+function renderDayPicker(ctx: RenderContext, week: WeekData, selected: ServiceDate | null): string {
+  const buttons = week.days
+    .map((day) =>
+      entityLink(
+        ctx,
+        { type: 'assignments', date: day },
+        `${WEEKDAY_LABELS[weekdayIndex(day)]} ${dayOfMonth(day)}`,
+        `btn btn-xs ${day === selected ? 'btn-primary' : 'btn-ghost'}`
+      )
     )
     .join('');
-  const more =
-    assignments.length > shown.length
-      ? `<span class="block text-[10px] leading-tight opacity-60">+${
-          assignments.length - shown.length
-        }</span>`
-      : '';
-
-  return `<a href="${escHtml(ctx.href({ type: 'assignments', date: day }))}"
-     data-nav="${escHtml(JSON.stringify({ type: 'assignments', date: day }))}"
-     class="block rounded-md border p-1 min-h-12 hover:bg-base-200 ${outside}
-            ${isSelected ? 'border-primary bg-base-200' : 'border-base-300'}">
-    <span class="block text-[11px] tabular-nums ${
-      isToday ? 'font-bold underline' : 'opacity-60'
-    }">${dayOfMonth(day)}</span>
-    ${chips}${more}
-  </a>`;
+  return `<div class="flex flex-wrap gap-1">${buttons}</div>`;
 }
 
-function renderGrid(
+function renderWeekBody(
   ctx: RenderContext,
-  anchor: ServiceDate,
+  week: WeekData,
   selected: ServiceDate | null
 ): string {
-  const headers = WEEKDAY_LABELS.map(
-    (label) =>
-      `<div class="text-[10px] uppercase tracking-wide opacity-50 text-center">${escHtml(
-        label.slice(0, 2)
-      )}</div>`
-  ).join('');
-  const cells = monthGrid(anchor)
-    .map((day) => renderDay(ctx, day, anchor, selected))
-    .join('');
-
-  return `<div class="grid grid-cols-7 gap-1">${headers}${cells}</div>`;
+  return `
+    ${renderDayPicker(ctx, week, selected)}
+    ${renderWeekChart(ctx, week)}
+    <p class="text-xs opacity-50">A cell is the tracker running that trip that day. Clicking one
+      offers the three writes a day can take: edit the rule, skip this date, or run it after all.
+      A triangle marks a date already <span class="text-success">added</span> or
+      <span class="text-error">removed</span> by hand.</p>
+    <div>${actionButton('assign:new', week.start, 'Assign a trip', 'btn-primary')}</div>`;
 }
 
-// ─── The day agenda ───────────────────────────────────────────────────────────
-
-/** The exception, if any, this rule already carries for this date. */
-function exceptionOn(rule: TrackerRule | undefined, date: ServiceDate) {
-  return rule?.exceptions.find((e) => e.date === date);
-}
-
-function renderAssignmentRow(
-  ctx: RenderContext,
-  assignment: Assignment,
-  date: ServiceDate,
-  conflicted: boolean
-): string {
-  const rule = ctx.session.rules?.get(assignment.rule_id);
-  const added = exceptionOn(rule, date)?.exception_type === 'added';
-
-  return `<li class="rounded-lg border ${
-    conflicted ? 'border-warning' : 'border-base-300'
-  } p-2 space-y-1">
-    <div class="flex items-center justify-between gap-2 min-w-0">
-      <span class="min-w-0 truncate text-sm">${entityLink(
-        ctx,
-        { type: 'tracker', tracker_id: assignment.tracker_id },
-        assignment.tracker_nickname
+/** What a week says about itself when it is closed. */
+function weekSummary(week: WeekData): string {
+  const conflicts = week.conflicts
+    ? `<span class="badge badge-warning badge-xs">${week.conflicts} conflict${
+        week.conflicts === 1 ? '' : 's'
+      }</span>`
+    : '';
+  return `<span class="flex items-center gap-2 min-w-0">
+      <span class="truncate">${escHtml(
+        `${shortDayLabel(week.start)} – ${shortDayLabel(week.end)}`
       )}</span>
-      <span class="text-xs tabular-nums opacity-70 shrink-0">${escHtml(
-        formatWindow(assignment.start_time, assignment.end_time)
-      )}</span>
-    </div>
-    <div class="text-xs min-w-0 truncate">${tripLink(ctx, assignment.trip_id)}</div>
-    ${
-      conflicted
-        ? `<p class="text-xs text-warning">Another tracker is assigned to this trip today. The
-           published feed will carry two vehicles claiming the same run.</p>`
-        : ''
-    }
-    ${rule ? `<p class="text-xs opacity-50">${escHtml(describeRecurrence(rule))}</p>` : ''}
-    <div class="flex flex-wrap gap-1">
-      ${actionButton('assign:edit', String(assignment.rule_id), 'Edit')}
-      ${
-        added
-          ? actionButton(
-              'assign:unexcept',
-              `${assignment.rule_id}:${date}`,
-              'Undo this date'
-            )
-          : actionButton('assign:skip', `${assignment.rule_id}:${date}`, 'Skip this day')
-      }
-      ${actionButton(
-        'assign:delete',
-        String(assignment.rule_id),
-        'Delete rule',
-        'btn-outline btn-error'
-      )}
-    </div>
-  </li>`;
+      <span class="ml-auto flex items-center gap-2 shrink-0">
+        ${conflicts}
+        <span class="opacity-50 tabular-nums font-normal">${week.assignments.length}</span>
+      </span>
+    </span>`;
 }
 
 /**
- * Rules that exist but do not run on the selected day, each with a one-click
- * way to make them.
+ * The anchored week, always open, and the rest as disclosures.
  *
- * This is the other half of the exception model: "skip this day" lives on a
- * row that is there, and "run it after all" has to live somewhere a row is
- * not. Closed by default, because on a normal day it is every other rule.
+ * The anchored one is a plain section rather than a `<details>` on purpose: a
+ * page that forced a disclosure open would fight the panel, which restores what
+ * the reader opened on every re-render and would keep reopening a week they had
+ * just closed. Picking a day in another week re-anchors it instead.
  */
-function renderOtherRules(
+function renderWeek(
   ctx: RenderContext,
-  date: ServiceDate,
-  running: Set<number>
+  week: WeekData,
+  selected: ServiceDate | null,
+  anchored: boolean
 ): string {
-  const rules = [...(ctx.session.rules?.values() ?? [])].filter((r) => !running.has(r.id));
-  if (rules.length === 0) return '';
-
-  const rows = rules
-    .slice(0, CONFIG.RULE_LIST_MAX)
-    .map((rule) => {
-      const tracker = ctx.session.trackers.get(rule.tracker_id);
-      const removed = exceptionOn(rule, date)?.exception_type === 'removed';
-      return `<li class="flex items-center gap-2 min-w-0 py-0.5">
-        <span class="min-w-0 truncate">${escHtml(tracker?.nickname ?? rule.tracker_id)}
-          <span class="opacity-50">·</span> ${tripLink(ctx, rule.trip_id)}</span>
-        <span class="ml-auto shrink-0">${
-          removed
-            ? actionButton('assign:unexcept', `${rule.id}:${date}`, 'Un-skip')
-            : actionButton('assign:add-day', `${rule.id}:${date}`, 'Run this day')
-        }</span>
-      </li>`;
-    })
-    .join('');
+  if (anchored) {
+    return section(
+      `Week of ${shortDayLabel(week.start)}`,
+      `<div class="space-y-2">${renderWeekBody(ctx, week, selected)}</div>`,
+      week.conflicts
+        ? `<span class="badge badge-warning badge-xs ml-2">${week.conflicts} conflict${
+            week.conflicts === 1 ? '' : 's'
+          }</span>`
+        : ''
+    );
+  }
 
   return `
-    <details class="rounded-lg border border-base-300 mt-2" data-detail="assign:other">
-      <summary class="cursor-pointer px-3 py-2 text-xs font-medium">
-        Rules not running this day
-        <span class="opacity-50 tabular-nums">${rules.length}</span>
-      </summary>
-      <ul class="px-3 pb-3 text-xs">${rows}</ul>
+    <details class="rounded-lg border border-base-300" data-detail="assign:week:${escHtml(
+      week.start
+    )}">
+      <summary class="cursor-pointer px-3 py-2 text-sm font-medium">${weekSummary(week)}</summary>
+      <div class="px-3 pb-3 space-y-2">${renderWeekBody(ctx, week, selected)}</div>
     </details>`;
-}
-
-function renderAgenda(ctx: RenderContext, date: ServiceDate): string {
-  const assignments = ctx.session.assignmentsOn(date);
-  const conflicts = conflictedTrips(assignments);
-  const running = new Set(assignments.map((a) => a.rule_id));
-
-  const body = assignments.length
-    ? `<ul class="space-y-2">${assignments
-        .map((a) => renderAssignmentRow(ctx, a, date, conflicts.has(a.trip_id)))
-        .join('')}</ul>`
-    : '<p class="text-xs opacity-60">Nothing is assigned on this day.</p>';
-
-  return section(
-    dayLabel(date),
-    `${body}
-     <div class="mt-2">${actionButton(
-       'assign:new',
-       date,
-       'Assign a tracker',
-       'btn-primary'
-     )}</div>
-     ${renderOtherRules(ctx, date, running)}`
-  );
 }
 
 // ─── The page ─────────────────────────────────────────────────────────────────
 
-/** Every rule on the feed, for editing one the current month never shows. */
-function renderAllRules(ctx: RenderContext): string {
-  const rules = [...(ctx.session.rules?.values() ?? [])].sort((a, b) => a.id - b.id);
-  if (rules.length === 0) return '';
-
-  const rows = rules
-    .map((rule) => {
-      const tracker = ctx.session.trackers.get(rule.tracker_id);
-      return `<li class="py-1 space-y-0.5">
-        <div class="flex items-center gap-2 min-w-0">
-          <span class="min-w-0 truncate">${escHtml(tracker?.nickname ?? rule.tracker_id)}
-            <span class="opacity-50">·</span> ${tripLink(ctx, rule.trip_id)}</span>
-          <span class="ml-auto shrink-0 flex gap-1">
-            ${actionButton('assign:edit', String(rule.id), 'Edit')}
-            ${actionButton('assign:delete', String(rule.id), 'Delete', 'btn-outline btn-error')}
-          </span>
-        </div>
-        <p class="opacity-50">${escHtml(describeRecurrence(rule))} · ${escHtml(
-          formatWindow(rule.start_time, rule.end_time)
-        )}</p>
-      </li>`;
-    })
-    .join('');
+function renderNav(ctx: RenderContext, from: ServiceDate, to: ServiceDate): string {
+  const jump = (date: ServiceDate, label: string): string =>
+    entityLink(ctx, { type: 'assignments', date }, label, 'btn btn-xs btn-ghost');
+  const step = CONFIG.ASSIGNMENT_WEEKS * 7;
 
   return `
-    <details class="rounded-lg border border-base-300" data-detail="assign:rules">
-      <summary class="cursor-pointer px-3 py-2 text-sm font-semibold flex justify-between gap-2">
-        <span>All rules</span>
-        <span class="opacity-50 tabular-nums font-normal">${rules.length}</span>
-      </summary>
-      <ul class="px-3 pb-3 text-xs">${rows}</ul>
-    </details>`;
+    <div class="flex items-center justify-between gap-2">
+      ${jump(addDays(from, -step), '‹')}
+      <span class="text-sm font-semibold">${escHtml(
+        `${shortDayLabel(from)} – ${shortDayLabel(to)}`
+      )}</span>
+      <span class="flex gap-1">
+        ${jump(today(), 'Today')}
+        ${jump(addDays(from, step), '›')}
+      </span>
+    </div>`;
+}
+
+/** Every rule on the feed, for reaching one no listed week shows. */
+function renderAllRules(ctx: RenderContext): string {
+  const rules = [...(ctx.session.rules?.values() ?? [])];
+  if (rules.length === 0) return '';
+
+  const feed = ctx.session.staticFeed;
+  const nickname = (rule: TrackerRule): string =>
+    ctx.session.trackers.get(rule.tracker_id)?.nickname ?? rule.tracker_id;
+  rules.sort((a, b) => nickname(a).localeCompare(nickname(b)) || a.id - b.id);
+
+  const shown = rules.slice(0, CONFIG.RULE_LIST_MAX);
+  const rows = shown.map((rule) => {
+    const trip = feed?.trips.get(rule.trip_id);
+    return entityRow(ctx, {
+      state: { type: 'tracker', tracker_id: rule.tracker_id },
+      label: nickname(rule),
+      sublabel: `${trip ? tripName(trip) : rule.trip_id} · ${describeRecurrence(rule)} · ${formatWindow(
+        rule.start_time,
+        rule.end_time
+      )}`,
+      actionsHtml: `${actionButton('assign:edit', String(rule.id), 'Edit')}${actionButton(
+        'assign:delete',
+        String(rule.id),
+        'Delete',
+        'btn-outline btn-error'
+      )}`,
+    });
+  });
+
+  return rowSection(
+    'All rules',
+    rules.length,
+    `${entityRowList(rows, 'No rule is on this feed.')}${cappedNote(rules.length, shown.length)}`
+  );
 }
 
 export function renderAssignmentsPage(
@@ -337,12 +393,18 @@ export function renderAssignmentsPage(
   const anchor = anchorDate(state);
   const selected = isServiceDate(state.date) ? state.date : null;
   const range = gridRange(anchor);
-  // The window is fetched by `AppState` on every focus change, so a grid whose
-  // range the session does not cover is one whose request is still out.
+  // The window is fetched by `AppState` on every focus change, so a range the
+  // session does not cover is one whose request is still out.
   const loaded =
     session.assignmentsRange !== null &&
     session.assignmentsRange.from <= range.from &&
     session.assignmentsRange.to >= range.to;
+
+  const anchorWeek = startOfWeek(anchor);
+  const weeks: string[] = [];
+  for (let start = range.from; start <= range.to; start = addDays(start, 7)) {
+    weeks.push(renderWeek(ctx, weekData(ctx, start), selected, start === anchorWeek));
+  }
 
   return `
     <div class="space-y-4">
@@ -352,20 +414,10 @@ export function renderAssignmentsPage(
         the feed's own timezone.</p>
       </div>
 
-      ${renderNav(anchor, ctx)}
-      ${
-        loaded
-          ? ''
-          : '<p class="text-xs opacity-60">Loading this month…</p>'
-      }
-      ${renderGrid(ctx, anchor, selected)}
+      ${renderNav(ctx, range.from, range.to)}
+      ${loaded ? '' : '<p class="text-xs opacity-60">Loading these weeks…</p>'}
 
-      ${
-        selected
-          ? renderAgenda(ctx, selected)
-          : `<p class="text-xs opacity-60">Pick a day to see what runs on it, and to add or
-             change an assignment.</p>`
-      }
+      <div class="space-y-2">${weeks.join('')}</div>
 
       ${renderAllRules(ctx)}
 

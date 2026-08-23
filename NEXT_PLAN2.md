@@ -426,23 +426,60 @@ Editing a cell is therefore one of exactly three writes, and only those three
 are offered: edit the rule, which changes every week; add a `removed`
 exception, which skips one day; add an `added` exception, which runs one day.
 
-- [ ] `pages/assignments-page.ts` rebuilt on `timeline-chart.ts`; the
+- [x] `pages/assignments-page.ts` rebuilt on `timeline-chart.ts`; the
       `grid grid-cols-7` and `CONFIG.CALENDAR_DAY_CHIPS` deleted
-- [ ] Weeks as openable objects, keyed by `data-detail` so the panel's open
+- [x] Weeks as openable objects, keyed by `data-detail` so the panel's open
       state survives a re-render
-- [ ] Cell click into the three writes, through the existing `assign:*`
+- [x] Cell click into the three writes, through the existing `assign:*`
       actions. No new endpoints
-- [ ] Conflict marking carried on the cell, in the chart's own visual language
+- [x] Conflict marking carried on the cell, in the chart's own visual language
       rather than the page's `bg-warning/30` invention
-- [ ] `{ type: 'assignments'; date? }` keeps its `date` and now anchors a week;
+- [x] `{ type: 'assignments'; date? }` keeps its `date` and now anchors a week;
       `gridRange` widens to the visible weeks
-- [ ] `AppState`'s assignment window and `MAX_ASSIGNMENT_DAYS` still bound what
-      is fetched
-- [ ] The map still draws the selected day's assigned trips
+- [x] `AppState`'s assignment window still bounds what is fetched
+- [x] The map still draws the selected day's assigned trips
 
 **Gotcha.** An assignment can name a `trip_id` the loaded zip no longer has, as
 a feed can be reloaded out from under a rule. That row still renders, as its
 bare id, exactly as the page does today.
+
+There is no `MAX_ASSIGNMENT_DAYS`: the window has only ever been whatever
+`gridRange` asked for, which is now `CONFIG.ASSIGNMENT_WEEKS` (6) weeks from the
+anchor's Monday rather than a padded month. `startOfWeek` and `shortDayLabel`
+were added to `service-date.ts`, and `TIMELINE_DAY_CELL_PX` went 40 to 64,
+because a day cell now has to hold a tracker nickname rather than a date.
+
+The anchored week is a plain always-open `section`, not a forced-open
+`<details>`. The panel restores open disclosures from its own set on every
+re-render, so a page that rendered `open` would reopen a week the reader had
+just closed, fifteen seconds later. Every other week is a `<details>` keyed
+`assign:week:<monday>` and is the reader's to open; picking a day inside one
+re-anchors it, which is what makes it the open section.
+
+A row draws no spans. The shading is the cell renderer's alone — the trip's
+route colour where a tracker runs it, nothing where none does — because a span
+across the week would claim seven days of service the recurrence may not have.
+The exception ticks are drawn inside the cell button rather than through
+`TimelineRow.ticks`: the chart appends its ticks after the cell's html, and a
+full-width button leaves them nowhere to sit on a 28px row.
+
+`assign:day` is the one new action, on `date:trip_id` — date first and ten
+characters wide, since a `trip_id` may contain a colon. It opens a menu of
+exactly the writes that cell can take (undo the exception it already carries, or
+skip it, or run it; edit the rule; assign a tracker where there is none), each
+with a line saying what it stores. `chooseAndRun` runs the choice after the
+modal closes, so a choice that opens its own dialog does not stack.
+
+Conflicts are counted on the second *distinct* tracker: one tracker held by two
+overlapping rules is redundant, not contradictory, and the cell says its
+nickname once rather than "2 trackers". The week summary carries the count as a
+`badge-warning`; the cell carries the chart's `ring-warning`.
+
+The day agenda and the "rules not running this day" disclosure are gone. Their
+two jobs — reading a day, and running a rule on a day it skips — are the day
+picker strip and the cell menu. "All rules" survives, converted to
+`entity-row.ts` rows with the edit and delete buttons on them, since deleting a
+rule is deliberately not offered from a cell.
 
 ---
 
