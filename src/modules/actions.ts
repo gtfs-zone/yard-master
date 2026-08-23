@@ -66,7 +66,7 @@ import { formatBytes } from './feed-download';
 import { putSchedule, scheduleZipField } from './schedule-upload';
 import { rtEnum } from '../gtfs-rt-spec/index';
 import type { FieldOption, FormField } from './entity-form';
-import { showEntityForm } from './entity-form';
+import { showEntityForm, weekdayBits, weekdayValue } from './entity-form';
 import {
   agencyOptions,
   directionOptions,
@@ -253,7 +253,7 @@ export class Actions {
           label: 'Name',
           value: feed.feed_name,
           autofocus: true,
-          help: 'Appears in every public GTFS-RT URL this feed serves, so renaming it moves them.',
+          tooltip: 'Appears in every public GTFS-RT URL this feed serves, so renaming it moves them.',
         },
         {
           name: 'source_kind',
@@ -264,7 +264,7 @@ export class Actions {
             { value: 'url', label: 'Link a URL' },
             ...(canHost ? [{ value: 'hosted', label: 'Serve the uploaded zip' }] : []),
           ],
-          help: canHost
+          tooltip: canHost
             ? 'Switching back to a URL leaves the uploads in place.'
             : 'Upload a zip to host this feed. Replace schedule does that.',
         },
@@ -274,7 +274,7 @@ export class Actions {
           type: 'url',
           value: feed.static_feed_url,
           visibleWhen: { field: 'source_kind', equals: 'url' },
-          help: 'Changing it re-downloads the schedule, here and on the server.',
+          tooltip: 'Changing it re-downloads the schedule, here and on the server.',
         },
       ],
       validate: (values): Record<string, string> | null =>
@@ -496,13 +496,13 @@ export class Actions {
           name: 'nickname',
           label: 'Nickname',
           autofocus: true,
-          help: 'The label the map and the public feed show. Unique within this feed.',
+          tooltip: 'The label the map and the public feed show. Unique within this feed.',
         },
         {
           name: 'device_key',
           label: 'Device key',
           placeholder: 'generated for you',
-          help: 'The Traccar credential. Settable now and never again, so leave it blank unless you are matching an existing device.',
+          tooltip: 'The Traccar credential. Settable now and never again, so leave it blank unless you are matching an existing device.',
         },
       ],
       submit: (values) => {
@@ -625,7 +625,7 @@ export class Actions {
         spec: { message: 'Alert', field: 'header_text' },
         value: alert?.header_text ?? '',
         autofocus: true,
-        help: 'The one line a rider sees. Shown in every consumer of this feed.',
+        tooltip: 'The one line a rider sees. Shown in every consumer of this feed.',
       },
       {
         name: 'description_text',
@@ -678,7 +678,7 @@ export class Actions {
         spec: { message: 'TimeRange', field: 'start' },
         type: 'datetime',
         value: toLocalInput(alert?.active_period_start),
-        help: 'In your own timezone. Leave both blank to publish it for as long as it exists.',
+        tooltip: 'In your own timezone. Leave both blank to publish it for as long as it exists.',
       },
       {
         name: 'active_period_end',
@@ -810,7 +810,7 @@ export class Actions {
         type: 'combo',
         options: directions,
         comboEmpty: NO_SCHEDULE,
-        help: 'Only means something alongside a route id.',
+        tooltip: 'Only means something alongside a route id.',
       },
       {
         name: 'stop_id',
@@ -943,7 +943,7 @@ export class Actions {
         name: 'trip_id',
         label: 'Trip',
         value: rule?.trip_id ?? tripId,
-        help: 'The trip_id as the feed spells it. Nothing checks it against the schedule, so a reloaded feed can outlive it.',
+        tooltip: 'The trip_id as the feed spells it. Nothing checks it against the schedule, so a reloaded feed can outlive it.',
       },
       {
         name: 'repeats',
@@ -955,23 +955,27 @@ export class Actions {
           { value: 'once', label: 'Once, on the start date' },
         ],
       },
-      ...WEEKDAY_KEYS.map((key) => ({
-        name: key,
-        label: key.charAt(0).toUpperCase() + key.slice(1),
-        type: 'checkbox' as const,
-        value: String(rule ? rule[key] : key === weekdayKey(startDate)),
-      })),
+      {
+        name: 'weekdays',
+        label: 'Runs on',
+        type: 'weekdays',
+        value: weekdayValue(
+          WEEKDAY_KEYS.map((key) => (rule ? Boolean(rule[key]) : key === weekdayKey(startDate)))
+        ),
+      },
       {
         name: 'start_date',
         label: 'First service date',
+        type: 'date',
         value: rule?.start_date ?? startDate,
-        help: 'YYYY-MM-DD, in the feed\u2019s timezone.',
+        tooltip: 'In the feed\u2019s timezone, not yours.',
       },
       {
         name: 'end_date',
         label: 'Last service date',
+        type: 'date',
         value: rule?.end_date ?? '',
-        placeholder: 'open-ended',
+        tooltip: 'Leave it blank and the rule runs until it is deleted.',
       },
       {
         name: 'start_time',
@@ -984,7 +988,7 @@ export class Actions {
         label: 'Ends',
         value: rule ? ruleTimeInput(rule.end_time) : '',
         placeholder: 'HH:MM, or 25:10 for the small hours',
-        help: 'Past midnight keeps counting: a run ending at 01:10 the next morning is 25:10.',
+        tooltip: 'Past midnight keeps counting: a run ending at 01:10 the next morning is 25:10.',
       },
     ];
   }
@@ -993,11 +997,9 @@ export class Actions {
   private validateRule(values: Record<string, string>): Record<string, string> | null {
     const errors: Record<string, string> = {};
     if (!values.trip_id.trim()) errors.trip_id = 'A rule needs a trip';
-    if (!isServiceDate(values.start_date.trim())) {
-      errors.start_date = 'A date as YYYY-MM-DD';
-    }
-    const end = values.end_date.trim();
-    if (end && !isServiceDate(end)) errors.end_date = 'A date as YYYY-MM-DD';
+    // The input is a `date`, so its shape is the browser's problem and the
+    // only thing left to check is that one was picked at all.
+    if (!values.start_date) errors.start_date = 'A rule needs a first service date';
     const start_time = parseRuleTime(values.start_time);
     const end_time = parseRuleTime(values.end_time);
     if (start_time === null) errors.start_time = 'A clock time as HH:MM';
@@ -1007,10 +1009,7 @@ export class Actions {
     }
     if (values.repeats !== 'weekly' && values.repeats !== 'once') {
       errors.repeats = 'Say whether this repeats';
-    } else if (
-      values.repeats === 'weekly' &&
-      !WEEKDAY_KEYS.some((key) => values[key] === 'true')
-    ) {
+    } else if (values.repeats === 'weekly' && !weekdayBits(values.weekdays).some(Boolean)) {
       errors.repeats = 'Pick at least one weekday, or make it a one-off';
     }
     return Object.keys(errors).length ? errors : null;
@@ -1028,15 +1027,16 @@ export class Actions {
     const once = values.repeats === 'once';
     const startDate = values.start_date.trim();
     const endDate = values.end_date.trim();
+    const days = weekdayBits(values.weekdays);
     return {
       trip_id: values.trip_id.trim(),
-      monday: !once && values.monday === 'true',
-      tuesday: !once && values.tuesday === 'true',
-      wednesday: !once && values.wednesday === 'true',
-      thursday: !once && values.thursday === 'true',
-      friday: !once && values.friday === 'true',
-      saturday: !once && values.saturday === 'true',
-      sunday: !once && values.sunday === 'true',
+      monday: !once && days[0],
+      tuesday: !once && days[1],
+      wednesday: !once && days[2],
+      thursday: !once && days[3],
+      friday: !once && days[4],
+      saturday: !once && days[5],
+      sunday: !once && days[6],
       start_date: startDate,
       end_date: once ? startDate : endDate || null,
       start_time: parseRuleTime(values.start_time)!,
@@ -1363,7 +1363,7 @@ export class Actions {
           name: 'email',
           label: 'Email address',
           autofocus: true,
-          help: 'Matched against verified addresses only.',
+          tooltip: 'Matched against verified addresses only.',
         },
       ],
       submit: (values) => addMember(feed.id, values.email.trim()),

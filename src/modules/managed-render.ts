@@ -15,7 +15,7 @@
 
 import type { LoadStatus, Member, TrackerRule } from '../types/api';
 import { rtEnumValues } from '../gtfs-rt-spec/index';
-import { WEEKDAY_KEYS, WEEKDAY_LABELS } from './service-date';
+import { WEEKDAY_DISPLAY, WEEKDAY_KEYS, WEEKDAY_LABELS } from './service-date';
 import type { FeedSession } from './feed-session';
 import { escHtml, formatAbsolute, formatRelative, timestampWithAge } from './render-utils';
 
@@ -257,9 +257,7 @@ export function formatWindow(start: number, end: number): string {
  * "never".
  */
 export function describeRecurrence(rule: TrackerRule): string {
-  const days = WEEKDAY_KEYS.filter((key) => rule[key]).map(
-    (key) => WEEKDAY_LABELS[WEEKDAY_KEYS.indexOf(key)]
-  );
+  const days = WEEKDAY_LABELS.filter((_, slot) => rule[WEEKDAY_KEYS[WEEKDAY_DISPLAY[slot]]]);
   const added = rule.exceptions.filter((e) => e.exception_type === 'added').length;
   const recurrence =
     days.length === 7

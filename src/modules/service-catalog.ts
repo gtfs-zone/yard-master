@@ -18,7 +18,7 @@
 
 import type { Calendar, GTFSStatic, Trip } from '../gtfs-static';
 import type { ServiceDate } from './service-date';
-import { WEEKDAY_LABELS, weekdayIndex } from './service-date';
+import { ruleWeekdayIndex, WEEKDAY_DISPLAY, WEEKDAY_LABELS } from './service-date';
 
 /** One service_id, with both halves of its calendar resolved. */
 export interface ServiceSummary {
@@ -43,7 +43,9 @@ export function toServiceDate(compact: string | undefined): ServiceDate | null {
 
 /** `Mon, Wed, Fri`, or what a service with no weekly pattern runs on. */
 export function weekdaysLabel(days: readonly boolean[]): string {
-  const named = WEEKDAY_LABELS.filter((_, i) => days[i]);
+  // `days` is Monday-first, the labels are in display order, so the flag each
+  // label is about is the one `WEEKDAY_DISPLAY` points at.
+  const named = WEEKDAY_LABELS.filter((_, slot) => days[WEEKDAY_DISPLAY[slot]]);
   if (named.length === 7) return 'Every day';
   if (named.length === 0) return 'No weekly pattern';
   return named.join(', ');
@@ -128,7 +130,7 @@ export function serviceRunsOn(service: ServiceSummary, date: ServiceDate): boole
   if (!service.calendar) return false;
   if (service.start && date < service.start) return false;
   if (service.end && date > service.end) return false;
-  return service.days[weekdayIndex(date)] === true;
+  return service.days[ruleWeekdayIndex(date)] === true;
 }
 
 /**

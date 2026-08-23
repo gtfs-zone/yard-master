@@ -102,6 +102,19 @@ export function specLabelContent(label: string, ref?: SpecRef): string {
 }
 
 /**
+ * A plain label carrying a tooltip of this app's own words.
+ *
+ * Same trigger markup as `specLabelContent`, so `tooltip-position.ts`'s portal
+ * picks it up with no new code. The content is a sentence about the field
+ * rather than a spec entry: the rule somebody cannot guess, which used to be a
+ * line of small print under the input.
+ */
+export function tooltipLabelContent(label: string, tooltip: string): string {
+  return `<span class="field-tooltip-trigger cursor-help" tabindex="0"
+    data-tooltip-content="${escHtml(tooltip)}">${escHtml(label)}</span>`;
+}
+
+/**
  * One enum value's description, flattened to a line.
  *
  * `Cause`, `Effect` and `SeverityLevel` are listed in the reference as bare

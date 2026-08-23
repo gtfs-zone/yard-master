@@ -32,8 +32,9 @@ import { CONFIG } from '../config';
 import { ApiError, SessionExpiredError } from './api-client';
 import { showModal } from './modal-utils';
 import { escHtml } from './render-utils';
+import { WEEKDAY_DISPLAY, WEEKDAY_KEYS, WEEKDAY_LABELS } from './service-date';
 import type { SpecRef } from './spec-field';
-import { enumValueDescription, specLabelContent } from './spec-field';
+import { enumValueDescription, specLabelContent, tooltipLabelContent } from './spec-field';
 
 export type FieldType =
   | 'text'
@@ -43,6 +44,8 @@ export type FieldType =
   | 'select'
   | 'combo'
   | 'datetime'
+  | 'date'
+  | 'weekdays'
   | 'checkbox'
   | 'file';
 
@@ -75,8 +78,15 @@ export interface FormField {
    */
   comboEmpty?: string;
   placeholder?: string;
-  /** A line under the input, for the rule a person cannot guess. */
-  help?: string;
+  /**
+   * The rule a person cannot guess, in a tooltip on the label.
+   *
+   * On the label rather than under the input, because a form of eight fields
+   * each with a line of small print under it is a wall of prose with inputs in
+   * it. Same trigger the spec fields use, so there is one way to explain a
+   * field.
+   */
+  tooltip?: string;
   /** Read-only fields still render, because context is half of a form. */
   readonly?: boolean;
   autofocus?: boolean;
@@ -160,6 +170,23 @@ export interface EntityFormOptions<T> {
    * that it can be accepted as it stands.
    */
   allowPristine?: boolean;
+}
+
+/**
+ * The seven flags a `weekdays` field carries, in `WEEKDAY_KEYS` order.
+ *
+ * The value is a seven-character string of `0` and `1` so it lives in a hidden
+ * input like every other field: dirty tracking compares strings, and a control
+ * that kept its state anywhere else would need its own path through both.
+ */
+export function weekdayBits(value: string | number | null | undefined): boolean[] {
+  const text = value === null || value === undefined ? '' : String(value);
+  return WEEKDAY_KEYS.map((_, i) => text[i] === '1');
+}
+
+/** The value a `weekdays` field holds for a set of flags in `WEEKDAY_KEYS` order. */
+export function weekdayValue(flags: readonly boolean[]): string {
+  return WEEKDAY_KEYS.map((_, i) => (flags[i] ? '1' : '0')).join('');
 }
 
 /** The current value of every field, keyed by name. */
@@ -264,6 +291,21 @@ function renderInput(field: FormField): string {
     </label>
     <div class="pt-2 empty:hidden" data-preview="${escHtml(field.name)}"></div>`;
   }
+  if (type === 'weekdays') {
+    // Display order for the pills, rule-column order in the value: the button
+    // carries the index it writes, so the two never have to line up.
+    const flags = weekdayBits(value);
+    return `<div class="flex flex-wrap gap-1" data-weekdays="${escHtml(field.name)}">
+      <input ${common} type="hidden" value="${escHtml(weekdayValue(flags))}" />
+      ${WEEKDAY_DISPLAY.map(
+        (i, slot) =>
+          `<button type="button" data-weekday="${i}" aria-pressed="${flags[i]}"
+            class="btn btn-xs ${flags[i] ? 'btn-primary' : 'btn-outline'}">${escHtml(
+              WEEKDAY_LABELS[slot]
+            )}</button>`
+      ).join('')}
+    </div>`;
+  }
   if (type === 'checkbox') {
     return `<input ${common} type="checkbox" class="toggle toggle-sm"${
       value === 'true' ? ' checked' : ''
@@ -273,9 +315,23 @@ function renderInput(field: FormField): string {
   // `url` is deliberately a text input: `type="url"` brings the browser's own
   // validation bubble, which fires before the request and cannot be styled to
   // match the field errors the server sends back.
-  const inputType = type === 'number' ? 'number' : type === 'datetime' ? 'datetime-local' : 'text';
+  const inputType =
+    type === 'number'
+      ? 'number'
+      : type === 'datetime'
+        ? 'datetime-local'
+        : type === 'date'
+          ? 'date'
+          : 'text';
   return `<input ${common} type="${inputType}" value="${escHtml(value)}"
     class="input input-bordered input-sm w-full" autocomplete="off" />`;
+}
+
+/** The label's own markup: a spec entry's tooltip, this app's, or neither. */
+function labelContent(field: FormField): string {
+  if (field.spec) return specLabelContent(field.label, field.spec);
+  if (field.tooltip) return tooltipLabelContent(field.label, field.tooltip);
+  return escHtml(field.label);
 }
 
 function renderField(field: FormField): string {
@@ -284,7 +340,12 @@ function renderField(field: FormField): string {
   // A `combo` wraps its input in a positioning div, so its label is a block
   // too: a `<label>` whose control is not its only focusable descendant sends
   // clicks on the popup to the input instead.
-  const tag = field.type === 'file' || field.type === 'combo' ? 'div' : 'label';
+  // A `weekdays` field is buttons, and a label wrapping a button forwards a
+  // click on the label to it, toggling a day nobody pressed.
+  const tag =
+    field.type === 'file' || field.type === 'combo' || field.type === 'weekdays'
+      ? 'div'
+      : 'label';
   const when = field.visibleWhen;
   const input = field.pick
     ? `<div class="flex gap-2">
@@ -299,9 +360,8 @@ function renderField(field: FormField): string {
         ? ` data-when-field="${escHtml(when.field)}" data-when-equals="${escHtml(when.equals)}"`
         : ''
     }>
-      <span class="label-text text-xs">${specLabelContent(field.label, field.spec)}</span>
+      <span class="label-text text-xs">${labelContent(field)}</span>
       ${input}
-      ${field.help ? `<span class="label-text-alt opacity-50">${escHtml(field.help)}</span>` : ''}
       <span class="label-text-alt text-error hidden" data-error="${escHtml(field.name)}"></span>
     </${tag}>`;
 }
@@ -551,6 +611,40 @@ export async function showEntityForm<T>(options: EntityFormOptions<T>): Promise<
           if (!button) return;
           event.preventDefault();
           choose(button.dataset.comboValue!);
+        });
+      }
+
+      /**
+       * The weekday pills.
+       *
+       * The buttons are the control and the hidden input is the value, so
+       * everything downstream — dirty tracking, `validate`, `submit` — reads
+       * them the way it reads a text field.
+       */
+      for (const field of options.fields) {
+        if (field.type !== 'weekdays') continue;
+        const wrap = root.querySelector<HTMLElement>(
+          `[data-weekdays="${CSS.escape(field.name)}"]`
+        );
+        const input = wrap?.querySelector<HTMLInputElement>(
+          `input[data-field="${CSS.escape(field.name)}"]`
+        );
+        if (!wrap || !input || field.readonly) continue;
+        wrap.addEventListener('click', (event) => {
+          const button = (event.target as HTMLElement | null)?.closest<HTMLElement>(
+            '[data-weekday]'
+          );
+          if (!button) return;
+          const index = Number(button.dataset.weekday);
+          const flags = weekdayBits(input.value);
+          flags[index] = !flags[index];
+          input.value = weekdayValue(flags);
+          button.setAttribute('aria-pressed', String(flags[index]));
+          button.classList.toggle('btn-primary', flags[index]);
+          button.classList.toggle('btn-outline', !flags[index]);
+          // Setting `.value` in script fires nothing, and `syncButtons` is
+          // what re-enables Save.
+          input.dispatchEvent(new Event('change', { bubbles: true }));
         });
       }
 

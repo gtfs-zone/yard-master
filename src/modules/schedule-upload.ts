@@ -94,7 +94,7 @@ export function scheduleZipField(overrides: Partial<FormField> = {}): FormField 
     label: 'Schedule zip',
     type: 'file',
     accept: '.zip,application/zip',
-    help: `A GTFS zip, up to ${Math.round(CONFIG.UPLOAD_MAX_BYTES / (1 << 20))} MB. It is
+    tooltip: `A GTFS zip, up to ${Math.round(CONFIG.UPLOAD_MAX_BYTES / (1 << 20))} MB. It is
            stored here and published at this feed's own URL.`,
     onFile: (file, slot) => {
       if (file) renderPreview(slot, file);
@@ -138,7 +138,7 @@ export async function showNewFeedForm(): Promise<Feed | null> {
         label: 'Name',
         autofocus: true,
         placeholder: 'my-agency',
-        help: `Starts with a lowercase letter, then lowercase letters, digits, - and _, 3-64
+        tooltip: `Starts with a lowercase letter, then lowercase letters, digits, - and _, 3-64
                characters. It appears in every public GTFS-RT URL this feed serves, so it
                cannot be changed casually.`,
       },
@@ -148,7 +148,7 @@ export async function showNewFeedForm(): Promise<Feed | null> {
         type: 'select',
         value: 'url',
         options: SOURCE_OPTIONS,
-        help: 'A linked feed is re-downloaded from its URL; an uploaded one is stored and served here.',
+        tooltip: 'A linked feed is re-downloaded from its URL; an uploaded one is stored and served here.',
       },
       {
         name: 'static_feed_url',

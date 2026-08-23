@@ -35,6 +35,7 @@ import {
   dayOfMonth,
   monthShortLabel,
   today as todayDate,
+  WEEKDAY_DISPLAY,
   WEEKDAY_KEYS,
   WEEKDAY_LABELS,
   weekdayIndex,
@@ -78,9 +79,9 @@ export interface TimelineRow {
   spans: TimelineSpan[];
   ticks?: TimelineTick[];
   /**
-   * Seven booleans, Monday first, for the weekday-dot column. A row that omits
-   * them renders an empty dot cell, and a chart where no row has them drops the
-   * column entirely.
+   * Seven booleans in display order, for the weekday-dot column. A row that
+   * omits them renders an empty dot cell, and a chart where no row has them
+   * drops the column entirely.
    */
   weekdays?: readonly boolean[];
   /** Plain text over the dots. Defaults to the day names. */
@@ -124,7 +125,7 @@ export interface TimelineOptions {
   emptyMessage?: string;
 }
 
-/** One drawn column: a week Monday to Sunday, or a single day. */
+/** One drawn column: a whole displayed week, or a single day. */
 export interface TimelineColumnRange {
   start: ServiceDate;
   end: ServiceDate;
@@ -154,10 +155,13 @@ function tooltipTrigger(text: string, content: string, className = ''): string {
     data-tooltip-content="${escHtml(text)}">${content}</span>`;
 }
 
-/** Seven Monday-first booleans out of anything with `monday`..`sunday` on it. */
+/**
+ * Seven booleans out of anything with `monday`..`sunday` on it, in display
+ * order, which is what the dots and the tooltip under them are drawn in.
+ */
 export function weekdayFlags(source: Partial<Record<WeekdayKey, unknown>>): boolean[] {
-  return WEEKDAY_KEYS.map((key) => {
-    const value = source[key];
+  return WEEKDAY_DISPLAY.map((i) => {
+    const value = source[WEEKDAY_KEYS[i]];
     return value === true || value === 1 || value === '1';
   });
 }

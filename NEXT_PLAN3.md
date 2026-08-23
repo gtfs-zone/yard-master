@@ -395,25 +395,25 @@ not the contract.
 Make every form field in the app render the way edit renders one. This is one
 module and then a sweep, not a per-form fix.
 
-- [ ] `entity-form.ts`: `FieldConfig.help` is **deleted**. Its replacement is
+- [x] `entity-form.ts`: `FieldConfig.help` is **deleted**. Its replacement is
       `tooltip?: string`, rendered through the same
       `.field-tooltip-trigger` + `data-tooltip-content` markup
       `spec-field.ts:93` already emits, so the portal in
       `utils/tooltip-position.ts` picks it up with no new code.
-- [ ] Move every existing `help:` string in `actions.ts` to `tooltip:`.
+- [x] Move every existing `help:` string in `actions.ts` to `tooltip:`.
       Delete the `label-text-alt` branch at `entity-form.ts:304`.
-- [ ] Inputs adopt edit's classes: `input input-bordered input-sm` for text,
+- [x] Inputs adopt edit's classes: `input input-bordered input-sm` for text,
       `select select-bordered select-sm` for selects. Compare against
       `service-days-controller.ts:644` before changing anything.
-- [ ] New field type `'date'` rendering `<input type="date">`. `start_date`
+- [x] New field type `'date'` rendering `<input type="date">`. `start_date`
       and `end_date` on the rule form switch to it, and their
       `YYYY-MM-DD` placeholders and format validators go — the browser owns
       that now, and `isServiceDate` only guards the parse.
-- [ ] New field type `'weekdays'` rendering coloring-book's day pills:
+- [x] New field type `'weekdays'` rendering coloring-book's day pills:
       seven `btn btn-xs`, `btn-primary` on and `btn-outline` off, one hidden
       input carrying the seven booleans. Replaces the seven separate
       `type: 'checkbox'` fields.
-- [ ] Weeks start on **Sunday**. `config.ts` gains `WEEK_START: 0`.
+- [x] Weeks start on **Sunday**. `config.ts` gains `WEEK_START: 0`.
 
 **Gotchas.**
 The Sunday change is not cosmetic and touches four files.
@@ -431,6 +431,44 @@ not a native input. Its state must live in a hidden input so
 unchanged.
 
 ---
+
+**What was found doing it.**
+
+`CONFIG.WEEK_START` is read in `Date.getUTCDay()` numbering, so 0 is Sunday.
+`weekdayIndex` is now the display slot and a new `ruleWeekdayIndex` is the
+Monday-first one; `weekdayKey` is the only caller of the second, plus
+`serviceRunsOn`, whose `service.days` comes straight out of `calendar.txt` and
+is Monday-first for the same reason the rule columns are.
+
+The bridge between the two orders is one exported array, `WEEKDAY_DISPLAY`:
+for each display slot, the index into `WEEKDAY_KEYS` it shows. `WEEKDAY_LABELS`
+is derived from it, so anything that draws a week iterates the labels and reads
+the flag `WEEKDAY_DISPLAY` points at. That is `weekdaysLabel`,
+`describeRecurrence` and `timeline-chart`'s `weekdayFlags`, which now returns
+its seven booleans in display order because the dots and their tooltip are the
+only things that read it.
+
+`service-date.ts` importing `CONFIG` put `config.ts` into the import graph of
+`scripts/check-alert-enums.ts`, which runs under tsx where `import.meta.env`
+does not exist at all. `RT_BASE` reads it through `?.` now; the alternative was
+a second copy of the week start somewhere the scripts cannot reach.
+
+A `weekdays` field's value is a seven-character string of `0` and `1` in
+`WEEKDAY_KEYS` order, in a hidden input, with `weekdayBits`/`weekdayValue`
+exported from `entity-form.ts` for the caller that has to write a rule body.
+The pills carry the index they write rather than the slot they sit in, so the
+display order and the column order never have to line up at click time. The
+field renders as a `div` rather than a `label` for the same reason `file` and
+`combo` do: a label would forward its own clicks into the first button.
+
+`repeats` and its weekly/once branch are untouched, and so is the `once`
+handling in `ruleBody`; both are Phase 5's. What changed under them is only
+that the seven booleans arrive as one value instead of seven.
+
+`validateRule` lost both date-format branches. `start_date` still has to be
+answered — a rule with no first service date is not a rule — but its shape is
+the date input's problem now, and `end_date` empty is what open-ended has
+always meant to the API.
 
 ## Phase 5 — Assigning
 

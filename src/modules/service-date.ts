@@ -13,6 +13,7 @@
  * classic way a calendar grid ends up one day out for half the world.
  */
 
+import { CONFIG } from '../config';
 import { feedTimezone } from './feed-time';
 
 /** A `YYYY-MM-DD` service date. Named for what it means, not for its shape. */
@@ -31,7 +32,23 @@ export const WEEKDAY_KEYS = [
 
 export type WeekdayKey = (typeof WEEKDAY_KEYS)[number];
 
-export const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
+/** One label per rule column, in `WEEKDAY_KEYS` order. */
+const KEY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
+
+/**
+ * For each display slot, the index into `WEEKDAY_KEYS` it shows.
+ *
+ * Display starts on `CONFIG.WEEK_START` and the rule columns start on Monday,
+ * so everything that draws a week goes through this and everything that writes
+ * a rule column does not.
+ */
+export const WEEKDAY_DISPLAY: readonly number[] = Array.from(
+  { length: 7 },
+  (_, slot) => (CONFIG.WEEK_START + slot + 6) % 7
+);
+
+/** Day labels in display order, aligned with `WEEKDAY_DISPLAY`. */
+export const WEEKDAY_LABELS: readonly string[] = WEEKDAY_DISPLAY.map((i) => KEY_LABELS[i]);
 
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
@@ -101,7 +118,7 @@ export function sameMonth(a: ServiceDate, b: ServiceDate): boolean {
   return a.slice(0, 7) === b.slice(0, 7);
 }
 
-/** The Monday of the week a date falls in. */
+/** The first day of the displayed week a date falls in. */
 export function startOfWeek(date: ServiceDate): ServiceDate {
   return addDays(date, -weekdayIndex(date));
 }
@@ -116,13 +133,18 @@ export function shortDayLabel(date: ServiceDate): string {
   });
 }
 
-/** 0 for Monday, matching the order of `WEEKDAY_KEYS` and the rule columns. */
+/** The display slot a date falls in: 0 is `CONFIG.WEEK_START`. */
 export function weekdayIndex(date: ServiceDate): number {
+  return (asUtc(date).getUTCDay() - CONFIG.WEEK_START + 7) % 7;
+}
+
+/** 0 for Monday, matching the order of `WEEKDAY_KEYS` and the rule columns. */
+export function ruleWeekdayIndex(date: ServiceDate): number {
   return (asUtc(date).getUTCDay() + 6) % 7;
 }
 
 export function weekdayKey(date: ServiceDate): WeekdayKey {
-  return WEEKDAY_KEYS[weekdayIndex(date)];
+  return WEEKDAY_KEYS[ruleWeekdayIndex(date)];
 }
 
 /** The bare day number, for a grid cell. */
@@ -159,8 +181,9 @@ export function dayLabel(date: ServiceDate): string {
 }
 
 /**
- * The days a month grid draws: whole weeks, Monday first, padded from the
- * previous month and into the next one so every row has seven cells.
+ * The days a month grid draws: whole weeks starting on `CONFIG.WEEK_START`,
+ * padded from the previous month and into the next one so every row has seven
+ * cells.
  *
  * Five or six rows depending on where the month falls, never a fixed six: a
  * blank trailing week is a row of dead space in a panel that is already narrow.

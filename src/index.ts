@@ -109,8 +109,8 @@ const appState = new AppState(session, {
     // This week, so the calendar button can say how much is running today
     // before anybody opens it.
     if (feed) {
-      const monday = startOfWeek(today());
-      void appState.ensureAssignments(monday, addDays(monday, 6));
+      const weekStart = startOfWeek(today());
+      void appState.ensureAssignments(weekStart, addDays(weekStart, 6));
     }
     syncCalendarBadge();
     syncAlertsBadge();

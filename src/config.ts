@@ -86,6 +86,11 @@ export const CONFIG = {
   // services would render hundreds of thousands of them.
   SERVICE_LIST_MAX: 200,
 
+  // The first day of a displayed week, in `Date.getUTCDay()` numbering, so 0
+  // is Sunday. Display only: `WEEKDAY_KEYS` stays Monday-first because it
+  // names the rule columns the API writes.
+  WEEK_START: 0,
+
   // Neutral fill for a vehicle whose trip/route cannot be resolved against the
   // static feed.
   VEHICLE_UNMATCHED_COLOR: '#94a3b8',
@@ -158,9 +163,12 @@ export const CONFIG = {
   // oauth2-proxy is a production build, so it would resolve against the real
   // feed server while everything else it talks to is local. VITE_RT_BASE is
   // how that build says otherwise.
+  //
+  // Read through `?.` because `scripts/` imports modules that reach this file
+  // under tsx, where there is no vite env to read at all.
   RT_BASE:
-    import.meta.env.VITE_RT_BASE ??
-    (import.meta.env.DEV ? 'http://localhost:8000' : 'https://rt.gtfs.zone'),
+    import.meta.env?.VITE_RT_BASE ??
+    (import.meta.env?.DEV ? 'http://localhost:8000' : 'https://rt.gtfs.zone'),
 
   // The cap cafe-car enforces on an uploaded schedule zip
   // (`max_gtfs_zip_bytes`, which is also schedule-foamer's download cap).
