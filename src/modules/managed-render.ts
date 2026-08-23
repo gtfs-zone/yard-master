@@ -61,8 +61,13 @@ export function loadStatusBadge(load: LoadStatus | null, size = 'badge-sm'): str
   return `<span class="badge ${cls} ${size}">${escHtml(load.status)}</span>`;
 }
 
-/** What to call someone: their name, then their address, then their id. */
-export function personLabel(person: Member): string {
+/**
+ * What to call someone: their name, then their address, then their id.
+ *
+ * Structural rather than `Member`, because the navbar names the signed-in
+ * person from `/api/me` and a `Me` is the same three fields under another name.
+ */
+export function personLabel(person: Pick<Member, 'user_id' | 'email' | 'display_name'>): string {
   return person.display_name || person.email || `User ${person.user_id}`;
 }
 

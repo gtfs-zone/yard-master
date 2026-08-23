@@ -213,23 +213,23 @@ The feed switcher keeps its current behaviour and modal; only its position and
 label change. It is this app's `[Load]`, and in both upstreams `[Load]` is the
 last thing in the navbar.
 
-- [ ] `index.html`: move `#feed-switcher-btn` to the end of `.navbar-end`.
+- [x] `index.html`: move `#feed-switcher-btn` to the end of `.navbar-end`.
       Label it with the selected feed's name, "Select feed" when none.
-- [ ] Replace `#calendar-btn`'s SVG path with coloring-book's `calendar-days`
+- [x] Replace `#calendar-btn`'s SVG path with coloring-book's `calendar-days`
       path. Keep the count badge.
-- [ ] Add `#share-btn` with a share icon (heroicons `share`), left of alerts.
-- [ ] Add `#alerts-btn` with `#alerts-badge`, copying test-track's markup at
+- [x] Add `#share-btn` with a share icon (heroicons `share`), left of alerts.
+- [x] Add `#alerts-btn` with `#alerts-badge`, copying test-track's markup at
       `index.html:71-83` including the `indicator` wrapper.
-- [ ] `#account-link` becomes `#user-btn`, labelled with the identity from
+- [x] `#account-link` becomes `#user-btn`, labelled with the identity from
       `/api/me` rather than the word "Account". Keep the `target="_blank"`
       and the comment about Keycloak being another origin.
-- [ ] New `modules/share-modal.ts`: `pages/managers-page.ts`'s renderers moved
+- [x] New `modules/share-modal.ts`: `pages/managers-page.ts`'s renderers moved
       into a `showModal` body, keeping the manager/invite split and the
       `can_manage` gating on every button.
-- [ ] New `modules/alerts-modal.ts`: every managed alert as an `entityRow`
+- [x] New `modules/alerts-modal.ts`: every managed alert as an `entityRow`
       linking to `{ type: 'alert' }`, plus the New alert button. Vendor
       test-track's `alerts-modal` markup where it fits.
-- [ ] `index.ts`: wire the two new buttons, close the modal before navigating
+- [x] `index.ts`: wire the two new buttons, close the modal before navigating
       exactly as `calendar-modal.ts` already does (the modal is on
       `document.body`, outside the panel host, so the panel's `data-nav`
       handler never sees these clicks).
@@ -240,6 +240,38 @@ delegation pattern: a real `<a href>` with the target hash so middle-click
 works, and a plain click that closes first. Do not invent a third way.
 The alerts badge counts alerts, and `feed-session` already holds
 `serviceAlerts`; do not add a second source of truth.
+
+**What was found doing it.**
+
+The calendar button moved into an `indicator` wrapper too, which is how both
+upstreams hang a count off a navbar icon and what the alerts button needed
+anyway. `#calendar-count` became the `indicator-item`, so `index.ts`'s badge
+sync did not change; `btn-circle` became `btn-square`, which is what every icon
+button in either upstream uses.
+
+`personLabel` was widened from `Member` to a structural `Pick`. A `Me` carries
+the same three fields under another name, and the navbar chip asks the same
+question the managers list does.
+
+The user chip still hides itself when the deployment has no Keycloak Account
+Console, which is the behaviour `#account-link` had: without a console there is
+nowhere for it to go, and a name that is not a link is furniture. Naming the
+person is the change; when to show them is not.
+
+Only the alerts modal delegates `data-nav`. Nothing in the share modal is a
+link — a manager is not an object this app browses — so it delegates
+`data-action` alone. Neither modal closes on a write: the form opens over it
+and the list underneath redraws on the session's `change`, which is what a
+write ends in.
+
+Opening Share is not a round trip. Phase 1 moved the members fetch into
+`loadManagedObjects`, so the rows are in the session from the moment a feed is
+selected, and the modal's loading line is only ever seen on a slow selection.
+
+The alerts badge counts `serviceAlerts`, the managed rows, rather than
+`alerts`, the ones parsed out of the RT feed. They are different things: the
+badge is a count of what this feed's managers have written, and the button
+opens exactly that list.
 
 ---
 

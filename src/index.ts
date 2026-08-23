@@ -23,6 +23,9 @@ import { addDays, startOfWeek, today } from './modules/service-date';
 import { initFieldTooltipPortal } from './utils/tooltip-position';
 import { showAboutModal } from './modules/about-modal';
 import { calendarBadgeCount, showCalendarModal } from './modules/calendar-modal';
+import { alertsBadgeCount, showAlertsModal } from './modules/alerts-modal';
+import { showShareModal } from './modules/share-modal';
+import { personLabel } from './modules/managed-render';
 
 // ─── Shell ────────────────────────────────────────────────────────────────────
 const version = document.getElementById('app-version');
@@ -86,7 +89,7 @@ session.addEventListener('vehicles', showVehicles);
 const panelContent = document.getElementById('panel-content')!;
 const feedSwitcherBtn = document.getElementById('feed-switcher-btn') as HTMLButtonElement;
 const feedSwitcherLabel = document.getElementById('feed-switcher-label')!;
-const accountLink = document.getElementById('account-link') as HTMLAnchorElement;
+const userBtn = document.getElementById('user-btn') as HTMLAnchorElement;
 
 // Declared before AppState so the focus hook can name it; the hooks on both
 // sides are only ever called after this block has run.
@@ -110,6 +113,7 @@ const appState = new AppState(session, {
       void appState.ensureAssignments(monday, addDays(monday, 6));
     }
     syncCalendarBadge();
+    syncAlertsBadge();
   },
   onFocusChange: (state) => {
     panel.show(state, appState.breadcrumbs);
@@ -193,18 +197,53 @@ function syncCalendarBadge(): void {
 session.addEventListener('assignments', syncCalendarBadge);
 session.addEventListener('change', syncCalendarBadge);
 
+// ─── Share ────────────────────────────────────────────────────────────────────
+// Who manages this feed. A fact about the feed rather than an object to browse
+// into, so it is a modal over whatever page is open.
+document.getElementById('share-btn')?.addEventListener('click', () => {
+  void showShareModal({
+    ctx: { session, href: (state) => appState.hrefFor(state) },
+    meUserId: () => appState.me?.user_id ?? null,
+    action: (action, arg) => void actions.run(action, arg),
+  });
+});
+
+// ─── Alerts ───────────────────────────────────────────────────────────────────
+// The flat list of managed alerts, and the way to write another one. Each row
+// navigates into the panel, after closing.
+const alertsBadge = document.getElementById('alerts-badge')!;
+
+document.getElementById('alerts-btn')?.addEventListener('click', () => {
+  void showAlertsModal({
+    ctx: { session, href: (state) => appState.hrefFor(state) },
+    navigate: (state) => appState.setFocus(state),
+    action: (action, arg) => void actions.run(action, arg),
+  });
+});
+
+/** The badge: the feed's managed alerts, hidden while there are none. */
+function syncAlertsBadge(): void {
+  const count = alertsBadgeCount(session);
+  alertsBadge.textContent = count ? String(count) : '';
+  alertsBadge.classList.toggle('hidden', !count);
+}
+
+session.addEventListener('change', syncAlertsBadge);
+
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 void appState.boot().then(() => {
   // Keycloak's Account Console is where somebody links another login provider.
   // A deployment without one has no page to send them to, so the link goes away
   // rather than 404ing.
-  const url = appState.me?.account_url;
-  if (url) {
-    accountLink.href = url;
-    accountLink.classList.remove('hidden');
+  const me = appState.me;
+  const url = me?.account_url;
+  if (me && url) {
+    userBtn.textContent = personLabel(me);
+    userBtn.href = url;
+    userBtn.classList.remove('hidden');
   } else {
-    accountLink.classList.add('hidden');
+    userBtn.classList.add('hidden');
   }
 
   // Landing on no feed leaves an empty map with nothing on it to act on, so the

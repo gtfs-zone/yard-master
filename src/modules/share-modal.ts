@@ -1,8 +1,8 @@
 /**
- * The managers page: who may work on this feed, and who has been invited but
- * has never signed in.
+ * Sharing: who may work on this feed, and who has been invited but has never
+ * signed in.
  *
- * yard-master's own page, and the one place the two halves of sharing are
+ * yard-master's own file, and the one place the two halves of sharing are
  * visible together. A manager is somebody with an account; an invite is an
  * email address that was shared with before an account existed behind it, and
  * it becomes a manager the first time that address signs in. Showing them in
@@ -13,18 +13,33 @@
  * The API calls these rows members and this app keeps that name in its types,
  * so `Member` still mirrors cafe-car's schema. Only the label says manager.
  *
- * Reading is open to every member, which is why this page renders for anyone
- * with the feed selected. The mutations are owner-only, so the buttons appear
- * only for a reader whose feed says `can_manage`: showing a manager a Remove
- * button that answers 403 would be worse than not offering it. Transfer is on
- * this page for the same reason it is gated: it hands the feed to one of the
- * rows listed right below it.
+ * Reading is open to every member, which is why this opens for anyone with the
+ * feed selected. The mutations are owner-only, so the buttons appear only for a
+ * reader whose feed says `can_manage`: showing a manager a Remove button that
+ * answers 403 would be worse than not offering it. Transfer is here for the
+ * same reason it is gated: it hands the feed to one of the rows listed right
+ * below it.
+ *
+ * It is a navbar modal rather than a page because sharing is a fact about the
+ * feed rather than an object to browse into, and it opens over whatever page
+ * the reader is on. Like the calendar, it is mounted on `document.body`, so the
+ * panel's `data-action` delegation never sees these buttons and this file
+ * delegates them itself.
  */
 
-import type { Invite, Member } from '../../types/api';
-import type { RenderContext } from '../render-utils';
-import { entityRow, entityRowList, rowSection } from '../entity-row';
-import { actionButton, formatIsoDate, personLabel } from '../managed-render';
+import type { Invite, Member } from '../types/api';
+import type { RenderContext } from './render-utils';
+import { entityRow, entityRowList, rowSection } from './entity-row';
+import { actionButton, formatIsoDate, personLabel } from './managed-render';
+import { showModal } from './modal-utils';
+
+export interface ShareModalHooks {
+  ctx: RenderContext;
+  /** The signed-in user's id, or null before `/me` has answered. */
+  meUserId: () => number | null;
+  /** Run a write, named by the button that asked for it. */
+  action: (action: string, arg: string) => void;
+}
 
 function managerRow(
   ctx: RenderContext,
@@ -59,7 +74,9 @@ function inviteRow(ctx: RenderContext, invite: Invite, canManage: boolean): stri
   });
 }
 
-export function renderManagersPage(ctx: RenderContext, meUserId: number | null): string {
+function renderShare(ctx: RenderContext, meUserId: number | null): string {
+  if (!ctx.session.feed) return `<p class="text-sm opacity-60">No feed is selected.</p>`;
+
   const members = ctx.session.members;
   if (!members) return `<p class="text-sm opacity-60">Loading the managers of this feed…</p>`;
 
@@ -74,8 +91,6 @@ export function renderManagersPage(ctx: RenderContext, meUserId: number | null):
 
   return `
     <div class="space-y-4">
-      <h2 class="text-lg font-semibold leading-tight">Managers</h2>
-
       ${
         canManage
           ? `<div class="flex flex-wrap gap-2">
@@ -109,4 +124,49 @@ export function renderManagersPage(ctx: RenderContext, meUserId: number | null):
           : ''
       }
     </div>`;
+}
+
+/**
+ * Open sharing.
+ *
+ * It redraws on the session's `change` event, which is what a write to a member
+ * or an invite ends in: the action re-reads the list and this puts the answer on
+ * screen without the reader having to close and reopen.
+ */
+export async function showShareModal(hooks: ShareModalHooks): Promise<void> {
+  const { ctx } = hooks;
+  const session = ctx.session;
+  let root: HTMLElement | null = null;
+
+  const draw = (): void => {
+    if (!root) return;
+    root.innerHTML = renderShare(ctx, hooks.meUserId());
+  };
+
+  const onChange = (): void => draw();
+  session.addEventListener('change', onChange);
+
+  await showModal({
+    title: 'Share',
+    body: '<div data-share-root></div>',
+    actions: [{ label: 'Close', onClick: () => {} }],
+    enterAction: 0,
+    escapeAction: 0,
+    boxClassName: 'max-w-2xl',
+    onMount: () => {
+      root = document.querySelector<HTMLElement>('[data-share-root]');
+      draw();
+
+      // The panel's delegation cannot see a button from here. The modal stays
+      // open: a write's own form opens over it and the list redraws underneath.
+      root?.addEventListener('click', (event) => {
+        const button = (event.target as HTMLElement | null)?.closest<HTMLElement>('[data-action]');
+        if (!button) return;
+        event.preventDefault();
+        hooks.action(button.dataset.action!, button.dataset.arg ?? '');
+      });
+    },
+  });
+
+  session.removeEventListener('change', onChange);
 }
