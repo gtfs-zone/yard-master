@@ -31,6 +31,7 @@ import type {
   TrackerDetail,
   TrackerRule,
 } from '../types/api';
+import { CONFIG } from '../config';
 import type { AppState } from './app-state';
 import type { FeedSession } from './feed-session';
 import {
@@ -90,7 +91,7 @@ import {
 } from './managed-render';
 import { parseGtfsClock } from './feed-time';
 import { dayLabel, isServiceDate, today, WEEKDAY_KEYS, weekdayKey } from './service-date';
-import { pickTrip, tripName } from './trip-picker';
+import { assignableTrips, tripLabel, tripName, tripOptions } from './trip-picker';
 import { showModal } from './modal-utils';
 import { notify } from './notification-system';
 import { escHtml } from './render-utils';
@@ -135,6 +136,17 @@ function orNullNumber(value: string): number | null {
   if (!trimmed) return null;
   const n = Number(trimmed);
   return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * A rule with no weekday on runs once, on its starting date.
+ *
+ * That day is written afterwards as an `added` exception, so a one-off and a
+ * day added to a recurrence are the same object and the form needs no separate
+ * question to tell them apart.
+ */
+function isOneOff(values: Record<string, string>): boolean {
+  return !weekdayBits(values.weekdays).some(Boolean);
 }
 
 export class Actions {
@@ -824,10 +836,12 @@ export class Actions {
         name: 'trip_id',
         label: 'Trip id',
         spec: { message: 'TripDescriptor', field: 'trip_id' },
-        // Not a combo: a feed holds tens of thousands of trips, and telling two
-        // runs of the same route apart needs the route and the departure time
-        // that `pickTrip`'s search already shows.
-        pick: { label: 'Choose', run: (current) => pickTrip(this.session, current || null) },
+        // The whole feed, because an alert can name any trip in it. The combo
+        // caps what it lists and matches the id as well as the label, so a
+        // feed of fifty thousand trips is typed at rather than scrolled.
+        type: 'combo',
+        options: tripOptions(feed),
+        comboEmpty: NO_SCHEDULE,
       },
       {
         name: 'trip_route_id',
@@ -926,35 +940,77 @@ export class Actions {
   // ─── Assignments ───────────────────────────────────────────────────────────
 
   /**
-   * The rule form, shared by create and edit.
+   * The route an assignment form is about, or null for the whole feed.
    *
-   * `trip_id` is a plain field rather than the picker: the picker runs before
-   * this form on a create, and an edit is nearly always about the times or the
-   * days, with a repointed trip the rare case that a text field still allows.
+   * A form opened from a trip page or for a chosen trip is about that trip's
+   * route; one opened from a route page is about that route. Anywhere else
+   * there is no route in hand and the trip list falls back to what the feed
+   * already assigns.
+   */
+  private assignScopeRoute(tripId: string | null): string | null {
+    const feed = this.session.staticFeed;
+    if (tripId) return feed?.trips.get(tripId)?.route_id ?? null;
+    const focus = this.app.focus;
+    if (focus.type === 'route') return focus.route_id;
+    if (focus.type === 'trip') {
+      return focus.route_id ?? feed?.trips.get(focus.trip_id)?.route_id ?? null;
+    }
+    return null;
+  }
+
+  /**
+   * The Trip field: a select of the trips worth offering, or a combo when
+   * there are too many of them to put in a dropdown.
+   *
+   * The trip already named is always in the list, even when the scope does not
+   * reach it \u2014 an edit must open on what it is about to change, and a feed
+   * reloaded under a rule can lose the trip entirely.
+   */
+  private tripField(routeId: string | null, tripId: string): FormField {
+    const feed = this.session.staticFeed;
+    const options = tripOptions(feed, assignableTrips(this.session, routeId));
+    if (tripId && !options.some((o) => o.value === tripId)) {
+      const trip = feed?.trips.get(tripId);
+      options.unshift({
+        value: tripId,
+        label: trip && feed ? tripLabel(feed, trip) : tripId,
+        detail: tripId,
+      });
+    }
+    const base = {
+      name: 'trip_id',
+      label: 'Trip',
+      value: tripId,
+      tooltip:
+        'Nothing checks a trip id against the schedule, so a reloaded feed can outlive one.',
+    };
+    if (options.length && options.length <= CONFIG.TRIP_SELECT_MAX) {
+      return { ...base, type: 'select', options };
+    }
+    // Too many to list, or no schedule at all: the combo filters as it is
+    // typed into and takes an id typed by hand either way.
+    return { ...base, type: 'combo', options: tripOptions(feed), comboEmpty: NO_SCHEDULE };
+  }
+
+  /**
+   * The rule form, shared by create and edit.
    *
    * The times are service-day clock readings, so 23:00 to 25:10 is how an
    * overnight run is written and there is no "next day" checkbox inventing a
    * second way to say the same number.
+   *
+   * There is no "does this repeat" question. A rule with no weekday on runs
+   * once, on its starting date, which is what `ruleBody` has always written;
+   * asking as well as showing was two ways to say the same thing.
    */
-  private ruleFields(rule: TrackerRule | null, tripId: string, startDate: string): FormField[] {
-    const weekly = !rule || WEEKDAY_KEYS.some((key) => rule[key]);
+  private ruleFields(
+    rule: TrackerRule | null,
+    tripId: string,
+    startDate: string,
+    scopeRoute: string | null
+  ): FormField[] {
     return [
-      {
-        name: 'trip_id',
-        label: 'Trip',
-        value: rule?.trip_id ?? tripId,
-        tooltip: 'The trip_id as the feed spells it. Nothing checks it against the schedule, so a reloaded feed can outlive it.',
-      },
-      {
-        name: 'repeats',
-        label: 'Repeats',
-        type: 'select',
-        value: weekly ? 'weekly' : 'once',
-        options: [
-          { value: 'weekly', label: 'Every week, on the days below' },
-          { value: 'once', label: 'Once, on the start date' },
-        ],
-      },
+      this.tripField(scopeRoute, rule?.trip_id ?? tripId),
       {
         name: 'weekdays',
         label: 'Runs on',
@@ -962,20 +1018,31 @@ export class Actions {
         value: weekdayValue(
           WEEKDAY_KEYS.map((key) => (rule ? Boolean(rule[key]) : key === weekdayKey(startDate)))
         ),
+        tooltip: 'Every day off runs it once, on the starting date.',
       },
       {
         name: 'start_date',
-        label: 'First service date',
+        label: 'Starting',
         type: 'date',
         value: rule?.start_date ?? startDate,
         tooltip: 'In the feed\u2019s timezone, not yours.',
       },
       {
+        name: 'end_mode',
+        label: 'Repeats',
+        type: 'radio',
+        value: rule?.end_date ? 'until' : 'forever',
+        options: [
+          { value: 'forever', label: 'forever' },
+          { value: 'until', label: 'until a last service date' },
+        ],
+      },
+      {
         name: 'end_date',
-        label: 'Last service date',
+        label: 'Until',
         type: 'date',
         value: rule?.end_date ?? '',
-        tooltip: 'Leave it blank and the rule runs until it is deleted.',
+        visibleWhen: { field: 'end_mode', equals: 'until' },
       },
       {
         name: 'start_time',
@@ -1007,10 +1074,10 @@ export class Actions {
     if (start_time !== null && end_time !== null && end_time <= start_time) {
       errors.end_time = 'The window ends before it starts';
     }
-    if (values.repeats !== 'weekly' && values.repeats !== 'once') {
-      errors.repeats = 'Say whether this repeats';
-    } else if (values.repeats === 'weekly' && !weekdayBits(values.weekdays).some(Boolean)) {
-      errors.repeats = 'Pick at least one weekday, or make it a one-off';
+    // "until" with no date is the one thing the radio pair can say and the
+    // API cannot: a null end_date is forever, which is the other choice.
+    if (values.end_mode === 'until' && !values.end_date) {
+      errors.end_date = 'Pick a last service date, or choose forever';
     }
     return Object.keys(errors).length ? errors : null;
   }
@@ -1024,19 +1091,19 @@ export class Actions {
    * means a one-off and a skipped recurrence are the same kind of object.
    */
   private ruleBody(values: Record<string, string>): RuleWrite {
-    const once = values.repeats === 'once';
-    const startDate = values.start_date.trim();
-    const endDate = values.end_date.trim();
     const days = weekdayBits(values.weekdays);
+    const once = isOneOff(values);
+    const startDate = values.start_date.trim();
+    const endDate = values.end_mode === 'until' ? values.end_date.trim() : '';
     return {
       trip_id: values.trip_id.trim(),
-      monday: !once && days[0],
-      tuesday: !once && days[1],
-      wednesday: !once && days[2],
-      thursday: !once && days[3],
-      friday: !once && days[4],
-      saturday: !once && days[5],
-      sunday: !once && days[6],
+      monday: days[0],
+      tuesday: days[1],
+      wednesday: days[2],
+      thursday: days[3],
+      friday: days[4],
+      saturday: days[5],
+      sunday: days[6],
       start_date: startDate,
       end_date: once ? startDate : endDate || null,
       start_time: parseRuleTime(values.start_time)!,
@@ -1079,12 +1146,15 @@ export class Actions {
     }
 
     const startDate = isServiceDate(arg) ? arg : today();
-    const tripId = presetTrip ?? (await pickTrip(this.session));
-    if (!tripId) return;
+    // The trip is settled when the ask came from a trip page and open
+    // otherwise; either way it is a field of this form rather than a dialog in
+    // front of it.
+    const tripId = presetTrip ?? '';
+    const scopeRoute = this.assignScopeRoute(presetTrip);
 
-    const trip = this.session.staticFeed?.trips.get(tripId);
-    const window = this.tripWindow(tripId);
-    const fields = this.ruleFields(null, tripId, startDate);
+    const trip = tripId ? this.session.staticFeed?.trips.get(tripId) : undefined;
+    const window = tripId ? this.tripWindow(tripId) : null;
+    const fields = this.ruleFields(null, tripId, startDate, scopeRoute);
     // Prefilled from the trip's own schedule, which is what the window is
     // nearly always meant to be.
     if (window) {
@@ -1097,8 +1167,8 @@ export class Actions {
       intro:
         'A tracker reporting inside this window is running this trip, and the service date it started on is the trip\u2019s start_date in the published feed.',
       submitLabel: 'Assign',
-      // Every field is prefilled from the trip and the day that was clicked, so
-      // the common case is opening this and pressing Assign.
+      // Opened from a trip, every field is already prefilled from that trip and
+      // the day that was clicked, so the common case is pressing Assign.
       allowPristine: true,
       fields: [
         {
@@ -1123,7 +1193,7 @@ export class Actions {
         // A one-off is a rule with no weekday, so the date it runs on is an
         // added exception. Written here rather than by the server, because the
         // server's job is to store a rule, not to guess what one means.
-        if (values.repeats === 'once') {
+        if (isOneOff(values)) {
           await addRuleException(rule.id, {
             date: values.start_date.trim(),
             exception_type: 'added',
@@ -1147,7 +1217,12 @@ export class Actions {
       title: tracker ? `Edit ${tracker.nickname}\u2019s assignment` : 'Edit assignment',
       intro:
         'Changing when a rule runs leaves its per-day exceptions alone: they name dates, and "not on the 4th" survives a change of weekday.',
-      fields: this.ruleFields(rule, rule.trip_id, rule.start_date),
+      fields: this.ruleFields(
+        rule,
+        rule.trip_id,
+        rule.start_date,
+        this.assignScopeRoute(rule.trip_id)
+      ),
       validate: (values) => this.validateRule(values),
       submit: async (values) => {
         const body = this.ruleBody(values);
@@ -1155,7 +1230,7 @@ export class Actions {
         // A rule edited down to a one-off needs the date it now runs on, and
         // the server keeps the exceptions, so writing the same one twice is a
         // no-op rather than a duplicate.
-        if (values.repeats === 'once') {
+        if (isOneOff(values)) {
           await addRuleException(rule.id, {
             date: body.start_date,
             exception_type: 'added',

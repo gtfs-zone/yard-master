@@ -43,6 +43,7 @@ export type FieldType =
   | 'number'
   | 'select'
   | 'combo'
+  | 'radio'
   | 'datetime'
   | 'date'
   | 'weekdays'
@@ -50,7 +51,7 @@ export type FieldType =
   | 'file';
 
 /**
- * One row of a `select` or a `combo`.
+ * One row of a `select`, a `combo` or a `radio` group.
  *
  * `detail` is the second line a combo row shows — a stop's name beside its id,
  * a route's long name beside its short one. A `select` ignores it: an
@@ -69,7 +70,7 @@ export interface FormField {
   type?: FieldType;
   /** The value the form opens with. Null and undefined both mean empty. */
   value?: string | number | null;
-  /** For `select` and `combo`. A select offers "—" for empty unless one is supplied. */
+  /** For `select`, `combo` and `radio`. A select offers "—" for empty unless one is supplied. */
   options?: FieldOption[];
   /**
    * For `combo`. Shown in the popup when the field has no options at all,
@@ -102,15 +103,6 @@ export interface FormField {
    * under the input can show what the chosen value means.
    */
   enumName?: string;
-  /**
-   * A button beside the input that opens a dialog of its own and puts what it
-   * returns into the field.
-   *
-   * For the values too numerous for a combo: a feed's trips are picked with
-   * `pickTrip`, which is a fuzzy search in its own modal rather than a list.
-   * Resolving to null leaves the field alone.
-   */
-  pick?: { label: string; run: (current: string) => Promise<string | null> };
   /** For `file`. Passed straight to the input's `accept`. */
   accept?: string;
   /**
@@ -193,6 +185,15 @@ export function weekdayValue(flags: readonly boolean[]): string {
 function readValues(root: HTMLElement, fields: FormField[]): Record<string, string> {
   const values: Record<string, string> = {};
   for (const field of fields) {
+    if (field.type === 'radio') {
+      // Every button in the group carries the field name, so the value is
+      // whichever one is checked rather than whichever one is first.
+      const checked = root.querySelector<HTMLInputElement>(
+        `input[data-field="${CSS.escape(field.name)}"]:checked`
+      );
+      values[field.name] = checked?.value ?? '';
+      continue;
+    }
     const el = root.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
       `[data-field="${CSS.escape(field.name)}"]`
     );
@@ -222,6 +223,9 @@ function readFiles(root: HTMLElement, fields: FormField[]): Record<string, File 
   }
   return files;
 }
+
+/** Makes each radio group's `name` unique, so stacked forms cannot share one. */
+let radioGroupSeq = 0;
 
 function renderInput(field: FormField): string {
   const type = field.type ?? 'text';
@@ -306,6 +310,25 @@ function renderInput(field: FormField): string {
       ).join('')}
     </div>`;
   }
+  if (type === 'radio') {
+    // Native radios, so arrow keys move between them for free. The group name
+    // is unique per rendered field because two stacked modals sharing one name
+    // would be one group with the fields of both in it.
+    const group = `radio-${++radioGroupSeq}`;
+    return `<div class="flex flex-col gap-1 pt-1">
+      ${(field.options ?? [])
+        .map(
+          (o) => `<label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="${group}" class="radio radio-xs"
+              data-field="${escHtml(field.name)}" value="${escHtml(o.value)}"${
+                o.value === value ? ' checked' : ''
+              }${field.readonly ? ' disabled' : ''} />
+            <span class="label-text text-xs">${escHtml(o.label)}</span>
+          </label>`
+        )
+        .join('')}
+    </div>`;
+  }
   if (type === 'checkbox') {
     return `<input ${common} type="checkbox" class="toggle toggle-sm"${
       value === 'true' ? ' checked' : ''
@@ -342,18 +365,17 @@ function renderField(field: FormField): string {
   // clicks on the popup to the input instead.
   // A `weekdays` field is buttons, and a label wrapping a button forwards a
   // click on the label to it, toggling a day nobody pressed.
+  // A `radio` group is labels of its own, one per option, so the field's own
+  // label is a block for the same reason.
   const tag =
-    field.type === 'file' || field.type === 'combo' || field.type === 'weekdays'
+    field.type === 'file' ||
+    field.type === 'combo' ||
+    field.type === 'weekdays' ||
+    field.type === 'radio'
       ? 'div'
       : 'label';
   const when = field.visibleWhen;
-  const input = field.pick
-    ? `<div class="flex gap-2">
-         <div class="flex-1">${renderInput(field)}</div>
-         <button type="button" class="btn btn-sm btn-outline shrink-0"
-           data-pick="${escHtml(field.name)}">${escHtml(field.pick.label)}</button>
-       </div>`
-    : renderInput(field);
+  const input = renderInput(field);
   return `
     <${tag} class="form-control"${
       when
@@ -645,27 +667,6 @@ export async function showEntityForm<T>(options: EntityFormOptions<T>): Promise<
           // Setting `.value` in script fires nothing, and `syncButtons` is
           // what re-enables Save.
           input.dispatchEvent(new Event('change', { bubbles: true }));
-        });
-      }
-
-      /**
-       * The `pick` buttons: a dialog of the caller's own, whose answer lands in
-       * the field. A dismissed dialog leaves what was already typed.
-       */
-      for (const field of options.fields) {
-        if (!field.pick) continue;
-        const button = root.querySelector<HTMLButtonElement>(
-          `[data-pick="${CSS.escape(field.name)}"]`
-        );
-        const input = root.querySelector<HTMLInputElement>(
-          `input[data-field="${CSS.escape(field.name)}"]`
-        );
-        if (!button || !input) continue;
-        button.addEventListener('click', async () => {
-          const picked = await field.pick!.run(input.value.trim());
-          if (picked === null) return;
-          input.value = picked;
-          input.dispatchEvent(new Event('input', { bubbles: true }));
         });
       }
 

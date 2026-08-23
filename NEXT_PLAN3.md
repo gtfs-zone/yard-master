@@ -491,22 +491,22 @@ Assign a trip
                                 [ Cancel ]  [ Assign ]
 ```
 
-- [ ] `trip-picker.ts` stops being a modal and becomes the option source for a
+- [x] `trip-picker.ts` stops being a modal and becomes the option source for a
       `trip_id` select. Keep `tripName`.
-- [ ] Delete the `repeats` weekly/once select. A one-off is every pill off,
+- [x] Delete the `repeats` weekly/once select. A one-off is every pill off,
       which the existing `ruleBody` already encodes as an `added` exception;
       the select was a second way to say the same thing.
-- [ ] "First service date" becomes **Starting**, a `type: 'date'` field. The
+- [x] "First service date" becomes **Starting**, a `type: 'date'` field. The
       radio that prompted the question goes.
-- [ ] "Last service date" becomes a **Repeats** radio pair: *forever* (empty
+- [x] "Last service date" becomes a **Repeats** radio pair: *forever* (empty
       `end_date`) or *until* plus a date input. Empty means forever, which is
       what the API already means by null.
-- [ ] `assign:new-for-trip` from a trip page preselects the trip in the select
+- [x] `assign:new-for-trip` from a trip page preselects the trip in the select
       rather than skipping the picker.
-- [ ] Keep `tripWindow` prefilling Starts/Ends from the trip's own stop times,
+- [x] Keep `tripWindow` prefilling Starts/Ends from the trip's own stop times,
       and keep `allowPristine` — opening the form and pressing Assign is the
       common case and must stay one click.
-- [ ] `validateRule` loses its date-format branches, keeps the
+- [x] `validateRule` loses its date-format branches, keeps the
       window-ends-before-it-starts check and the tracker check.
 
 **Gotchas.**
@@ -521,6 +521,49 @@ request must stay inside the same `submit` so a failure leaves nothing half
 made.
 
 ---
+
+**What was found doing it.**
+
+`pickTrip` is gone and `trip-picker.ts` is an option source: `tripName`,
+`tripLabel` (departure, route, name, in that order because the departure is
+what tells two runs apart), `tripOptions` and `assignableTrips`. The uFuzzy
+search went with the modal — the combo's own substring filter over a list that
+carries the id as its `detail` answers the same question, and the map's search
+box is still the place to search a whole feed.
+
+The scope is passed into `ruleFields` rather than derived inside it. Deriving
+it from the trip the form opens on works for an edit and collapses on a
+create: the moment a default trip is chosen, the list narrows to that trip's
+route and the other routes disappear. `assignScopeRoute` therefore reads the
+preset trip first and `AppState.focus` second, and its answer is a parameter.
+
+The trip field is a `select` when the scoped list fits `CONFIG.TRIP_SELECT_MAX`
+and a `combo` over the whole feed when it does not, so an unloaded schedule and
+a fifty-thousand-trip feed both land on the field that still takes a typed id.
+The trip a rule already names is unshifted into the options when the scope
+does not reach it, or a select would silently repoint the rule to whatever sat
+at the top of the list.
+
+`entity-form.ts` gained a `radio` type — native inputs, so the arrow keys work
+without anything here handling them, with a per-render group `name` because two
+stacked modals sharing one would be a single group spanning both forms.
+`readValues` reads the `:checked` one. The `until` date is an ordinary field
+with the `visibleWhen` that already existed.
+
+`pick` is deleted from `entity-form.ts` with its render branch and its mount
+loop. `trip_id` was its only caller, and the informed-entity form's `trip_id`
+is now a combo like every other id field on it.
+
+`repeats` is gone from the form, from `validateRule` and from `ruleBody`.
+`isOneOff` is one module-level function reading the weekday bits, which the two
+`submit`s and `ruleBody` all call, so "no day on" means one thing in one place.
+The `!once &&` guards on the seven day flags went with it: `once` is now
+derived from those flags, so guarding them with it said nothing.
+
+The create form no longer preselects a trip when it was not opened from one.
+Prefilling the first trip of a scope would make `allowPristine` assign an
+arbitrary trip to a tracker in one click; the window prefill and the one-click
+Assign both belong to the path that arrives with a trip in hand.
 
 ## Phase 6 — The object pages
 

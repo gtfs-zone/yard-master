@@ -180,9 +180,14 @@ export const CONFIG = {
   // retention. Matches cafe-car's `keep_uploads`, so a full history fits.
   UPLOAD_HISTORY_MAX: 10,
 
+  // Trips a `<select>` may offer before the field falls back to the searchable
+  // combo. A scoped list is usually a route's day of service; past this it is
+  // a feed, and a dropdown is the wrong shape for one.
+  TRIP_SELECT_MAX: 200,
+
   // Rows an id combo lists at once. The popup is a shortlist to pick from, not
   // a way to page through a feed's fifty thousand stops: a query that matches
-  // more than this means "type more". Same number trip-picker uses.
+  // more than this means "type more". Same number the trip options use.
   COMBO_RESULT_LIMIT: 50,
 
   // Prod URLs of the sibling apps, for deep links out of a properties page.
