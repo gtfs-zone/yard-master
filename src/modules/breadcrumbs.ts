@@ -5,15 +5,11 @@
    - The variant set is yard-master's. `vehicle` became `tracker` and resolves
      against `session.trackers` (the API list) rather than only against the
      live map, so a tracker that has never reported a fix still has a label.
-   - `routes`, `stops`, `trackers`, `alerts` and `services` added: the list
-     pages, one hop off the feed root. A `service` hangs off the services list,
-     which is the only parent it has. Every other object page keeps its own
-     parent rather than hanging off its list — a trip under its route reads
-     better in a narrow panel than a four-crumb trail through Routes.
-   - `managers` and `assignments` added. They are managed objects with no GTFS
-     parent, so each is one hop off the feed root. A calendar day hangs off the
-     month, so `assignments` with a date is two.
    - `trip` added, with its route as the parent when the feed names one.
+   - Every crumb is a real ancestor and never a category: there are no list
+     pages, so a tracker and a route both hang straight off the feed, a trip
+     hangs off its route, a stop off its `parent_station` chain and an alert off
+     the entity it informs. Three crumbs is the deepest trail in the app.
    - HOME is the feed root rather than test-track's "Feed status" page, and it
      is labelled with the selected feed's name.
    - `alertLabel` reads the managed `serviceAlerts` map first, since an
@@ -33,8 +29,6 @@
 
 import type { BreadcrumbItem, PageState } from '../types/page-state';
 import type { FeedSession } from './feed-session';
-import { serviceIds } from './service-catalog';
-import { dayLabel, isServiceDate } from './service-date';
 
 function home(session: FeedSession): BreadcrumbItem {
   return { label: session.feed?.feed_name ?? 'Feed', pageState: { type: 'home' } };
@@ -131,40 +125,6 @@ export function buildBreadcrumbs(session: FeedSession, state: PageState): Breadc
     case 'home':
       return [];
 
-    case 'managers':
-      return [home(session), { label: 'Managers', pageState: state }];
-
-    case 'routes':
-      return [home(session), { label: 'Routes', pageState: state }];
-
-    case 'stops':
-      return [home(session), { label: 'Stops', pageState: state }];
-
-    case 'trackers':
-      return [home(session), { label: 'Trackers', pageState: state }];
-
-    case 'alerts':
-      return [home(session), { label: 'Service alerts', pageState: state }];
-
-    case 'services':
-      return [home(session), { label: 'Services', pageState: state }];
-
-    case 'service':
-      return [
-        home(session),
-        { label: 'Services', pageState: { type: 'services' } },
-        { label: state.service_id, pageState: state },
-      ];
-
-    case 'assignments':
-      return [
-        home(session),
-        { label: 'Assignments', pageState: { type: 'assignments' } },
-        ...(isServiceDate(state.date)
-          ? [{ label: dayLabel(state.date), pageState: state }]
-          : []),
-      ];
-
     case 'tracker':
       return [
         home(session),
@@ -229,22 +189,7 @@ export function buildBreadcrumbs(session: FeedSession, state: PageState): Breadc
 export function validateState(session: FeedSession, state: PageState): boolean {
   switch (state.type) {
     case 'home':
-    case 'managers':
-    case 'assignments':
-    // The list pages name no object, so there is nothing to validate. Each
-    // renders its own "still downloading" or empty state.
-    case 'routes':
-    case 'stops':
-    case 'trackers':
-    case 'alerts':
-    case 'services':
       return true;
-    case 'service': {
-      // Both files: a service can be named by calendar_dates alone. Like every
-      // GTFS variant this answers false until the zip is in.
-      const feed = session.staticFeed;
-      return feed ? serviceIds(feed).has(state.service_id) : false;
-    }
     case 'route':
       return session.staticFeed?.routes.has(state.route_id) ?? false;
     case 'stop':

@@ -192,13 +192,7 @@ function renderAssignments(ctx: RenderContext, trackerId: string): string {
   return rowSection(
     'Assignments',
     rules.length,
-    `${entityRowList(rows, 'This tracker is not assigned to anything.')}
-     <div class="mt-2 text-xs">${entityLink(
-       ctx,
-       { type: 'assignments' },
-       'Open the calendar',
-       'link link-hover'
-     )}</div>`
+    entityRowList(rows, 'This tracker is not assigned to anything.')
   );
 }
 
@@ -225,7 +219,6 @@ export function renderTrackerPage(
         <h2 class="text-lg font-semibold leading-tight">${escHtml(tracker.nickname)}</h2>
         <p class="text-xs opacity-60 flex items-center gap-2">
           ${livenessBadge(trackerLiveness(ctx.session, tracker.id))}
-          <span>${entityLink(ctx, { type: 'assignments' }, 'Assignments')}</span>
         </p>
       </div>
 

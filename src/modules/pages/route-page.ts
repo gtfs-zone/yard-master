@@ -52,12 +52,8 @@ import {
 } from '../route-strip';
 import type { RowDot } from '../route-strip';
 import type { RenderContext } from '../render-utils';
-import { entityRow, entityRowList, rowSection } from '../entity-row';
-import {
-  renderServiceChart,
-  serviceChartLegend,
-  servicesForTrips,
-} from '../service-catalog';
+import { cappedNote, entityRow, entityRowList, rowSection } from '../entity-row';
+import { servicesForTrips, weekdaysLabel } from '../service-catalog';
 import {
   OCCUPANCY_LABELS,
   ROUTE_TYPE_LABELS,
@@ -457,12 +453,11 @@ function renderTrips(ctx: RenderContext, routeId: string, directionId: string): 
 }
 
 /**
- * When this route runs, as the waterfall.
+ * When this route runs: one row per service, in cascade order.
  *
  * Both directions, not the tab's: a route's calendar is a property of the route
- * and splitting it by direction would draw the same spans twice. The route's
- * own colour shades the spans, so the section reads as part of this page rather
- * than as a chart that happens to be on it.
+ * and splitting it by direction would say the same thing twice. A service is
+ * not an object this app browses, so a row is a fact rather than a link.
  */
 function renderServices(ctx: RenderContext, route: Route): string {
   const feed = ctx.session.staticFeed!;
@@ -470,18 +465,18 @@ function renderServices(ctx: RenderContext, route: Route): string {
   if (services.length === 0) return '';
 
   const shown = services.slice(0, CONFIG.SERVICE_LIST_MAX);
+  const rows = shown.map(service =>
+    entityRow(ctx, {
+      label: service.id,
+      sublabel: weekdaysLabel(service.days),
+      ...(service.start && service.end ? { badge: `${service.start} to ${service.end}` } : {}),
+    }),
+  );
+
   return rowSection(
     'Service calendar',
     services.length,
-    `${renderServiceChart(ctx, shown, { color: route.color })}
-     ${
-       services.length > shown.length
-         ? `<p class="text-xs opacity-50">${escHtml(
-             `${services.length - shown.length} more services not drawn.`,
-           )}</p>`
-         : ''
-     }
-     ${serviceChartLegend()}`,
+    `${entityRowList(rows, '')}${cappedNote(services.length, shown.length)}`,
   );
 }
 

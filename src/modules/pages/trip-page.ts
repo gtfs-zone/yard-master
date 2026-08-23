@@ -36,21 +36,15 @@ import {
   section,
   vehicleDisplayName,
 } from '../render-utils';
-import {
-  renderServiceChart,
-  serviceCatalog,
-  serviceChartLegend,
-  weekdaysLabel,
-} from '../service-catalog';
+import { serviceCatalog, weekdaysLabel } from '../service-catalog';
 import { renderAlertList } from './alert-page';
 
 /**
- * When this trip runs: the service it points at, drawn as its own chart row.
+ * When this trip runs: three read-only lines off the service it points at.
  *
- * The weekly pattern, the window and the exceptions used to be spelled out
- * here in prose and two date lists. They are one row of the waterfall now, the
- * same row the service page and the route page draw, and the `service_id` is a
- * link to the object that owns the rest of the detail.
+ * A service is not an object this app browses — there is no page and no crumb
+ * for one — so what a reader needs about it belongs here, on the trip that
+ * names it: which service, which weekdays, and over what window.
  */
 function renderService(ctx: RenderContext, trip: Trip): string {
   const feed = ctx.session.staticFeed!;
@@ -65,22 +59,19 @@ function renderService(ctx: RenderContext, trip: Trip): string {
     );
   }
 
+  // No `calendar.txt` row means no window: the service runs on the dates
+  // `calendar_dates.txt` adds and nowhere else, which "No weekly pattern"
+  // already says.
+  const window =
+    service.start && service.end ? `${service.start} to ${service.end}` : 'No date range';
+
   return section(
     'Service',
-    `${propList([
-      prop(
-        'service_id',
-        entityLink(
-          ctx,
-          { type: 'service', service_id: service.id },
-          service.id,
-          'link link-hover font-mono'
-        )
-      ),
+    propList([
+      prop('Service', `<span class="font-mono">${escHtml(service.id)}</span>`),
       prop('Runs', escHtml(weekdaysLabel(service.days))),
-    ])}
-     ${renderServiceChart(ctx, [service])}
-     ${serviceChartLegend()}`
+      prop('Window', escHtml(window)),
+    ])
   );
 }
 

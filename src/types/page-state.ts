@@ -3,23 +3,18 @@
    @status modified
    @changes
    - Variants replaced wholesale. yard-master browses a hierarchy neither
-     upstream has: `tracker`, `assignments` and `managers` are managed objects
-     from the API, `route`, `stop` and `trip` come from the in-browser GTFS.
-     Dropped `vehicle`; kept `alert`, which here is a managed object rather
-     than a decoded GTFS-RT entity.
-   - `home` is the feed itself: its own properties, flat, plus the links to
-     what hangs off it. There is no separate `feed` variant.
-   - `routes`, `stops`, `trackers`, `alerts` and `services` are the list pages
-     the feed page used to hold as disclosures. Each names no object, so each
-     is told apart by the hash's `type` param alone.
-   - `service` is a `service_id` out of `calendar.txt`/`calendar_dates.txt`,
-     which neither upstream browses as an object at all.
+     upstream has: `tracker` is a managed object from the API, `route`, `stop`
+     and `trip` come from the in-browser GTFS. Dropped `vehicle`; kept `alert`,
+     which here is a managed object rather than a decoded GTFS-RT entity.
+   - `home` is the feed itself: its own properties, its children, and the facts
+     about it. There is no separate `feed` variant.
+   - Six variants and a maximum depth of three. There are no list variants: a
+     list is a scrollbox on the page of the object that owns it, never a page,
+     so no crumb is ever a category. The calendar, sharing and the alert list
+     are navbar modals rather than pages and carry no state here.
    - `tracker` is keyed by `Tracker.id`, the surrogate. It is not the Traccar
      credential (that is `device_key`, which never leaves the properties panel)
      and it is genuinely unique, which nickname is not.
-   - `assignments` carries an optional `date` (YYYY-MM-DD, a feed-local service
-     date) so a day in the calendar is linkable. Hyphenated, matching the API
-     it is passed to, rather than GTFS's own compact form.
    - `trip` added, with `route_id` alongside `trip_id` so a trip page can render
      its breadcrumb before the zip has finished parsing.
    - `isPageState` no longer counts keys per variant; the optional members make
@@ -35,15 +30,7 @@
  */
 export type PageState =
   | { type: 'home' }
-  | { type: 'routes' }
-  | { type: 'stops' }
-  | { type: 'trackers' }
-  | { type: 'alerts' }
-  | { type: 'services' }
-  | { type: 'service'; service_id: string }
   | { type: 'tracker'; tracker_id: string }
-  | { type: 'assignments'; date?: string }
-  | { type: 'managers' }
   | { type: 'alert'; alert_id: string }
   | { type: 'route'; route_id: string; direction_id?: string }
   | { type: 'stop'; stop_id: string }
@@ -70,22 +57,10 @@ export function isPageState(value: unknown): value is PageState {
 
   switch (state.type) {
     case 'home':
-    case 'routes':
-    case 'stops':
-    case 'trackers':
-    case 'alerts':
-    case 'services':
-    case 'managers':
       return true;
-
-    case 'service':
-      return typeof state.service_id === 'string';
 
     case 'tracker':
       return typeof state.tracker_id === 'string';
-
-    case 'assignments':
-      return isOptionalString(state.date);
 
     case 'alert':
       return typeof state.alert_id === 'string';

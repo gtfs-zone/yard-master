@@ -19,7 +19,7 @@ import { SearchController } from './modules/search-controller';
 import { buildSearchEntries } from './modules/search-entries';
 import { PanelRenderer } from './modules/panel-renderer';
 import { Actions } from './modules/actions';
-import { addDays, isServiceDate, startOfWeek, today } from './modules/service-date';
+import { addDays, startOfWeek, today } from './modules/service-date';
 import { initFieldTooltipPortal } from './utils/tooltip-position';
 import { showAboutModal } from './modules/about-modal';
 import { calendarBadgeCount, showCalendarModal } from './modules/calendar-modal';
@@ -121,29 +121,8 @@ const appState = new AppState(session, {
     else bottomSheet.close();
     // After the sheet moves, so the camera knows how much of the map is covered.
     mapCtrl.focus(state);
-    // After `focus`, which clears whatever the previous page drew.
-    syncAssignedTrips(state);
   },
 });
-
-/**
- * Draw the trips assigned on the selected calendar day.
- *
- * The map has no notion of an assignment, so this is the one place the two are
- * joined: a day in the hash becomes a set of trip ids, and the map draws their
- * geometry the same way it draws one focused trip. Re-run when the expansion
- * arrives, since the focus almost always changes before the request answers.
- */
-function syncAssignedTrips(state: PageState): void {
-  if (state.type !== 'assignments' || !isServiceDate(state.date)) {
-    mapCtrl.showTrips([]);
-    return;
-  }
-  const trips = session.assignmentsOn(state.date).map((a) => a.trip_id);
-  mapCtrl.showTrips([...new Set(trips)]);
-}
-
-session.addEventListener('assignments', () => syncAssignedTrips(appState.focus));
 
 // Every write the panel can start. Declared here rather than inside the hooks
 // so the same instance answers every button, whichever page emitted it.

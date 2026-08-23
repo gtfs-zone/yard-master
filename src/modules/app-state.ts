@@ -70,7 +70,6 @@ import {
   SessionExpiredError,
 } from './api-client';
 import { isHosted, scheduleFetchUrl } from './feed-source';
-import { anchorDate, gridRange } from './pages/assignments-page';
 import type { ServiceDate } from './service-date';
 import { getMe } from './api-client';
 import { notify } from './notification-system';
@@ -379,11 +378,10 @@ export class AppState {
    * Make sure a window is expanded, widening the held one rather than replacing
    * it.
    *
-   * The calendar modal asks for whatever month it is showing while the
-   * assignments page may be sitting behind it on another set of weeks, and a
-   * narrower window would leave that page with empty cells and no request out
-   * to fill them. Widening keeps both covered; navigating the page back out of
-   * the union is what shrinks it again.
+   * The calendar modal asks for whatever month it is showing while the navbar
+   * badge is holding this week, and a narrower window would leave the badge
+   * counting nothing with no request out to fill it. Widening keeps both
+   * covered; selecting another feed is what drops the window again.
    */
   async ensureAssignments(from: ServiceDate, to: ServiceDate): Promise<void> {
     // A request already out lands first, so its window is the one this widens.
@@ -408,7 +406,7 @@ export class AppState {
    * draws, and a write to one changes the other: adding an exception changes
    * no rule field and moves a day off the calendar. The window is the one last
    * asked for, so a write made from a trip page refreshes whichever weeks the
-   * assignments page was left on.
+   * calendar was left on.
    */
   async refreshCalendar(): Promise<void> {
     const window = this.assignmentWindow;
@@ -517,21 +515,6 @@ export class AppState {
           ]);
         };
       }
-    } else if (state.type === 'assignments') {
-      // Both halves: the rules an editor reads, and the weeks the charts draw.
-      // The expansion is re-fetched only when the listed weeks run outside the
-      // window already held, so stepping between days in one page is free.
-      const { from, to } = gridRange(anchorDate(state));
-      const held = session.assignmentsRange;
-      const covered = held !== null && held.from <= from && held.to >= to;
-      if (!session.rules || !covered) {
-        load = async () => {
-          await Promise.all([
-            session.rules ? Promise.resolve() : this.refreshRules(),
-            covered ? Promise.resolve() : this.refreshAssignments(from, to),
-          ]);
-        };
-      }
     } else if (state.type === 'trip' && !session.rules) {
       // The trip page lists what is assigned to it, and an empty rule map
       // would otherwise read as "nothing is".
@@ -546,9 +529,9 @@ export class AppState {
       // rollback list, so it is fetched when the page that shows it opens.
       const feed = session.feed;
       const needsUploads = session.uploads === null && isHosted(feed);
-      // The feed page counts the managers on its link out to them, so the
-      // count is fetched with the page that shows it rather than only by the
-      // page it points at.
+      // Sharing is a modal over whatever page is open, so its rows are fetched
+      // with the feed rather than on the way in: opening it should not be a
+      // round trip.
       const needsMembers = !session.members;
       if (needsUploads || needsMembers) {
         load = async () => {
@@ -560,9 +543,6 @@ export class AppState {
           ]);
         };
       }
-    } else if (state.type === 'managers' && !session.members && session.feed) {
-      const feedId = session.feed.id;
-      load = async () => session.setMembers(await getMembers(feedId));
     }
     if (!load) return;
 

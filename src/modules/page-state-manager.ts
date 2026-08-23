@@ -219,22 +219,9 @@ export class PageStateManager {
         // The surrogate, never `device_key`.
         params.set('tracker', pageState.tracker_id);
         break;
-      case 'assignments':
-        if (pageState.date) params.set('date', pageState.date);
-        break;
       case 'trip':
         params.set('trip', pageState.trip_id);
         if (pageState.route_id) params.set('route', pageState.route_id);
-        break;
-      case 'managers':
-      case 'routes':
-      case 'stops':
-      case 'trackers':
-      case 'alerts':
-      case 'services':
-        break;
-      case 'service':
-        params.set('service', pageState.service_id);
         break;
       case 'alert':
         params.set('alert', pageState.alert_id);
@@ -248,41 +235,15 @@ export class PageStateManager {
    * Read the focus out of a hash string (no leading `#`), ignoring the feed
    * params. Driven by the explicit `type` param; anything unrecognised, or a
    * variant missing the object key it needs, falls back to home rather than
-   * producing a state no page can render.
+   * producing a state no page can render. A hash naming a retired variant —
+   * the list pages, `service`, `assignments`, `managers`, `feed`, `tree`,
+   * `people` — lands there too, so no migration is needed.
    */
   urlToPageState(hash: string): PageState {
     const params = new URLSearchParams(hash);
     const get = (key: string) => params.get(key) ?? undefined;
 
     switch (params.get('type')) {
-      // Two hashes written before this page settled: `feed` is from before the
-      // feed page was merged into home, `tree` from when home was a browse
-      // tree rather than the feed itself.
-      case 'feed':
-      case 'tree':
-        return { type: 'home' };
-      case 'routes':
-        return { type: 'routes' };
-      case 'stops':
-        return { type: 'stops' };
-      case 'trackers':
-        return { type: 'trackers' };
-      case 'alerts':
-        return { type: 'alerts' };
-      case 'services':
-        return { type: 'services' };
-      case 'service': {
-        const service_id = get('service');
-        return service_id === undefined ? { type: 'home' } : { type: 'service', service_id };
-      }
-      // `people` is what this page was called before it became Managers.
-      case 'people':
-      case 'managers':
-        return { type: 'managers' };
-      case 'assignments': {
-        const date = get('date');
-        return { type: 'assignments', ...(date !== undefined && { date }) };
-      }
       case 'tracker': {
         const tracker_id = get('tracker');
         return tracker_id === undefined ? { type: 'home' } : { type: 'tracker', tracker_id };

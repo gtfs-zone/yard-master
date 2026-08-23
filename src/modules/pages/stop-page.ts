@@ -32,7 +32,7 @@ import { alertsForStop } from '../alerts';
 import { zoneLabel } from '../feed-time';
 import type { RtIndex } from '../rt-index';
 import type { RenderContext } from '../render-utils';
-import { entityRow, entityRowList, rowSection } from '../entity-row';
+import { cappedNote, entityRow, entityRowList, rowSection } from '../entity-row';
 import {
   LOCATION_TYPE_LABELS,
   VEHICLE_STATUS_LABELS,
@@ -50,9 +50,8 @@ import {
   vehicleDisplayName,
 } from '../render-utils';
 import {
-  renderServiceChart,
-  serviceChartLegend,
   servicesForTrips,
+  weekdaysLabel,
 } from '../service-catalog';
 import { CONFIG } from '../../config';
 import { renderAlertList } from './alert-page';
@@ -326,7 +325,8 @@ function renderSiblingPlatforms(ctx: RenderContext, stop: Stop): string {
  * Over every trip that stops here rather than over the departures board: the
  * board is one day's worth, and this is the question of which days there is a
  * service at all. A station aggregates over its platforms, exactly as its
- * routes and departures do.
+ * routes and departures do. A service is not an object this app browses, so a
+ * row is a fact rather than a link.
  */
 function renderServices(ctx: RenderContext, stopIds: string[]): string {
   const feed = ctx.session.staticFeed!;
@@ -342,18 +342,18 @@ function renderServices(ctx: RenderContext, stopIds: string[]): string {
   if (services.length === 0) return '';
 
   const shown = services.slice(0, CONFIG.SERVICE_LIST_MAX);
+  const rows = shown.map(service =>
+    entityRow(ctx, {
+      label: service.id,
+      sublabel: weekdaysLabel(service.days),
+      ...(service.start && service.end ? { badge: `${service.start} to ${service.end}` } : {}),
+    }),
+  );
+
   return rowSection(
     'Service calendar',
     services.length,
-    `${renderServiceChart(ctx, shown)}
-     ${
-       services.length > shown.length
-         ? `<p class="text-xs opacity-50">${escHtml(
-             `${services.length - shown.length} more services not drawn.`,
-           )}</p>`
-         : ''
-     }
-     ${serviceChartLegend()}`,
+    `${entityRowList(rows, '')}${cappedNote(services.length, shown.length)}`,
   );
 }
 

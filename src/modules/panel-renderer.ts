@@ -10,13 +10,13 @@
      the panel always has something to render.
    - `setBreadcrumbs` added: the trail is rebuilt outside this class and can
      arrive after the page it belongs to, without a scroll reset.
-   - The dispatcher covers yard-master's variants: `home` renders the feed
-     itself, the list pages hang off it, `trip` is this repo's own page,
-     `vehicle` is gone, and the managed variants render this repo's own pages,
-     the calendar included.
-   - `meUserId` added to the hooks: the managers page marks the signed-in row,
-     and `RenderContext` is a verbatim type that has no business growing a
-     field for it.
+   - The dispatcher covers yard-master's six variants: `home` renders the feed
+     itself, `trip` is this repo's own page, `vehicle` is gone, and `tracker`
+     and `alert` render the managed objects. There are no list pages; a list is
+     a scrollbox on the page of the object that owns it.
+   - `meUserId` added to the hooks: sharing marks the signed-in row, and
+     `RenderContext` is a verbatim type that has no business growing a field
+     for it.
    - `action` added to the hooks, and `data-action` delegated alongside
      `data-nav`. test-track's panel is read-only and needs neither; here a page
      emits a button and `actions.ts` owns what it does, which is what keeps the
@@ -42,20 +42,10 @@ import { RtIndex } from './rt-index';
 import type { RenderContext } from './render-utils';
 import { escHtml, formatRelative } from './render-utils';
 import { renderAlertPage } from './pages/alert-page';
-import { renderAssignmentsPage } from './pages/assignments-page';
-import { renderManagersPage } from './pages/managers-page';
 import { renderRoutePage } from './pages/route-page';
 import { renderStopPage } from './pages/stop-page';
 import { renderTrackerPage } from './pages/tracker-page';
 import { renderFeedPage } from './pages/feed-page';
-import {
-  renderAlertsPage,
-  renderRoutesPage,
-  renderServicesPage,
-  renderStopsPage,
-  renderTrackersPage,
-} from './pages/list-pages';
-import { renderServicePage } from './pages/service-page';
 import { renderTripPage } from './pages/trip-page';
 
 export interface PanelRendererHooks {
@@ -266,18 +256,6 @@ export class PanelRenderer {
     switch (this.state.type) {
       case 'home':
         return renderFeedPage(ctx, this.hooks.mapIssues());
-      case 'routes':
-        return renderRoutesPage(ctx);
-      case 'stops':
-        return renderStopsPage(ctx);
-      case 'trackers':
-        return renderTrackersPage(ctx);
-      case 'alerts':
-        return renderAlertsPage(ctx);
-      case 'services':
-        return renderServicesPage(ctx);
-      case 'service':
-        return renderServicePage(ctx, this.state);
       case 'route':
         return renderRoutePage(ctx, index, this.state);
       case 'stop':
@@ -288,10 +266,6 @@ export class PanelRenderer {
         return renderAlertPage(ctx, this.state);
       case 'tracker':
         return renderTrackerPage(ctx, this.state);
-      case 'managers':
-        return renderManagersPage(ctx, this.hooks.meUserId());
-      case 'assignments':
-        return renderAssignmentsPage(ctx, this.state);
     }
   }
 }

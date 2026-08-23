@@ -17,8 +17,8 @@
  * a plain click closes the modal first and then navigates, since the page
  * behind it is about to change.
  *
- * Rows and chips are read-only. Every write to a rule lives on the assignments
- * page, and a chip is the way to it.
+ * Rows and chips are read-only. A tracker chip is the way to the object that
+ * owns the rule, which is where a write to it lives.
  */
 
 import { CONFIG } from '../config';
@@ -30,11 +30,9 @@ import { formatWindow } from './managed-render';
 import type { RenderContext } from './render-utils';
 import { escHtml, section } from './render-utils';
 import {
-  renderServiceChart,
   serviceCatalog,
-  serviceChartLegend,
   serviceRunsOn,
-  sortServices,
+  sortByCascade,
   type ServiceSummary,
 } from './service-catalog';
 import {
@@ -97,16 +95,15 @@ function chipLink(
 
 const CHIP_CLASS = 'block truncate rounded px-1 text-[10px] leading-4 hover:brightness-110';
 
-/** One service running that day, in the accent, linking to its own page. */
-function serviceChip(ctx: RenderContext, service: ServiceSummary): string {
-  return chipLink(
-    ctx,
-    { type: 'service', service_id: service.id },
-    service.id,
-    `${CHIP_CLASS} bg-primary/15 text-primary font-mono`,
-    '',
-    `Service ${service.id}`
-  );
+/**
+ * One service running that day, in the accent.
+ *
+ * A chip rather than a link: a service is not an object this app browses, so
+ * the id is a fact about the day and nothing more.
+ */
+function serviceChip(service: ServiceSummary): string {
+  return `<span class="${CHIP_CLASS} bg-primary/15 text-primary font-mono"
+    title="${escHtml(`Service ${service.id}`)}">${escHtml(service.id)}</span>`;
 }
 
 /**
@@ -145,7 +142,7 @@ function renderDayCell(
   const assignments = ctx.session.assignmentsOn(date);
   const running = services.filter((service) => serviceRunsOn(service, date));
   const chips = [
-    ...running.map((service) => serviceChip(ctx, service)),
+    ...running.map((service) => serviceChip(service)),
     ...assignments.map((assignment) => assignmentChip(ctx, assignment)),
   ];
 
@@ -153,14 +150,10 @@ function renderDayCell(
   const hidden = chips.length - shown.length;
   const more =
     hidden > 0
-      ? chipLink(
-          ctx,
-          { type: 'assignments', date },
-          `+${hidden} more`,
-          `${CHIP_CLASS} opacity-60`,
-          '',
-          `${hidden} more on ${dayLabel(date)}`
-        )
+      ? `<span class="${CHIP_CLASS} opacity-60"
+          title="${escHtml(`${hidden} more on ${dayLabel(date)}`)}">${escHtml(
+          `+${hidden} more`
+        )}</span>`
       : '';
 
   const isToday = date === today();
@@ -169,23 +162,17 @@ function renderDayCell(
   return `<div class="min-h-16 rounded-lg border p-1 space-y-0.5 ${
     outside ? 'border-base-300/40 bg-base-200/30' : 'border-base-300'
   }">
-    ${chipLink(
-      ctx,
-      { type: 'assignments', date },
-      String(dayOfMonth(date)),
-      `block text-[11px] leading-4 tabular-nums font-medium ${
-        outside ? 'opacity-40' : 'opacity-70'
-      } ${isToday ? 'text-primary font-bold' : ''}`,
-      '',
-      dayLabel(date)
-    )}
+    <span class="block text-[11px] leading-4 tabular-nums font-medium ${
+      outside ? 'opacity-40' : 'opacity-70'
+    } ${isToday ? 'text-primary font-bold' : ''}" title="${escHtml(dayLabel(date))}"
+      >${dayOfMonth(date)}</span>
     ${shown.join('')}${more}
   </div>`;
 }
 
 function renderGrid(ctx: RenderContext, month: ServiceDate): string {
   const feed = ctx.session.staticFeed;
-  const services = feed ? sortServices([...serviceCatalog(feed).values()]) : [];
+  const services = feed ? sortByCascade([...serviceCatalog(feed).values()]) : [];
   const days = monthGrid(month);
 
   const header = WEEKDAY_LABELS.map(
@@ -202,7 +189,7 @@ function renderGrid(ctx: RenderContext, month: ServiceDate): string {
         .map((date) => renderDayCell(ctx, date, month, services))
         .join('')}</div>
       <p class="text-xs opacity-50">A chip is a service running that day, or a tracker assigned
-        to a trip. The day number opens that day's assignments.</p>
+        to a trip. A tracker chip opens that tracker.</p>
     </div>`;
 }
 
@@ -276,24 +263,8 @@ function renderRuleChart(ctx: RenderContext, month: ServiceDate): string {
 }
 
 function renderTimeline(ctx: RenderContext, month: ServiceDate): string {
-  const feed = ctx.session.staticFeed;
-  const services = feed ? sortServices([...serviceCatalog(feed).values()]) : [];
-  const shown = services.slice(0, CONFIG.SERVICE_LIST_MAX);
-  const cut =
-    services.length > shown.length
-      ? `<p class="text-xs opacity-50">${escHtml(
-          `${services.length - shown.length} more services not shown.`
-        )}</p>`
-      : '';
-
   return `
     <div class="space-y-4">
-      ${section(
-        'Services',
-        `${renderServiceChart(ctx, shown, {
-          emptyMessage: 'The loaded schedule names no services.',
-        })}${cut}${serviceChartLegend()}`
-      )}
       ${section(
         'Assignments',
         `${renderRuleChart(ctx, month)}

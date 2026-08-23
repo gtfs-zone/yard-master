@@ -30,7 +30,6 @@
 
 import { CONFIG } from '../../config';
 import type { Feed, GtfsUpload } from '../../types/api';
-import type { PageState } from '../../types/page-state';
 import type { MapDataIssues } from '../layer-manager';
 import type { RenderContext } from '../render-utils';
 import { escHtml, prop, propList, section } from '../render-utils';
@@ -46,7 +45,6 @@ import { resolveRealtimeUrl } from '../feed-url-resolve';
 import { isHosted, publicScheduleUrl, sourceLabel } from '../feed-source';
 import { formatBytes } from '../feed-download';
 import { renderIssueCard } from '../../utils/issue-card';
-import { serviceIds } from '../service-catalog';
 
 /**
  * An external link, shown as the URL itself so it can be read and copied.
@@ -338,88 +336,6 @@ function renderIssues(ctx: RenderContext, issues: MapDataIssues): string {
   ]);
 }
 
-// ─── The links out ───────────────────────────────────────────────────────────
-
-/**
- * A count, or the reason there is not one yet.
- *
- * A list that has not been fetched shows nothing rather than a zero: "no
- * trackers" and "the trackers have not arrived" are different facts, and a
- * badge that says 0 for both is the one that gets believed.
- */
-function browseRow(
-  ctx: RenderContext,
-  state: PageState,
-  label: string,
-  count: number | null,
-  sublabel?: string
-): string {
-  return entityRow(ctx, {
-    state,
-    label,
-    ...(sublabel ? { sublabel } : {}),
-    ...(count === null ? {} : { badge: String(count) }),
-  });
-}
-
-/** The managed objects hanging off this feed, one row each. */
-function renderManagedLinks(ctx: RenderContext): string {
-  const session = ctx.session;
-  const members = session.members;
-
-  return section(
-    'In this feed',
-    entityRowList(
-      [
-        browseRow(ctx, { type: 'trackers' }, 'Trackers', session.trackers.size),
-        browseRow(
-          ctx,
-          { type: 'assignments' },
-          'Assignments',
-          null,
-          'Which tracker runs which trip'
-        ),
-        browseRow(ctx, { type: 'alerts' }, 'Service alerts', session.serviceAlerts.size),
-        browseRow(
-          ctx,
-          { type: 'managers' },
-          'Managers',
-          members ? members.members.length : null,
-          members && members.invites.length
-            ? `${members.invites.length} invited`
-            : undefined
-        ),
-      ],
-      ''
-    )
-  );
-}
-
-/**
- * The GTFS lists. All three render before the zip does, without a count, so the
- * way into a list is never hidden by a download; the status line above them is
- * what says why the counts are missing.
- */
-function renderScheduleLinks(ctx: RenderContext): string {
-  const feed = ctx.session.staticFeed;
-  const places = feed ? [...feed.stops.values()].filter((s) => !s.parent_station).length : null;
-
-  return entityRowList(
-    [
-      browseRow(ctx, { type: 'routes' }, 'Routes', feed ? feed.routes.size : null),
-      browseRow(ctx, { type: 'stops' }, 'Stops', places),
-      browseRow(
-        ctx,
-        { type: 'services' },
-        'Services',
-        feed ? serviceIds(feed).size : null,
-        'What runs on which days'
-      ),
-    ],
-    ''
-  );
-}
-
 /**
  * The whole fleet at once: how many trackers are reporting, how many have gone
  * quiet, and how many have said nothing.
@@ -509,12 +425,10 @@ export function renderFeedPage(ctx: RenderContext, issues: MapDataIssues): strin
       ${renderHistory(ctx, feed)}
       ${renderOpenIn(feed)}
 
-      ${renderManagedLinks(ctx)}
       ${renderFleet(ctx)}
 
       <div class="divider text-xs opacity-60 my-1">Schedule</div>
       ${renderStaticStatus(ctx)}
-      ${renderScheduleLinks(ctx)}
       ${renderContents(ctx)}
       ${renderIssues(ctx, issues)}
     </div>`;
