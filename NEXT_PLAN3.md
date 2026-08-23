@@ -317,24 +317,24 @@ section with the docs link and a tooltip carrying the reference's own words.
 Scheduled, because the editor edits the schedule; "Open in visualizer" stays
 with the realtime endpoints, because that is what viz consumes.
 
-- [ ] Merge `renderLoad` and `renderSource` into one `renderScheduled`.
+- [x] Merge `renderLoad` and `renderSource` into one `renderScheduled`.
       Keep the error alert and `next_retry_at`, drop the rest of the load
       section's separate framing.
-- [ ] Section headings get a `(?)` tooltip trigger using `spec-field.ts`'s
+- [x] Section headings get a `(?)` tooltip trigger using `spec-field.ts`'s
       `.field-tooltip-trigger` markup, with `gtfs.org/reference/` as the link
       and the reference's own description as the content.
-- [ ] `renderOpenIn` splits: the editor button into GTFS Scheduled, the viz
+- [x] `renderOpenIn` splits: the editor button into GTFS Scheduled, the viz
       button into GTFS Realtime Endpoints. The section itself goes.
-- [ ] `renderActions` becomes the last section, "Feed", not a button row above
+- [x] `renderActions` becomes the last section, "Feed", not a button row above
       everything.
-- [ ] `renderManagedLinks` and `renderScheduleLinks` become two scrollboxes:
+- [x] `renderManagedLinks` and `renderScheduleLinks` become two scrollboxes:
       Trackers and Routes, `max-h-96 overflow-y-auto`, `entityRowList` rows.
-- [ ] Delete `renderContents` (the "In this browser" counts), `renderFleet`
+- [x] Delete `renderContents` (the "In this browser" counts), `renderFleet`
       and `renderIssues`. The fleet summary becomes the count badge on the
       Trackers scrollbox plus the liveness badge already on each row; the
       unparsed-schedule facts become the one-line `renderStaticStatus` that is
       already there.
-- [ ] `renderHistory` stays but moves inside GTFS Scheduled as a `<details>`,
+- [x] `renderHistory` stays but moves inside GTFS Scheduled as a `<details>`,
       since upload history is a fact about the schedule source.
 
 **Gotchas.**
@@ -348,6 +348,47 @@ status; do not merge the two into one number that hides the disagreement.
 orphaned.
 
 ---
+
+**What was found doing it.**
+
+`renderFeedPage` lost its `issues` argument, which took the `mapIssues` hook,
+its `index.ts` wiring and `src/utils/issue-card.ts` with it — the feed page was
+the card's only caller. `panel-renderer.ts`'s `@changes` bullet about the hook
+was rewritten to say why the page has no counts rather than why it had them,
+and the vendored row for `issue-card.ts` is out of `VENDORED.md` already rather
+than waiting for Phase 7. `LayerManager.issues` and `MapController.issues` are
+untouched: both are vendored, and the counts are still what the map itself
+reasons about.
+
+The load section did not survive as its own thing at all. `Last loaded`,
+`Started`, `Next retry` and `Feed timezone` are four more rows in GTFS
+Scheduled's one `propList`, under the source rows, and the "never handed to the
+loader" line is a sentence above them rather than a section body. The error
+alert stays at the top of the section, where it is the first thing read.
+
+Upload history is a `<details data-detail="feed:uploads">`, so the panel's open
+tracking keeps it open across the fifteen-second repaint the way it does a raw
+column table. The count moved into the summary, since a disclosure has no
+`rowSection` heading to hang a badge off.
+
+The Routes scrollbox caps at a new `CONFIG.ROUTE_LIST_MAX` of 200 with the
+existing `cappedNote`. The deleted routes page had no cap because it was a whole
+page; a scrollbox on a panel that rebuilds every row on each realtime poll is
+not the place to render a thousand of them. Trackers is uncapped — a feed's
+fleet is tens, not thousands — and carries the New tracker button under the
+list.
+
+Routes is also where `renderStaticStatus` lives now: routes come out of the zip,
+so "downloading the schedule" is that section's empty state rather than a line
+floating between sections. `CONFIG.STOP_LIST_MAX` and `CONFIG.RULE_LIST_MAX` are
+left orphaned by Phases 1 and 3 and are Phase 7's to remove.
+
+"Open in editor" takes the *published* URL, not `static_feed_url`. It is the one
+URL that works for whoever the link is sent to, and it is what `renderOpenIn`
+already passed — a linked feed whose upstream zip is reachable is the accident,
+not the contract.
+
+
 
 ## Phase 4 — Fields
 

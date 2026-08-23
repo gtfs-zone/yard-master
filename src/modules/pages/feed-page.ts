@@ -1,42 +1,37 @@
 /**
- * The feed page: everything the API knows about the selected feed, and the way
- * into every object hanging off it.
+ * The feed page: identity, children, then facts.
  *
  * yard-master's own page. test-track shows a feed status page here; this repo
- * is a manager, so the no-focus page is the feed itself. It is the feed row the
- * API owns — its identity, where its schedule comes from, what the loader last
- * made of it, and what this reader may do to it — followed by a flat block of
- * links to the lists that hang off it.
+ * is a manager, so the no-focus page is the feed itself.
  *
- * Nothing is behind a disclosure. This page used to be an accordion whose rows
- * disagreed with each other: Trackers and Alerts opened in place while
- * Assignments and Managers navigated. Every list is a page now, so every row
- * here does the same thing, and a list is complete on its own page rather than
- * capped inside a section of this one.
+ * The order is the point. The feed names itself, then the two things that hang
+ * off it — its trackers and its routes, each a scrollbox rather than a page —
+ * and only then the facts about where its schedule comes from and what it
+ * publishes. A reader arriving here wants an object, not a report.
  *
- * The two halves of a feed are reported separately on purpose. `load` is what
- * *cafe-car* last made of the zip, which is what the published GTFS-RT feed is
- * built from; the counts under "In this browser" are what *this browser*
- * parsed a moment ago. They can legitimately disagree — a load that failed
- * leaves the server on an older schedule than the one the map is drawing — and
- * a page that merged them would hide exactly that.
+ * The facts are two sections and no more. `GTFS Scheduled` is everything about
+ * the schedule: where it comes from, what the loader last made of it, and the
+ * uploads it has kept. `GTFS Realtime Endpoints` is what this feed publishes.
+ * The sibling apps open from whichever of the two they consume — the editor
+ * edits the schedule, the visualizer reads the realtime endpoints — so neither
+ * is a section of its own.
  *
- * The actions are not equally available. Editing the feed and replacing its
- * schedule are open to any member, matching the API; deleting is what
- * `can_manage` gates, and a member who cannot do it is not shown a button that
- * would 403. Transferring is `can_manage`-gated too, and lives on the managers
- * page next to the list of people it can hand the feed to.
+ * What this browser parsed out of the zip is deliberately not reported here.
+ * cafe-car's load and this browser's parse can legitimately disagree, and the
+ * page used to print both sets of counts side by side and leave the reader to
+ * notice; the map draws one of them and `renderStaticStatus` says when the
+ * other has not arrived, which is the same information without the table.
  */
 
 import { CONFIG } from '../../config';
 import type { Feed, GtfsUpload } from '../../types/api';
-import type { MapDataIssues } from '../layer-manager';
 import type { RenderContext } from '../render-utils';
-import { escHtml, prop, propList, section } from '../render-utils';
-import { entityRow, entityRowList, rowSection } from '../entity-row';
+import { escHtml, prop, propList, routeBadge, section } from '../render-utils';
+import { cappedNote, entityRow, entityRowList, rowSection } from '../entity-row';
 import {
   actionButton,
   isoWithAge,
+  livenessBadge,
   loadStatusBadge,
   personLabel,
   trackerLiveness,
@@ -44,7 +39,29 @@ import {
 import { resolveRealtimeUrl } from '../feed-url-resolve';
 import { isHosted, publicScheduleUrl, sourceLabel } from '../feed-source';
 import { formatBytes } from '../feed-download';
-import { renderIssueCard } from '../../utils/issue-card';
+import { routeSortKey } from '../route-sort';
+
+/** Where a section heading's `(?)` sends a reader who wants the whole thing. */
+const SCHEDULE_REFERENCE_URL = 'https://gtfs.org/documentation/schedule/reference/';
+const REALTIME_REFERENCE_URL = 'https://gtfs.org/documentation/realtime/reference/';
+
+/** The reference's own words, so this app is not paraphrasing the spec. */
+const SCHEDULE_TOOLTIP = `The General Transit Feed Specification (GTFS) is a standardized format
+  for public transportation schedules and associated geographic information.`;
+const REALTIME_TOOLTIP = `GTFS Realtime is a feed specification that allows public transportation
+  agencies to provide realtime updates about their fleet to application developers.`;
+
+/**
+ * A section heading's `(?)`, using the same trigger markup `spec-field.ts`
+ * emits so `utils/tooltip-position.ts`'s portal picks it up with no new code.
+ * The glyph is the link, matching `specLabelContent`, where the label is.
+ */
+function docsTooltip(url: string, content: string): string {
+  return `<span class="field-tooltip-trigger cursor-help ml-1 align-middle text-xs opacity-60"
+    tabindex="0" data-tooltip-content="${escHtml(content)}"
+    ><a class="link link-hover" href="${escHtml(url)}" target="_blank"
+      rel="noopener noreferrer">(?)</a></span>`;
+}
 
 /**
  * An external link, shown as the URL itself so it can be read and copied.
@@ -64,321 +81,7 @@ function urlRow(label: string, url: string, resolve = false): string {
   );
 }
 
-// ─── The feed itself ─────────────────────────────────────────────────────────
-
-/**
- * Where cafe-car's copy of the schedule stands. Every field the API reports is
- * shown, including the ones that are null most of the time: `next_retry_at`
- * with a value is the difference between a load that failed and gave up and one
- * that failed and is coming back.
- */
-function renderLoad(feed: Feed): string {
-  const load = feed.load;
-  if (!load) {
-    return section(
-      'Static load',
-      `<p class="text-xs opacity-60">This feed has never been handed to the loader. Its schedule
-       is not on the server yet, so the published realtime feed has nothing to match against.</p>`
-    );
-  }
-
-  return section(
-    'Static load',
-    `<div class="space-y-2">
-      ${
-        load.error_message
-          ? `<div class="alert alert-error alert-sm text-xs"><span>${escHtml(
-              load.error_message
-            )}</span></div>`
-          : ''
-      }
-      ${propList([
-        prop('Last loaded', isoWithAge(load.last_loaded_at)),
-        // `isoWithAge` counts in both directions, so a start in the past reads
-        // as an elapsed time while a retry in the future reads as a countdown.
-        // Both are driven by the panel's own ticker, so a running load shows
-        // itself running without the stream having to say anything.
-        prop('Started', isoWithAge(load.started_at)),
-        load.next_retry_at ? prop('Next retry', isoWithAge(load.next_retry_at)) : '',
-        prop('Feed timezone', escHtml(load.timezone ?? '—')),
-      ])}
-    </div>`
-  );
-}
-
-/** Who uploaded it, if the members list happens to name them. */
-function uploaderLabel(ctx: RenderContext, upload: GtfsUpload): string {
-  const id = upload.uploaded_by_user_id;
-  if (id === null) return 'someone no longer on this feed';
-  const member = ctx.session.members?.members.find((m) => m.user_id === id);
-  return member ? personLabel(member) : `user ${id}`;
-}
-
-/** One upload as a line: what it was, how big, when, and by whom. */
-function uploadLine(ctx: RenderContext, upload: GtfsUpload): string {
-  return `${escHtml(upload.original_filename)} · ${escHtml(
-    formatBytes(upload.size_bytes)
-  )} · ${isoWithAge(upload.uploaded_at)} · ${escHtml(uploaderLabel(ctx, upload))}`;
-}
-
-/**
- * Where this feed's schedule comes from, and where a consumer gets it.
- *
- * The two kinds answer the same two questions differently: a linked feed shows
- * the URL it is downloaded from, which is also the URL a consumer would use; a
- * hosted feed shows the URL this app publishes, which is the only one anybody
- * outside the stack is given for it.
- */
-/**
- * Re-download a linked feed's zip.
- *
- * Disabled while cafe-car's own load is running, which the event stream
- * reports as it happens. Queueing a second load on top of one already in
- * flight does nothing — schedule-foamer's task is a singleton per feed — so a
- * button that offered it would be lying about what it does.
- */
-function reloadButton(feed: Feed): string {
-  const running = feed.load?.status === 'running';
-  return actionButton('feed:reload', '', running ? 'Reloading…' : 'Reload', 'btn-outline', running);
-}
-
-function renderSource(ctx: RenderContext, feed: Feed): string {
-  const hosted = isHosted(feed);
-  const published = publicScheduleUrl(feed);
-  const current = feed.current_upload;
-
-  const rows = [prop('Source', escHtml(sourceLabel(feed)))];
-  if (hosted) {
-    rows.push(
-      published
-        ? urlRow('Published at', published)
-        : prop('Published at', '<span class="opacity-40">nothing uploaded yet</span>')
-    );
-    rows.push(
-      current
-        ? prop('Serving', uploadLine(ctx, current))
-        : prop('Serving', '<span class="opacity-40">nothing uploaded yet</span>')
-    );
-  } else {
-    rows.push(urlRow('Downloaded from', feed.static_feed_url ?? '—'));
-  }
-
-  return section(
-    'Schedule source',
-    `${propList(rows)}
-    <div class="flex flex-wrap gap-2 pt-2">
-      ${actionButton(
-        'feed:replace-schedule',
-        '',
-        hosted ? 'Replace schedule' : 'Upload a schedule'
-      )}
-      ${hosted ? '' : reloadButton(feed)}
-      ${published ? actionButton('feed:copy-schedule-url', '', 'Copy URL') : ''}
-    </div>`
-  );
-}
-
-/**
- * The uploads this feed has kept, newest first, with the way back to any of
- * them.
- *
- * Rendered for a feed that has any, not only for a hosted one: a feed switched
- * back to a URL still has its history, and that history is the only way to
- * undo the switch.
- */
-function renderHistory(ctx: RenderContext, feed: Feed): string {
-  const uploads = ctx.session.uploads;
-  if (uploads === null) {
-    return isHosted(feed)
-      ? section('Upload history', '<p class="text-xs opacity-60">Loading…</p>')
-      : '';
-  }
-  if (uploads.length === 0) return '';
-
-  const shown = uploads.slice(0, CONFIG.UPLOAD_HISTORY_MAX);
-  const rows = shown.map((upload) =>
-    entityRow(ctx, {
-      label: upload.original_filename,
-      sublabel: `${formatBytes(upload.size_bytes)} · ${uploaderLabel(ctx, upload)}`,
-      badgeHtml: upload.is_current
-        ? '<span class="badge badge-xs badge-success">serving</span>'
-        : `<span class="text-xs opacity-60">${isoWithAge(upload.uploaded_at)}</span>`,
-      actionsHtml: upload.is_current
-        ? ''
-        : `${actionButton('upload:activate', upload.id, 'Serve')}
-           ${actionButton('upload:delete', upload.id, 'Delete', 'btn-ghost btn-error')}`,
-    })
-  );
-
-  return rowSection(
-    'Upload history',
-    uploads.length,
-    `${entityRowList(rows, 'No uploads yet.')}
-     ${
-       uploads.length > shown.length
-         ? `<p class="text-xs opacity-50">${uploads.length - shown.length} older not shown.</p>`
-         : ''
-     }`
-  );
-}
-
-/**
- * The sibling apps, opened on this feed.
- *
- * Both links are built from the feed's own URLs rather than from anything this
- * app holds, so they keep working for whoever the link is sent to: viz takes
- * the published realtime endpoints in its hash, and the editor takes the static
- * zip through its `load` command.
- */
-function renderOpenIn(feed: Feed): string {
-  // The published URL rather than the upstream one, so a hosted feed opens in
-  // both apps at all: they run on somebody else's machine and have no way to
-  // reach an object this app is holding.
-  const schedule = publicScheduleUrl(feed) ?? '';
-  const viz = new URLSearchParams({
-    static: schedule,
-    rt_vp: resolveRealtimeUrl(feed.vehicle_positions_url),
-    rt_tu: resolveRealtimeUrl(feed.trip_updates_url),
-    rt_al: resolveRealtimeUrl(feed.service_alerts_url),
-  });
-  const editor = new URLSearchParams({ load: schedule });
-
-  return section(
-    'URLs',
-    `${propList([
-      urlRow('Vehicle positions', feed.vehicle_positions_url, true),
-      urlRow('Trip updates', feed.trip_updates_url, true),
-      urlRow('Service alerts', feed.service_alerts_url, true),
-    ])}
-    <div class="flex flex-wrap gap-2 pt-2">
-      <a class="btn btn-xs btn-outline" target="_blank" rel="noopener"
-         href="${escHtml(`${CONFIG.VIZ_BASE}/#${viz.toString()}`)}">Open in visualizer</a>
-      <a class="btn btn-xs btn-outline" target="_blank" rel="noopener"
-         href="${escHtml(`${CONFIG.EDITOR_BASE}/#${editor.toString()}`)}">Open in editor</a>
-    </div>`
-  );
-}
-
-/**
- * What this reader may do to the feed.
- *
- * `can_manage` is the permission rather than the fact, so an admin working on
- * somebody else's feed gets the owner-only buttons and the owner's own
- * `is_owner` is not what decides it.
- */
-function renderActions(feed: Feed): string {
-  return `<div class="flex flex-wrap gap-2">
-    ${actionButton('feed:edit', '', 'Edit')}
-    ${feed.can_manage ? actionButton('feed:delete', '', 'Delete', 'btn-outline btn-error') : ''}
-  </div>`;
-}
-
-// ─── The GTFS half ───────────────────────────────────────────────────────────
-
-/** What this browser parsed out of the zip. */
-function renderContents(ctx: RenderContext): string {
-  const feed = ctx.session.staticFeed;
-  if (!feed) return '';
-
-  return section(
-    'In this browser',
-    `${propList([
-      prop('Agencies', String(feed.agencies.length)),
-      prop('Routes', String(feed.routes.size)),
-      prop('Stops', String(feed.stops.size)),
-      prop('Trips', String(feed.trips.size)),
-      prop('Shapes', String(feed.shapes.size)),
-    ])}
-    <p class="text-xs opacity-50">Parsed from the feed's schedule zip by this browser, not by the
-    server.</p>`
-  );
-}
-
-/**
- * What the map could not draw, as the vendored warning card.
- *
- * The unmatched row is reworded rather than reused as upstream words it. In
- * test-track an unmatched vehicle means somebody else's feed is lying to you:
- * it claims a route the schedule does not contain. Here it is usually the
- * ordinary state of an idle tracker, which is reporting a position and is not
- * assigned to anything, so the wording has to lead with that and mention the
- * feed problem second.
- */
-function renderIssues(ctx: RenderContext, issues: MapDataIssues): string {
-  // Only meaningful once the map has something to have drawn: before the zip
-  // parses every vehicle is unmatched by definition.
-  if (!ctx.session.staticFeed) return '';
-
-  return renderIssueCard('Not drawn', [
-    {
-      label: 'Vehicles not on a known trip',
-      count: issues.vehiclesUnmatched,
-      note: `Reporting a position, but not running a trip this schedule describes. That is the
-             normal state of an idle tracker; it also covers a tracker assigned to a trip the
-             loaded feed no longer has. They draw in grey on the map.`,
-    },
-    {
-      label: 'Stops with no stop_id',
-      count: issues.stopsMissingId,
-      note: 'Unaddressable, so they cannot be drawn, linked to or focused.',
-    },
-    {
-      label: 'Stops with no coordinates',
-      count: issues.stopsMissingCoords,
-      note: 'A blank or unparseable stop_lat/stop_lon. They are in the feed but not on the map.',
-    },
-    {
-      label: 'Vehicles sharing a map feature',
-      count: issues.vehiclesDuplicateKeys,
-      note: `Must be zero. A non-zero count means two vehicles collapsed onto one dot, which is
-             a bug in how cafe-car derives a vehicle key, not a problem with this feed.`,
-    },
-  ]);
-}
-
-/**
- * The whole fleet at once: how many trackers are reporting, how many have gone
- * quiet, and how many have said nothing.
- *
- * This is the feed-wide version of the badge on each tracker row, and the
- * reason it is here: "three of my eleven trackers are not reporting" is a
- * question about the feed, and answering it by scrolling a list is how it goes
- * unnoticed.
- */
-function renderFleet(ctx: RenderContext): string {
-  const session = ctx.session;
-  if (session.trackers.size === 0) return '';
-
-  let reporting = 0;
-  let quiet = 0;
-  let silent = 0;
-  for (const tracker of session.trackers.values()) {
-    const liveness = trackerLiveness(session, tracker.id);
-    if (liveness.state === 'reporting') reporting += 1;
-    else if (liveness.state === 'quiet') quiet += 1;
-    else silent += 1;
-  }
-
-  return rowSection(
-    'Fleet',
-    `${reporting} reporting`,
-    `${propList([
-      prop('Reporting', String(reporting)),
-      // Only shown once it has happened: before then it is always zero, and a
-      // permanent zero reads like a claim that nothing ever goes quiet.
-      quiet ? prop('Went quiet', String(quiet)) : '',
-      prop('No fix', String(silent)),
-      // Not the same as the tracker count: one tracker can be carrying several.
-      reporting && session.vehicles.size !== reporting
-        ? prop('Vehicles', String(session.vehicles.size))
-        : '',
-    ])}
-    <p class="text-xs opacity-50">A position expires ${Math.round(
-      CONFIG.TRACKER_STALE_MS / 1000
-    )} seconds after it is posted, so "reporting" means a fix arrived within the last
-    minute. Nothing here is remembered across a reload.</p>`
-  );
-}
+// ─── The children ────────────────────────────────────────────────────────────
 
 /**
  * Where the zip is up to. The managed half of the page works without it, so
@@ -398,9 +101,290 @@ function renderStaticStatus(ctx: RenderContext): string {
   return '';
 }
 
-export function renderFeedPage(ctx: RenderContext, issues: MapDataIssues): string {
-  const session = ctx.session;
-  const feed = session.feed;
+/** The scroll container every list on this page shares. */
+function scrollbox(body: string): string {
+  return `<div class="max-h-96 overflow-y-auto">${body}</div>`;
+}
+
+/**
+ * Every tracker on the feed, reporting or not.
+ *
+ * A tracker with no fix has no coordinates and so is not on the map at all,
+ * which makes this list the only place it exists. The liveness badge on each
+ * row is what the page's old fleet summary counted; a reader asking "how many
+ * are quiet" reads the badges rather than a number that agrees with them.
+ */
+function renderTrackers(ctx: RenderContext): string {
+  const trackers = [...ctx.session.trackers.values()].sort((a, b) =>
+    a.nickname.localeCompare(b.nickname)
+  );
+
+  const rows = trackers.map((tracker) =>
+    entityRow(ctx, {
+      state: { type: 'tracker', tracker_id: tracker.id },
+      label: tracker.nickname,
+      badgeHtml: livenessBadge(trackerLiveness(ctx.session, tracker.id)),
+    })
+  );
+
+  return rowSection(
+    'Trackers',
+    trackers.length,
+    `${scrollbox(entityRowList(rows, 'No trackers yet.'))}
+     <div class="pt-1">${actionButton('tracker:new', '', 'New tracker')}</div>`
+  );
+}
+
+/**
+ * The feed's routes, in the order the map paints them.
+ *
+ * Same sort key as the layers, so the panel's order and the map's stacking
+ * agree about which routes are the important ones, and descending so the one
+ * that paints on top reads first.
+ */
+function renderRoutes(ctx: RenderContext): string {
+  const feed = ctx.session.staticFeed;
+  if (!feed) return rowSection('Routes', 0, renderStaticStatus(ctx));
+
+  const routes = [...feed.routes.values()].sort((a, b) => {
+    const keyA = routeSortKey(a.raw.route_type, (feed.tripsByRoute.get(a.id) ?? []).length);
+    const keyB = routeSortKey(b.raw.route_type, (feed.tripsByRoute.get(b.id) ?? []).length);
+    if (keyA !== keyB) return keyB - keyA;
+    return (a.short_name || a.long_name || a.id).localeCompare(b.short_name || b.long_name || b.id);
+  });
+
+  const shown = routes.slice(0, CONFIG.ROUTE_LIST_MAX);
+  const rows = shown.map((route) => {
+    const trips = (feed.tripsByRoute.get(route.id) ?? []).length;
+    return entityRow(ctx, {
+      state: { type: 'route', route_id: route.id },
+      // The badge already carries the route's colour, so the row's dot would
+      // say the same thing twice.
+      leadHtml: routeBadge(ctx, route),
+      label: route.long_name || route.short_name || route.id,
+      badge: `${trips} trip${trips === 1 ? '' : 's'}`,
+    });
+  });
+
+  return rowSection(
+    'Routes',
+    routes.length,
+    `${scrollbox(entityRowList(rows, 'No routes in this feed.'))}
+     ${cappedNote(routes.length, shown.length)}`
+  );
+}
+
+// ─── GTFS Scheduled ──────────────────────────────────────────────────────────
+
+/** Who uploaded it, if the members list happens to name them. */
+function uploaderLabel(ctx: RenderContext, upload: GtfsUpload): string {
+  const id = upload.uploaded_by_user_id;
+  if (id === null) return 'someone no longer on this feed';
+  const member = ctx.session.members?.members.find((m) => m.user_id === id);
+  return member ? personLabel(member) : `user ${id}`;
+}
+
+/** One upload as a line: what it was, how big, when, and by whom. */
+function uploadLine(ctx: RenderContext, upload: GtfsUpload): string {
+  return `${escHtml(upload.original_filename)} · ${escHtml(
+    formatBytes(upload.size_bytes)
+  )} · ${isoWithAge(upload.uploaded_at)} · ${escHtml(uploaderLabel(ctx, upload))}`;
+}
+
+/**
+ * Re-download a linked feed's zip.
+ *
+ * Disabled while cafe-car's own load is running, which the event stream
+ * reports as it happens. Queueing a second load on top of one already in
+ * flight does nothing — schedule-foamer's task is a singleton per feed — so a
+ * button that offered it would be lying about what it does.
+ */
+function reloadButton(feed: Feed): string {
+  const running = feed.load?.status === 'running';
+  return actionButton('feed:reload', '', running ? 'Reloading…' : 'Reload', 'btn-outline', running);
+}
+
+/**
+ * The uploads this feed has kept, newest first, with the way back to any of
+ * them.
+ *
+ * A disclosure, and inside the schedule section: an upload is a fact about
+ * where the schedule came from, and the only one that is history rather than
+ * current state. Rendered for a feed that has any, not only for a hosted one:
+ * a feed switched back to a URL still has its history, and that history is the
+ * only way to undo the switch.
+ */
+function renderHistory(ctx: RenderContext, feed: Feed): string {
+  const uploads = ctx.session.uploads;
+  if (uploads === null) {
+    return isHosted(feed) ? '<p class="text-xs opacity-60">Loading upload history…</p>' : '';
+  }
+  if (uploads.length === 0) return '';
+
+  const shown = uploads.slice(0, CONFIG.UPLOAD_HISTORY_MAX);
+  const rows = shown.map((upload) =>
+    entityRow(ctx, {
+      label: upload.original_filename,
+      sublabel: `${formatBytes(upload.size_bytes)} · ${uploaderLabel(ctx, upload)}`,
+      badgeHtml: upload.is_current
+        ? '<span class="badge badge-xs badge-success">serving</span>'
+        : `<span class="text-xs opacity-60">${isoWithAge(upload.uploaded_at)}</span>`,
+      actionsHtml: upload.is_current
+        ? ''
+        : `${actionButton('upload:activate', upload.id, 'Serve')}
+           ${actionButton('upload:delete', upload.id, 'Delete', 'btn-ghost btn-error')}`,
+    })
+  );
+
+  return `
+    <details class="text-xs rounded-lg border border-base-300 p-2" data-detail="feed:uploads">
+      <summary class="cursor-pointer font-medium">Upload history (${uploads.length})</summary>
+      <div class="mt-1">
+        ${entityRowList(rows, 'No uploads yet.')}
+        ${
+          uploads.length > shown.length
+            ? `<p class="text-xs opacity-50">${uploads.length - shown.length} older not shown.</p>`
+            : ''
+        }
+      </div>
+    </details>`;
+}
+
+/**
+ * The schedule, whole: where it comes from, where a consumer gets it, and what
+ * cafe-car's loader last made of it.
+ *
+ * The two kinds of source answer the same question differently — a linked feed
+ * shows the URL it is downloaded from, a hosted feed shows the URL this app
+ * publishes — and the load rows below them are the same either way. Every load
+ * field is shown, including the ones that are null most of the time:
+ * `next_retry_at` with a value is the difference between a load that failed and
+ * gave up and one that failed and is coming back.
+ */
+function renderScheduled(ctx: RenderContext, feed: Feed): string {
+  const hosted = isHosted(feed);
+  const published = publicScheduleUrl(feed);
+  const current = feed.current_upload;
+  const load = feed.load;
+
+  const rows = [prop('Source', escHtml(sourceLabel(feed)))];
+  if (hosted) {
+    rows.push(
+      published
+        ? urlRow('Published at', published)
+        : prop('Published at', '<span class="opacity-40">nothing uploaded yet</span>')
+    );
+    rows.push(
+      current
+        ? prop('Serving', uploadLine(ctx, current))
+        : prop('Serving', '<span class="opacity-40">nothing uploaded yet</span>')
+    );
+  } else {
+    rows.push(urlRow('Downloaded from', feed.static_feed_url ?? '—'));
+  }
+
+  if (load) {
+    rows.push(prop('Last loaded', isoWithAge(load.last_loaded_at)));
+    // `isoWithAge` counts in both directions, so a start in the past reads as
+    // an elapsed time while a retry in the future reads as a countdown. Both
+    // are driven by the panel's own ticker, so a running load shows itself
+    // running without the stream having to say anything.
+    rows.push(prop('Started', isoWithAge(load.started_at)));
+    if (load.next_retry_at) rows.push(prop('Next retry', isoWithAge(load.next_retry_at)));
+    rows.push(prop('Feed timezone', escHtml(load.timezone ?? '—')));
+  }
+
+  const editor = new URLSearchParams({ load: published ?? '' });
+
+  return section(
+    'GTFS Scheduled',
+    `<div class="space-y-2">
+      ${
+        load?.error_message
+          ? `<div class="alert alert-error alert-sm text-xs"><span>${escHtml(
+              load.error_message
+            )}</span></div>`
+          : ''
+      }
+      ${
+        load
+          ? ''
+          : `<p class="text-xs opacity-60">This feed has never been handed to the loader. Its
+             schedule is not on the server yet, so the published realtime feed has nothing to
+             match against.</p>`
+      }
+      ${propList(rows)}
+      <div class="flex flex-wrap gap-2 pt-1">
+        ${actionButton(
+          'feed:replace-schedule',
+          '',
+          hosted ? 'Replace schedule' : 'Upload a schedule'
+        )}
+        ${hosted ? '' : reloadButton(feed)}
+        ${published ? actionButton('feed:copy-schedule-url', '', 'Copy URL') : ''}
+        <a class="btn btn-xs btn-outline" target="_blank" rel="noopener"
+           href="${escHtml(`${CONFIG.EDITOR_BASE}/#${editor.toString()}`)}">Open in editor</a>
+      </div>
+      ${renderHistory(ctx, feed)}
+    </div>`,
+    docsTooltip(SCHEDULE_REFERENCE_URL, SCHEDULE_TOOLTIP)
+  );
+}
+
+// ─── GTFS Realtime Endpoints ─────────────────────────────────────────────────
+
+/**
+ * What this feed publishes, and the app that reads it.
+ *
+ * The visualizer link is built from the feed's own URLs rather than from
+ * anything this app holds, so it keeps working for whoever it is sent to: viz
+ * runs on somebody else's machine and has no way to reach an object here.
+ */
+function renderRealtime(feed: Feed): string {
+  const viz = new URLSearchParams({
+    static: publicScheduleUrl(feed) ?? '',
+    rt_vp: resolveRealtimeUrl(feed.vehicle_positions_url),
+    rt_tu: resolveRealtimeUrl(feed.trip_updates_url),
+    rt_al: resolveRealtimeUrl(feed.service_alerts_url),
+  });
+
+  return section(
+    'GTFS Realtime Endpoints',
+    `${propList([
+      urlRow('Vehicle positions', feed.vehicle_positions_url, true),
+      urlRow('Trip updates', feed.trip_updates_url, true),
+      urlRow('Service alerts', feed.service_alerts_url, true),
+    ])}
+    <div class="flex flex-wrap gap-2 pt-1">
+      <a class="btn btn-xs btn-outline" target="_blank" rel="noopener"
+         href="${escHtml(`${CONFIG.VIZ_BASE}/#${viz.toString()}`)}">Open in visualizer</a>
+    </div>`,
+    docsTooltip(REALTIME_REFERENCE_URL, REALTIME_TOOLTIP)
+  );
+}
+
+// ─── The feed row itself ─────────────────────────────────────────────────────
+
+/**
+ * What this reader may do to the feed. Last, because it acts on the whole page
+ * rather than on any one section of it.
+ *
+ * `can_manage` is the permission rather than the fact, so an admin working on
+ * somebody else's feed gets the owner-only buttons and the owner's own
+ * `is_owner` is not what decides it.
+ */
+function renderActions(feed: Feed): string {
+  return section(
+    'Feed',
+    `<div class="flex flex-wrap gap-2">
+      ${actionButton('feed:edit', '', 'Edit')}
+      ${feed.can_manage ? actionButton('feed:delete', '', 'Delete', 'btn-outline btn-error') : ''}
+    </div>`
+  );
+}
+
+export function renderFeedPage(ctx: RenderContext): string {
+  const feed = ctx.session.feed;
   if (!feed) {
     return '<p class="text-base-content/50 text-sm text-center py-8">No feed selected</p>';
   }
@@ -419,17 +403,10 @@ export function renderFeedPage(ctx: RenderContext, issues: MapDataIssues): strin
         </div>
       </div>
 
+      ${renderTrackers(ctx)}
+      ${renderRoutes(ctx)}
+      ${renderScheduled(ctx, feed)}
+      ${renderRealtime(feed)}
       ${renderActions(feed)}
-      ${renderLoad(feed)}
-      ${renderSource(ctx, feed)}
-      ${renderHistory(ctx, feed)}
-      ${renderOpenIn(feed)}
-
-      ${renderFleet(ctx)}
-
-      <div class="divider text-xs opacity-60 my-1">Schedule</div>
-      ${renderStaticStatus(ctx)}
-      ${renderContents(ctx)}
-      ${renderIssues(ctx, issues)}
     </div>`;
 }

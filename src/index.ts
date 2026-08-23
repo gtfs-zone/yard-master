@@ -138,7 +138,6 @@ panel = new PanelRenderer(panelContent, session, {
   hoverStop: (stop_id) => mapCtrl.hoverStop(stop_id),
   meUserId: () => appState.me?.user_id ?? null,
   action: (action, arg) => void actions.run(action, arg),
-  mapIssues: () => mapCtrl.issues,
 });
 panel.initialize();
 // The trail is rebuilt from the session, so a crumb whose object only just

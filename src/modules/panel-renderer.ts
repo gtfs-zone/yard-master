@@ -21,9 +21,9 @@
      `data-nav`. test-track's panel is read-only and needs neither; here a page
      emits a button and `actions.ts` owns what it does, which is what keeps the
      pages pure string renderers.
-   - `mapIssues` added to the hooks. The counts belong to `LayerManager`, which
-     is verbatim and knows nothing about the panel; upstream reads them off its
-     own status page, which this repo does not have. */
+   - The feed page takes no map-issue counts. Upstream reads them off its own
+     status page; here the map draws what it could draw and the feed page is
+     the feed, not a report on it. */
 /**
  * The right panel's object pages: one dispatcher over `PageState`, plus the
  * furniture every page shares.
@@ -36,7 +36,6 @@
  */
 
 import type { BreadcrumbItem, PageState } from '../types/page-state';
-import type { MapDataIssues } from './layer-manager';
 import type { FeedSession } from './feed-session';
 import { RtIndex } from './rt-index';
 import type { RenderContext } from './render-utils';
@@ -59,8 +58,6 @@ export interface PanelRendererHooks {
   meUserId: () => number | null;
   /** Run a write, named by the button that asked for it. */
   action: (action: string, arg: string) => void;
-  /** What the map could not draw, for the home page's warning card. */
-  mapIssues: () => MapDataIssues;
 }
 
 function renderBreadcrumbs(ctx: RenderContext, items: BreadcrumbItem[]): string {
@@ -255,7 +252,7 @@ export class PanelRenderer {
     const index = this.rtIndex;
     switch (this.state.type) {
       case 'home':
-        return renderFeedPage(ctx, this.hooks.mapIssues());
+        return renderFeedPage(ctx);
       case 'route':
         return renderRoutePage(ctx, index, this.state);
       case 'stop':

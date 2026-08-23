@@ -71,6 +71,11 @@ export const CONFIG = {
   // Rules listed on the assignments page before the list is capped.
   RULE_LIST_MAX: 200,
 
+  // Routes listed in the feed page's Routes scrollbox before it is capped. The
+  // panel rebuilds every row on each realtime poll, so a feed with thousands of
+  // routes is capped and points at the search box.
+  ROUTE_LIST_MAX: 200,
+
   // Places listed on the stops page before it is capped. The only list page
   // that caps: a large feed has tens of thousands of stops, and the panel
   // rebuilds every row on each realtime poll.
