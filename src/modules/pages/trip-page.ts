@@ -243,9 +243,9 @@ export function renderTripPage(
 
       ${renderAlertList(ctx, alertsForTrip(ctx.session, trip.trip_id, trip.route_id), 'Alerts')}
       ${renderTrackers(ctx, rt, trip)}
-      ${renderAssignments(ctx, trip)}
-      ${renderService(ctx, trip)}
       ${renderSchedule(ctx, rt, trip)}
+      ${renderService(ctx, trip)}
+      ${renderAssignments(ctx, trip)}
 
       ${section(
         'Properties',

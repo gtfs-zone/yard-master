@@ -4,12 +4,12 @@
    @changes
    - The `vehicle` PageState variant became `tracker`, keyed by `Tracker.id`,
      which is `VehiclePosition.trackerId` here and never `key`.
-   - A Trips section lists the direction's trips, each a link to the `trip`
-     page, which test-track does not have.
+   - A Trips section lists the direction's trips in a `max-h-96` scrollbox, each
+     a link to the `trip` page, badged with the tracker assigned to it. Neither
+     the page nor the assignment exists upstream.
    - User-facing "vehicle" wording became "tracker". The internal names keep
      saying vehicle: these really are `VehiclePosition`s on the vehicle layer.
-   - A Service calendar section draws the route's services on this repo's
-     timeline chart, shaded in the route's own colour.
+   - A Service calendar section lists the route's services, one row each.
    - The Trips and Unplaced trackers lists render through this repo's
      `entity-row.ts`, the one row shape every list in the app uses. The strip
      itself is untouched: a vehicle chip sits in a rail row, not in a list.
@@ -412,9 +412,26 @@ function renderUnplaced(ctx: RenderContext, unplaced: Unplaced[]): string {
 // ─── Trips ────────────────────────────────────────────────────────────────────
 
 /**
+ * Which tracker each trip is assigned to, by trip id.
+ *
+ * Built once for the direction rather than asked per row: `rulesForTrip` walks
+ * every rule in the feed, and a busy route lists two hundred trips.
+ */
+function assignedTrackers(ctx: RenderContext): Map<string, string> {
+  const session = ctx.session;
+  const byTrip = new Map<string, string>();
+  for (const rule of session.rules?.values() ?? []) {
+    const tracker = session.trackers.get(rule.tracker_id);
+    if (!tracker || byTrip.has(rule.trip_id)) continue;
+    byTrip.set(rule.trip_id, tracker.nickname);
+  }
+  return byTrip;
+}
+
+/**
  * The route's trips in this direction, ordered by first departure, so the tree
  * can be walked down to a trip page. A busy route has thousands of them, so the
- * list is capped and says how many it left out.
+ * list scrolls in place, is capped, and says how many it left out.
  */
 function renderTrips(ctx: RenderContext, routeId: string, directionId: string): string {
   const feed = ctx.session.staticFeed!;
@@ -430,11 +447,16 @@ function renderTrips(ctx: RenderContext, routeId: string, directionId: string): 
   const ordered = [...trips].sort((a, b) => departure(a.trip_id).localeCompare(departure(b.trip_id)));
   const shown = ordered.slice(0, CONFIG.ROUTE_TRIP_LIST_MAX);
 
+  // The departure moves to the second line so the badge can carry the assigned
+  // tracker: which tracker runs a trip is what this app is for, and the clock
+  // time is already the order the rows are in.
+  const assigned = assignedTrackers(ctx);
   const rows = shown.map(trip =>
     entityRow(ctx, {
       state: { type: 'trip', trip_id: trip.trip_id, route_id: routeId },
       label: trip.raw.trip_short_name?.trim() || trip.headsign || trip.trip_id,
-      badge: formatScheduledTime(departure(trip.trip_id) || undefined, false),
+      sublabel: formatScheduledTime(departure(trip.trip_id) || undefined, false),
+      ...(assigned.has(trip.trip_id) ? { badge: assigned.get(trip.trip_id)! } : {}),
     }),
   );
 
@@ -448,7 +470,10 @@ function renderTrips(ctx: RenderContext, routeId: string, directionId: string): 
   return rowSection(
     'Trips',
     ordered.length,
-    `${entityRowList(rows, 'No trips in this direction.')}${more}`,
+    `<div class="max-h-96 overflow-y-auto">${entityRowList(
+      rows,
+      'No trips in this direction.',
+    )}</div>${more}`,
   );
 }
 

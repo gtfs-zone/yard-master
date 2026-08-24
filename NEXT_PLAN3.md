@@ -589,16 +589,42 @@ by map click and map search.
 its informed entities as links. That is the back-reference: the route page
 lists the alert, the alert page lists the route.
 
-- [ ] `tracker-page.ts`: drop anything that is not identity, liveness, fix,
+- [x] `tracker-page.ts`: drop anything that is not identity, liveness, fix,
       credential or assignments.
-- [ ] `route-page.ts`: add the Trips scrollbox; the strip is vendored and is
+- [x] `route-page.ts`: add the Trips scrollbox; the strip is vendored and is
       not to be touched.
-- [ ] `trip-page.ts`: add the three service lines using `service-catalog.ts`'s
+- [x] `trip-page.ts`: add the three service lines using `service-catalog.ts`'s
       surviving data half, and the assignments block.
-- [ ] `alert-page.ts`: add the Affects section from `AlertDetail.entities`.
-- [ ] Every one of them uses `entityRow`/`entityRowList`/`rowSection` for
+- [x] `alert-page.ts`: add the Affects section from `AlertDetail.entities`.
+- [x] Every one of them uses `entityRow`/`entityRowList`/`rowSection` for
       lists and `section`/`prop`/`propList` for facts. No page defines its own
       row.
+
+What the tracker page lost was its Properties section: nickname and id, both
+already in the header two inches above. Its assignment rows gained the Edit and
+Delete buttons the trip page's rows already had, so a rule can be changed from
+either end of it, and the window moved into the sublabel to make room for them.
+
+The route page's trip rows swapped their two right-hand slots: the departure
+time is now the second line and the badge carries the assigned tracker, which is
+the fact this app exists to show. The lookup is built once per render rather
+than per row — `rulesForTrip` scans every rule in the feed and a direction lists
+up to `ROUTE_TRIP_LIST_MAX` trips.
+
+The trip page already had both the service lines and the assignments block; only
+the order changed, to stop times, service, assignments, so the page reads
+schedule-then-arrangement.
+
+The alert page's "Informed entities" became **Affects**, and its hand-rolled
+`<li>` became an `entityRow` linking the most specific object the selector names
+— trip over route over stop — with the rest of the selector on the second line.
+The two `<li>`s left in the file are both test-track's, on the decoded-entity
+fallback page, which describes rows this app cannot write.
+
+The level badge still comes from `selectorLevel`, which takes a GTFS-RT
+`EntitySelector`, so the flat API row is mapped back into one to score it. That
+keeps the managed row and the decoded row agreeing about a selector's reach
+instead of scoring it twice.
 
 **Gotchas.**
 `device_key` rules are unchanged and absolute: `GET /trackers/{id}` only, the

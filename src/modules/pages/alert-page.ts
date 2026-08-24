@@ -7,10 +7,11 @@
      test-track's decoded-entity page is kept below it as
      `renderRtAlertPage`, which is what a `PageState` naming an alert that is
      only in the live payload still falls back to.
-   - `renderManagedEntity` added: an `InformedEntity` row from the API, whose
-     columns are flat where a GTFS-RT `EntitySelector` nests the trip half. It
-     carries a Remove button; the decoded-entity page below has none, because
-     nothing there is a row this app can write.
+   - An Affects section added: the API's `InformedEntity` rows, whose columns
+     are flat where a GTFS-RT `EntitySelector` nests the trip half, each an
+     `entity-row.ts` row linking the object it names and carrying a Remove
+     button. The decoded-entity page below keeps test-track's own entity list,
+     with no button, because nothing there is a row this app can write.
    - `renderAlertList`, which the route, stop and trip pages embed, renders
      through this repo's `entity-row.ts` so an alert row looks like every other
      row in the app. `statusBadge`, the translation and active-period renderers
@@ -48,7 +49,7 @@ import {
   translations,
 } from '../alerts';
 import type { RenderContext } from '../render-utils';
-import { entityRow, entityRowList, rowSection } from '../entity-row';
+import { emptyState, entityRow, entityRowList, rowSection } from '../entity-row';
 import { actionButton, formatIso } from '../managed-render';
 import {
   entityLink,
@@ -220,76 +221,95 @@ function renderManagedWindow(alert: Alert): string {
 }
 
 /**
- * One informed entity from the API, linked to the pages for what it names.
+ * One informed entity from the API, as a row pointing at what it names.
  *
  * The API's row is flat where GTFS-RT nests the trip descriptor, so the trip
- * half is `trip_id` / `trip_route_id` / `trip_start_date` rather than a
- * `trip` object. Everything it names is a string the feed's own author typed,
- * and none of it is validated against the zip, so an id that resolves gets a
- * link and one that does not is still shown as what was entered.
+ * half is `trip_id` / `trip_route_id` / `trip_start_date` rather than a `trip`
+ * object. Everything it names is a string the feed's own author typed, and none
+ * of it is validated against the zip, so an id that resolves becomes a link to
+ * its page and one that does not is still shown as what was entered.
+ *
+ * The row links the most specific object it names — a trip over a route over a
+ * stop — and everything else it says becomes the second line. That is the back
+ * reference: the route page lists the alert, and this lists the route.
  */
-function renderManagedEntity(ctx: RenderContext, e: InformedEntity): string {
+function renderAffectedEntity(ctx: RenderContext, e: InformedEntity): string {
   // `alertId:entityId`: an entity is addressable only through its own alert,
   // which is how the server scopes the delete too.
   const arg = `${e.service_alert_id}:${e.id}`;
   const feed = ctx.session.staticFeed;
-  const parts: string[] = [];
 
-  const add = (label: string, valueHtml: string): void => {
-    parts.push(`<span class="opacity-60">${escHtml(label)}</span> ${valueHtml}`);
-  };
+  const trip = e.trip_id ? feed?.trips.get(e.trip_id) : undefined;
+  const route = e.route_id ? feed?.routes.get(e.route_id) : undefined;
+  const stop = e.stop_id ? feed?.stops.get(e.stop_id) : undefined;
 
-  if (e.agency_id) add('agency', escHtml(e.agency_id));
-  if (e.route_type !== null) add('route_type', escHtml(String(e.route_type)));
-  if (e.route_id) {
-    const route = feed?.routes.get(e.route_id);
-    add(
-      'route',
-      route
-        ? entityLink(ctx, { type: 'route', route_id: route.id }, route.short_name || route.long_name || route.id)
-        : escHtml(e.route_id),
-    );
+  let state: PageState | undefined;
+  let label: string;
+  if (trip) {
+    state = { type: 'trip', trip_id: trip.trip_id, route_id: trip.route_id };
+    label = trip.raw.trip_short_name?.trim() || trip.headsign || trip.trip_id;
+  } else if (route) {
+    state = { type: 'route', route_id: route.id };
+    label = route.short_name || route.long_name || route.id;
+  } else if (stop) {
+    state = { type: 'stop', stop_id: stop.id };
+    label = stop.name || stop.id;
+  } else {
+    label =
+      e.trip_id ??
+      e.route_id ??
+      e.stop_id ??
+      e.agency_id ??
+      'The whole feed — this entity names nothing';
   }
-  if (e.stop_id) {
-    const stop = feed?.stops.get(e.stop_id);
-    add('stop', stop ? entityLink(ctx, { type: 'stop', stop_id: stop.id }, stop.name || stop.id) : escHtml(e.stop_id));
-  }
-  if (e.direction_id !== null) add('direction', escHtml(String(e.direction_id)));
-  if (e.trip_id) {
-    const trip = feed?.trips.get(e.trip_id);
-    add(
-      'trip',
-      trip
-        ? entityLink(ctx, { type: 'trip', trip_id: trip.trip_id, route_id: trip.route_id }, trip.headsign || trip.trip_id)
-        : escHtml(e.trip_id),
-    );
-  }
-  if (e.trip_route_id) add('trip route', escHtml(e.trip_route_id));
-  if (e.trip_start_date) add('start date', escHtml(e.trip_start_date));
-  if (e.trip_start_time) add('start time', escHtml(e.trip_start_time));
 
-  return `<li class="text-xs rounded border border-base-300 p-2 flex items-start gap-2">
-    <div class="flex flex-wrap gap-x-3 gap-y-1 flex-1 min-w-0">${
-      parts.length ? parts.join('') : '<span class="opacity-50">names nothing — applies to the whole feed</span>'
-    }</div>
-    ${actionButton('entity:delete', arg, 'Remove', 'btn-ghost')}
-  </li>`;
+  // Everything the row did not spend on its label, so a selector that names a
+  // route *and* a direction still says both.
+  const rest: string[] = [];
+  if (e.agency_id && label !== e.agency_id) rest.push(`agency ${e.agency_id}`);
+  if (e.route_type !== null) rest.push(`route_type ${e.route_type}`);
+  if (route && !trip) rest.push(`route_id ${route.id}`);
+  if (stop && (trip || route)) rest.push(`stop ${stop.name || stop.id}`);
+  if (e.direction_id !== null) rest.push(`direction ${e.direction_id}`);
+  if (trip && route) rest.push(`on ${route.short_name || route.long_name || route.id}`);
+  if (e.trip_route_id && !route) rest.push(`trip route ${e.trip_route_id}`);
+  if (e.trip_start_date) rest.push(e.trip_start_date);
+  if (e.trip_start_time) rest.push(e.trip_start_time);
+
+  // How broadly the entity applies, scored on the same selector rule the
+  // decoded feed is scored on, so the two ends agree about a row's reach.
+  const level = selectorLevel({
+    ...(e.agency_id ? { agencyId: e.agency_id } : {}),
+    ...(e.route_id ? { routeId: e.route_id } : {}),
+    ...(e.route_type !== null ? { routeType: e.route_type } : {}),
+    ...(e.stop_id ? { stopId: e.stop_id } : {}),
+    ...(e.trip_id ? { trip: { tripId: e.trip_id } } : {}),
+  });
+
+  return entityRow(ctx, {
+    ...(state ? { state } : {}),
+    label,
+    ...(rest.length ? { sublabel: rest.join(' · ') } : {}),
+    badge: ALERT_LEVEL_LABELS[level],
+    actionsHtml: actionButton('entity:delete', arg, 'Remove', 'btn-ghost'),
+  });
 }
 
-/** The informed entities, or the count while the detail request is in flight. */
-function renderManagedEntities(ctx: RenderContext, alert: Alert): string {
+/** What the alert informs, or the count while the detail request is in flight. */
+function renderAffects(ctx: RenderContext, alert: Alert): string {
   const detail = ctx.session.alertDetails.get(String(alert.id));
+  const empty = 'Nothing named — the alert applies to the whole feed.';
   if (!detail) {
     return alert.entity_count === 0
-      ? '<p class="text-xs opacity-60">No informed entities — the alert applies to the whole feed.</p>'
+      ? emptyState(empty)
       : `<p class="text-xs opacity-60">Loading ${escHtml(String(alert.entity_count))} informed entit${
           alert.entity_count === 1 ? 'y' : 'ies'
         }…</p>`;
   }
-  if (detail.entities.length === 0) {
-    return '<p class="text-xs opacity-60">No informed entities — the alert applies to the whole feed.</p>';
-  }
-  return `<ul class="space-y-1">${detail.entities.map(e => renderManagedEntity(ctx, e)).join('')}</ul>`;
+  return entityRowList(
+    detail.entities.map(e => renderAffectedEntity(ctx, e)),
+    empty,
+  );
 }
 
 /** Whether the managed alert's window contains this moment. */
@@ -342,10 +362,11 @@ function renderManagedAlertPage(ctx: RenderContext, alert: Alert): string {
       )}
 
       ${section('Active window', renderManagedWindow(alert))}
-      ${section(
-        'Informed entities',
+      ${rowSection(
+        'Affects',
+        alert.entity_count,
         `<div class="space-y-2">
-          ${renderManagedEntities(ctx, alert)}
+          ${renderAffects(ctx, alert)}
           ${actionButton('entity:add', String(alert.id), 'Add entity')}
         </div>`
       )}
