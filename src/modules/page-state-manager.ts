@@ -2,16 +2,17 @@
    @sha 56f120a
    @status modified
    @changes
-   - `pageStateToURL` / `urlToPageState` rewritten for yard-master's variants.
-     The hash now carries an explicit `type` param, because `feed`,
-     `assignments` and `managers` name no object and cannot be told apart by the
-     presence of an object key the way test-track's four pages could.
+   - `pageStateToURL` / `urlToPageState` rewritten for yard-master's six
+     variants. The hash carries an explicit `type` param and the codec switches
+     on it, rather than telling the pages apart by which object key is present
+     the way test-track's four could.
    - A tracker appears in the hash as `tracker=<Tracker.id>`. The surrogate is
      not a secret and is unique; `device_key` is the credential and never
      reaches a URL, and nickname is a label that may repeat.
-   - The four list variants (`routes`, `stops`, `trackers`, `alerts`) name no
-     object, so they carry the `type` param and nothing else. `tree` and `feed`
-     are read as aliases of home, for hashes written before this page settled.
+   - Every variant but `home` names an object, so a hash missing that object's
+     key falls back to home. So does any `type` the switch does not know, which
+     is what retires the list, `service`, `assignments` and `managers` hashes
+     without a migration.
    - Added `syncHash()`. `adoptState` is deliberately silent, but a focus
      restored from a link still has to survive the feed params being written
      around it, and this module is the only thing allowed to touch the hash. */

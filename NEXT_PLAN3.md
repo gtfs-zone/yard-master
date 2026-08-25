@@ -636,16 +636,35 @@ not let it grow into a general cross-linking habit.
 
 ## Phase 7 — Settle
 
-- [ ] `pnpm typecheck` clean, then `pnpm build`.
-- [ ] `pnpm vendor:check`, `pnpm check-rt-spec`, `pnpm check-alert-enums`.
-- [ ] `VENDORED.md`: remove the rows for the deleted files, and update the
+- [x] `pnpm typecheck` clean, then `pnpm build`.
+- [x] `pnpm vendor:check`, `pnpm check-rt-spec`, `pnpm check-alert-enums`.
+- [x] `VENDORED.md`: remove the rows for the deleted files, and update the
       prose paragraph that lists yard-master's own pages — it currently names
       `list-pages.ts`, `assignments-page.ts` and `managers-page.ts`.
-- [ ] Any file that has drifted far enough in this refactor moves from
+- [x] Any file that has drifted far enough in this refactor moves from
       `verbatim` to `modified` with an `@changes` list, or to `adopted`.
       `page-state.ts` and `breadcrumbs.ts` are already `modified` and their
       `@changes` lists are now wrong in almost every bullet; rewrite both.
 - [ ] Hand off for visual verification. No browser automation.
+
+Nothing crossed a tier. `vendor:check` reports every `verbatim` entry matching,
+which is the point of the tier: the refactor stayed inside the files that were
+already `modified` or already yard-master's own. Two rows are a commit behind
+test-track's HEAD (`feed-download.ts`, `gtfs-static.ts`), which predates this
+plan and is a re-sync, not a drift.
+
+`page-state.ts` and `breadcrumbs.ts` turned out to have been rewritten in Phase
+1, when their variants changed; the banner that was actually stale was
+`page-state-manager.ts`'s, still describing a hash codec that told pages apart
+by which object key was present and listing the four retired list variants. Its
+bullets now say what the codec does: switch on `type`, fall back to home for an
+unknown one, which is what retires every old hash without a migration.
+
+`VENDORED.md` had no rows to delete — the deleted pages were yard-master's own
+and named only in the prose, and `issue-card.ts`'s row went with it in Phase 3.
+The prose paragraph now names the six surviving own-files plus the three navbar
+modals, and two table notes that counted nine page variants were corrected to
+six.
 
 **Gotchas.**
 Anything auth-shaped — the user chip reading `/api/me`, the CSRF header on the

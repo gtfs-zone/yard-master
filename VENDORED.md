@@ -40,19 +40,20 @@ imports `renderCloseIcon` from the newer form. `tooltip-position.ts` and
 RT spec below — spec-driven form labels are a coloring-book idea that test-track
 has no counterpart to, because test-track edits nothing.
 
-`src/modules/pages/trip-page.ts`, `src/modules/pages/feed-page.ts`,
-`src/modules/pages/list-pages.ts`, `src/modules/pages/tracker-page.ts`,
-`src/modules/pages/managers-page.ts`, `src/modules/pages/assignments-page.ts`,
+`src/modules/pages/feed-page.ts`, `src/modules/pages/tracker-page.ts`,
+`src/modules/pages/trip-page.ts`, `src/modules/share-modal.ts`,
+`src/modules/alerts-modal.ts`, `src/modules/calendar-modal.ts`,
 `src/modules/managed-render.ts`, `src/modules/service-date.ts`,
-`src/modules/entity-row.ts` and
-`src/modules/trip-picker.ts` are in neither tier and deliberately absent from
-the table: they are yard-master's own files with no upstream at all. test-track
-browses route, stop, vehicle and alert, and shows a feed status page when
-nothing is focused; this repo's hierarchy runs Route -> Trips -> Trip, its
-no-focus page is the feed itself with a list page per kind of object hanging
-off it, and the managed half of that hierarchy — feeds, trackers, assignments,
-alerts and managers — has no counterpart upstream at all, because test-track
-owns none of those objects. `entity-row.ts` is the same
+`src/modules/entity-row.ts` and `src/modules/trip-picker.ts` are in neither
+tier and deliberately absent from the table: they are yard-master's own files
+with no upstream at all. test-track browses route, stop, vehicle and alert, and
+shows a feed status page when nothing is focused; this repo's hierarchy runs
+Feed -> Route -> Trip, its home page is the feed itself with the trackers and
+routes hanging off it as scrollboxes rather than as pages, and the managed half
+of that hierarchy — feeds, trackers, assignments, alerts and members — has no
+counterpart upstream at all, because test-track owns none of those objects.
+Sharing, the alert list and the calendar are navbar modals for the same reason:
+nothing upstream has an object to put in them. `entity-row.ts` is the same
 kind of file for a different reason: coloring-book's
 `utils/entity-references.ts` is its visual model and nothing else, so there is
 no upstream to diff it against and nothing about it is checked.
@@ -103,7 +104,7 @@ left alone.
 | `src/modules/feed-time.ts` | `test-track` | `src/modules/feed-time.ts` | 56f120a | verbatim | `adoptFeedTimezone` and the feed-local clock helpers. Every transit time is rendered against the feed's zone, never the browser's |
 | `src/modules/render-utils.ts` | `test-track` | `src/modules/render-utils.ts` | 56f120a | verbatim | Shared page furniture: `escHtml`, `entityLink`, `routeBadge`, the raw-column table, and the time/delay formatters. `RenderContext.session` resolves against yard-master's own `feed-session.ts`, which is deliberately shaped like test-track's |
 | `src/modules/search-entries.ts` | `test-track` | `src/modules/search-entries.ts` | 56f120a | modified | Builds `SearchController` entries from the session. See the banner's `@changes`: the vehicle loop became a tracker loop over the API's list (one entry per tracker, whatever it is running), service alerts were added, and the priorities bucket managed objects ahead of GTFS objects |
-| `src/types/page-state.ts` | `test-track` | `src/types/page-state.ts` | 56f120a | modified | The union of every page. See the banner's `@changes`: yard-master's nine variants replace test-track's five |
+| `src/types/page-state.ts` | `test-track` | `src/types/page-state.ts` | 56f120a | modified | The union of every page. See the banner's `@changes`: yard-master's six variants replace test-track's five, and there are no list variants |
 | `src/modules/page-state-manager.ts` | `test-track` | `src/modules/page-state-manager.ts` | 56f120a | modified | Owns the current focus, the navigation history and the hash. See the banner's `@changes`: the hash codec is rewritten around an explicit `type` param |
 | `src/modules/breadcrumbs.ts` | `test-track` | `src/modules/breadcrumbs.ts` | fa12a57 | modified | The breadcrumb trail and `validateState`. See the banner's `@changes`: the variant set is yard-master's, trackers resolve against the API list, and a managed object is accepted while its list is still empty |
 | `src/modules/app-state.ts` | `test-track` | `src/modules/app-state.ts` | fa12a57 | modified | Focus changes and feed selection. See the banner's `@changes`: a feed is an API row rather than a `FeedSelection` of URLs, a linked focus is held pending until the zip it names has parsed, and the feed's event stream and live fleet are owned here |
@@ -117,7 +118,7 @@ left alone.
 | `src/modules/pages/alert-page.ts` | `test-track` | `src/modules/pages/alert-page.ts` | fa12a57 | modified | `renderAlertList`, which the route, stop and trip pages all embed, plus both alert pages. See the banner's `@changes`: the page renders the managed `Alert` from the API, test-track's decoded-entity page is kept underneath it as the fallback for an alert that is only in the live payload, and the embedded list is drawn on `entity-row.ts` |
 | `src/modules/pages/route-page.ts` | `test-track` | `src/modules/pages/route-page.ts` | fa12a57 | modified | The route strip. See the banner's `@changes`: `vehicle` links became `tracker` links, the wording follows, a Trips section lists the direction's trips, and the page's two lists render through `entity-row.ts`. The strip itself is untouched |
 | `src/modules/pages/stop-page.ts` | `test-track` | `src/modules/pages/stop-page.ts` | fa12a57 | modified | The stop and station page. See the banner's `@changes`: `vehicle` links became `tracker` links, a departure's headsign links to its trip page, and every list on the page — departures included, which was a `<table>` — renders through `entity-row.ts` |
-| `src/modules/panel-renderer.ts` | `test-track` | `src/modules/panel-renderer.ts` | fa12a57 | modified | The panel dispatcher, its scroll/`<details>` restore and the shared ticker. See the banner's `@changes`: yard-master's session events (`change`, `vehicles`, `staticloaded`), no status page to hand back to, the nine-variant switch, and a `mapIssues` hook so the feed page can render the warning card |
+| `src/modules/panel-renderer.ts` | `test-track` | `src/modules/panel-renderer.ts` | fa12a57 | modified | The panel dispatcher, its scroll/`<details>` restore and the shared ticker. See the banner's `@changes`: yard-master's session events (`change`, `vehicles`, `assignments`, `staticloaded`), no status page to hand back to, the six-variant switch, and the `meUserId` and `action` hooks the pages emit buttons against |
 | `src/modules/feed-session.ts` | `test-track` | `src/feed-session.ts` | 56f120a | adopted | Not a copy: written here, and deliberately shaped so the vendored modules that read a `FeedSession` compile against it unchanged. test-track's owns a GTFS-RT poller; here the managed objects come from the API and the live half arrives on the SSE channel, so only the `staticFeed` / `vehicles` / `alerts` / `tripUpdates` surface is held in common. Listed so the seam is inventoried rather than invisible |
 | `src/utils/tooltip-position.ts` | `coloring-book` | `src/utils/tooltip-position.ts` | 6ee1372 | verbatim | The portal behind every spec tooltip: delegated document listeners, `position: fixed` off the trigger's rect, clamped to the viewport. A CSS tooltip is clipped by the scrollable modal body these labels live in, which is what this exists to sidestep. Its doc comment names coloring-book's own paths, which is what verbatim means |
 | `src/utils/spec-markup.ts` | `coloring-book` | `src/utils/spec-markup.ts` | 6ee1372 | modified | Renders a verbatim reference description as HTML: `<br>`, backticks, bold, links, bullets and tables. See the banner's `@changes`: image support removed with the three schedule SVGs it resolved against, `escHtml` from this repo's `render-utils`, and the anchor base pointed at the realtime reference |
