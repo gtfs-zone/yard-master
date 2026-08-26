@@ -470,7 +470,7 @@ function renderTrips(ctx: RenderContext, routeId: string, directionId: string): 
   return rowSection(
     'Trips',
     ordered.length,
-    `<div class="max-h-96 overflow-y-auto">${entityRowList(
+    `<div class="max-h-96 overflow-y-auto overflow-x-hidden">${entityRowList(
       rows,
       'No trips in this direction.',
     )}</div>${more}`,

@@ -103,7 +103,7 @@ function renderStaticStatus(ctx: RenderContext): string {
 
 /** The scroll container every list on this page shares. */
 function scrollbox(body: string): string {
-  return `<div class="max-h-96 overflow-y-auto">${body}</div>`;
+  return `<div class="max-h-96 overflow-y-auto overflow-x-hidden">${body}</div>`;
 }
 
 /**

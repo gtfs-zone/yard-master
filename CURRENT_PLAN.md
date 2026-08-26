@@ -195,14 +195,18 @@ reason. Do not send the CSRF header on this GET; `api.get` already does not.
 
 ## Phase 3 — The horizontal scrollbar
 
-- [ ] `feed-page.ts::scrollbox`: add `overflow-x-hidden`
-- [ ] `route-page.ts::renderTrips`: the same box, same fix
-- [ ] Check the other `overflow-y-auto` boxes in `pages/` for the same pairing
+- [x] `feed-page.ts::scrollbox`: add `overflow-x-hidden`
+- [x] `route-page.ts::renderTrips`: the same box, same fix
+- [x] Check the other `overflow-y-auto` boxes in `pages/` for the same pairing
       with `entityRowList`'s `-mx-2` and fix them together
 
 **Gotcha.** `overflow-x-hidden` on the scrollbox, not on the `<ul>`: hiding it
 on the list would clip the hover background the negative margin exists to
 widen.
+
+**Discoveries.** `feed-page.ts::scrollbox` and `route-page.ts`'s Trips box were
+the only two `overflow-y-auto` boxes under `pages/`; no third site needed the
+fix.
 
 ---
 
