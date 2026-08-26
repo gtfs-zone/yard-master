@@ -65,7 +65,7 @@ function renderPreview(slot: HTMLElement, file: File): void {
         ${s.routes.toLocaleString()} routes, ${s.stops.toLocaleString()} stops,
         ${s.trips.toLocaleString()} trips
       </div>
-      <div class="opacity-70">Service ${escHtml(dates)} · ${escHtml(
+      <div class="opacity-70">Service ${escHtml(dates)} - ${escHtml(
         formatBytes(s.sizeBytes)
       )}</div>
     </div>`;

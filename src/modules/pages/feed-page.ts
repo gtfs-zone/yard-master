@@ -188,9 +188,9 @@ function uploaderLabel(ctx: RenderContext, upload: GtfsUpload): string {
 
 /** One upload as a line: what it was, how big, when, and by whom. */
 function uploadLine(ctx: RenderContext, upload: GtfsUpload): string {
-  return `${escHtml(upload.original_filename)} · ${escHtml(
+  return `${escHtml(upload.original_filename)} - ${escHtml(
     formatBytes(upload.size_bytes)
-  )} · ${isoWithAge(upload.uploaded_at)} · ${escHtml(uploaderLabel(ctx, upload))}`;
+  )} - ${isoWithAge(upload.uploaded_at)} - ${escHtml(uploaderLabel(ctx, upload))}`;
 }
 
 /**
@@ -227,7 +227,7 @@ function renderHistory(ctx: RenderContext, feed: Feed): string {
   const rows = shown.map((upload) =>
     entityRow(ctx, {
       label: upload.original_filename,
-      sublabel: `${formatBytes(upload.size_bytes)} · ${uploaderLabel(ctx, upload)}`,
+      sublabel: `${formatBytes(upload.size_bytes)} - ${uploaderLabel(ctx, upload)}`,
       badgeHtml: upload.is_current
         ? '<span class="badge badge-xs badge-success">serving</span>'
         : `<span class="text-xs opacity-60">${isoWithAge(upload.uploaded_at)}</span>`,

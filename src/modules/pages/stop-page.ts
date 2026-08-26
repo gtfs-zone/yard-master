@@ -86,7 +86,7 @@ function aggregationNote(count: number): string {
 
 function renderRoutes(ctx: RenderContext, serviceIds: string[], isStation: boolean): string {
   const feed = ctx.session.staticFeed!;
-  // route_id → the platforms that serve it
+  // route_id -> the platforms that serve it
   const routePlatforms = new Map<string, Set<string>>();
   for (const id of serviceIds) {
     for (const routeId of feed.routesByStop.get(id) ?? []) {
@@ -119,7 +119,7 @@ function renderRoutes(ctx: RenderContext, serviceIds: string[], isStation: boole
         : `<span class="badge badge-ghost badge-sm">${escHtml(routeId)}</span>`;
       const platformTags = [...platforms]
         .map(id => fromChild(ctx, id))
-        .join('<span class="opacity-30">·</span> ');
+        .join('<span class="opacity-30">-</span> ');
       return `<div class="flex items-center gap-2 flex-wrap">${badge}${platformTags}</div>`;
     })
     .join('');
@@ -169,7 +169,7 @@ function renderDepartures(
         ? routeBadge(ctx, route)
         : `<span class="badge badge-ghost badge-sm">${escHtml(p.update.trip?.routeId ?? '?')}</span>`,
       label: trip?.headsign || p.trip_id,
-      sublabel: detail.join(' · '),
+      sublabel: detail.join(' - '),
       badgeHtml: `<span class="text-xs flex items-center gap-2 whitespace-nowrap">
         <span class="tabular-nums">${escHtml(formatEpochTime(p.time, false))}</span>
         ${formatDelay(p.delay)}

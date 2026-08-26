@@ -243,9 +243,9 @@ export function parseRuleTime(value: string): number | null {
   return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3] ?? 0);
 }
 
-/** `09:00 → 17:00`, the pair as one reading. */
+/** `09:00 to 17:00`, the pair as one reading. */
 export function formatWindow(start: number, end: number): string {
-  return `${formatRuleTime(start)} → ${formatRuleTime(end)}`;
+  return `${formatRuleTime(start)} to ${formatRuleTime(end)}`;
 }
 
 /**
@@ -262,5 +262,5 @@ export function describeRecurrence(rule: TrackerRule): string {
   const range = rule.end_date
     ? `${rule.start_date} to ${rule.end_date}`
     : `from ${rule.start_date}`;
-  return `${recurrence} · ${range}`;
+  return `${recurrence} - ${range}`;
 }

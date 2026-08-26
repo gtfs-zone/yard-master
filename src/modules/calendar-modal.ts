@@ -127,7 +127,7 @@ function assignmentChip(ctx: RenderContext, assignment: Assignment): string {
     assignment.tracker_nickname,
     `${CHIP_CLASS} ${route ? '' : 'bg-base-content/10'}`,
     style,
-    `${assignment.tracker_nickname} · ${trip ? tripName(trip) : assignment.trip_id} · ${formatWindow(
+    `${assignment.tracker_nickname} - ${trip ? tripName(trip) : assignment.trip_id} - ${formatWindow(
       assignment.start_time,
       assignment.end_time
     )}`
@@ -209,7 +209,7 @@ function ruleRow(ctx: RenderContext, rule: TrackerRule, openEnd: ServiceDate): T
   const trip = feed?.trips.get(rule.trip_id);
   const route = trip ? feed?.routes.get(trip.route_id) : undefined;
   const nickname = ctx.session.trackers.get(rule.tracker_id)?.nickname ?? rule.tracker_id;
-  const label = `${nickname} · ${trip ? tripName(trip) : rule.trip_id}`;
+  const label = `${nickname} - ${trip ? tripName(trip) : rule.trip_id}`;
   const end = rule.end_date ?? openEnd;
 
   return {
@@ -228,7 +228,7 @@ function ruleRow(ctx: RenderContext, rule: TrackerRule, openEnd: ServiceDate): T
             {
               from: rule.start_date,
               to: end,
-              tooltip: `${label} · ${formatWindow(rule.start_time, rule.end_time)} · ${
+              tooltip: `${label} - ${formatWindow(rule.start_time, rule.end_time)} - ${
                 rule.end_date ? `${rule.start_date} to ${rule.end_date}` : `from ${rule.start_date}, no end date`
               }`,
             },

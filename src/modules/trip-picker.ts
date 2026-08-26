@@ -45,7 +45,7 @@ export function tripLabel(feed: GTFSStatic, trip: Trip): string {
   const departure = firstDeparture(feed, trip);
   return [departure ? formatScheduleTime(departure) : null, routeLabel(feed, trip), tripName(trip)]
     .filter(Boolean)
-    .join(' · ');
+    .join(' - ');
 }
 
 /**

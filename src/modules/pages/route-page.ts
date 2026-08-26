@@ -224,8 +224,8 @@ function vehicleChip(
   return `<div class="text-xs flex items-center gap-1 flex-wrap">
     <span class="badge badge-xs badge-neutral">${renderTriangleIcon('h-2 w-2')}</span>
     ${entityLink(ctx, { type: 'tracker', tracker_id: vehicle.trackerId }, label, 'link link-hover font-medium')}
-    ${status ? `<span class="opacity-40">·</span>${status}` : ''}
-    ${occupancy ? `<span class="opacity-40">·</span>${occupancy}` : ''}
+    ${status ? `<span class="opacity-40">-</span>${status}` : ''}
+    ${occupancy ? `<span class="opacity-40">-</span>${occupancy}` : ''}
     ${stopSequenceMark(vehicle, current)}
   </div>`;
 }

@@ -184,7 +184,7 @@ function renderAssignments(ctx: RenderContext, trackerId: string): string {
       // bare id rather than a link that would go nowhere.
       ...(trip ? { state: { type: 'trip' as const, trip_id: rule.trip_id, route_id: trip.route_id } } : {}),
       label: trip ? trip.raw.trip_short_name?.trim() || trip.headsign || rule.trip_id : rule.trip_id,
-      sublabel: `${describeRecurrence(rule)} · ${formatWindow(rule.start_time, rule.end_time)}`,
+      sublabel: `${describeRecurrence(rule)} - ${formatWindow(rule.start_time, rule.end_time)}`,
       actionsHtml: `${actionButton('assign:edit', String(rule.id), 'Edit')}
         ${actionButton('assign:delete', String(rule.id), 'Delete', 'btn-outline btn-error')}`,
     });

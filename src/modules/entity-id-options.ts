@@ -54,7 +54,7 @@ export function routeOptions(feed: GTFSStatic | null): FieldOption[] {
   return [...feed.routes.values()].map((route) => ({
     value: route.id,
     label: route.id,
-    detail: [route.short_name, route.long_name].filter(Boolean).join(' · '),
+    detail: [route.short_name, route.long_name].filter(Boolean).join(' - '),
   }));
 }
 
@@ -113,7 +113,7 @@ export function directionOptions(feed: GTFSStatic | null): FieldOption[] {
     return {
       value: direction,
       label: direction,
-      detail: top.length ? `e.g. ${top.join(' · ')}` : '',
+      detail: top.length ? `e.g. ${top.join(' - ')}` : '',
     };
   });
 }

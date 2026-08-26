@@ -289,7 +289,7 @@ function renderAffectedEntity(ctx: RenderContext, e: InformedEntity): string {
   return entityRow(ctx, {
     ...(state ? { state } : {}),
     label,
-    ...(rest.length ? { sublabel: rest.join(' · ') } : {}),
+    ...(rest.length ? { sublabel: rest.join(' - ') } : {}),
     badge: ALERT_LEVEL_LABELS[level],
     actionsHtml: actionButton('entity:delete', arg, 'Remove', 'btn-ghost'),
   });

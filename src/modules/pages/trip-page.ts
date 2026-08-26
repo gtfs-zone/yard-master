@@ -193,7 +193,7 @@ function renderAssignments(ctx: RenderContext, trip: Trip): string {
     return entityRow(ctx, {
       ...(tracker ? { state: { type: 'tracker' as const, tracker_id: tracker.id } } : {}),
       label: tracker ? tracker.nickname : rule.tracker_id,
-      sublabel: `${describeRecurrence(rule)} · ${formatWindow(rule.start_time, rule.end_time)}`,
+      sublabel: `${describeRecurrence(rule)} - ${formatWindow(rule.start_time, rule.end_time)}`,
       actionsHtml: `${actionButton('assign:edit', String(rule.id), 'Edit')}
         ${actionButton('assign:delete', String(rule.id), 'Delete', 'btn-outline btn-error')}`,
     });
