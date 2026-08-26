@@ -159,20 +159,31 @@ does not apply and `X-Yard-Master` is untouched.
 schedule, and null for one that has none. `CONFIG.RT_BASE` keeps its job — the
 realtime `.pb` links and `publicScheduleUrl` — and loses this one.
 
-- [ ] cafe-car: factor `static_feed.py`'s response builder so both routers use
+- [x] cafe-car: factor `static_feed.py`'s response builder so both routers use
       one copy
-- [ ] cafe-car: the new route, hosted branch, with the conditional GET intact
-- [ ] cafe-car: the linked branch — a capped streaming fetch, a 502 with the
+- [x] cafe-car: the new route, hosted branch, with the conditional GET intact
+- [x] cafe-car: the linked branch — a capped streaming fetch, a 502 with the
       upstream's status in the detail when it refuses, a 504 on timeout
-- [ ] cafe-car: tests for hosted, linked, no-schedule, oversize upstream, and a
+- [x] cafe-car: tests for hosted, linked, no-schedule, oversize upstream, and a
       feed the caller may not see (404, not 403 — `AccessibleFeed`'s existing
       shape)
-- [ ] yard-master: `feed-source.ts::scheduleFetchUrl` rewritten, its doc
+- [x] yard-master: `feed-source.ts::scheduleFetchUrl` rewritten, its doc
       comment rewritten with it
-- [ ] yard-master: the `feed-download`/`gtfs-static` path is unchanged — it
+- [x] yard-master: the `feed-download`/`gtfs-static` path is unchanged — it
       fetches a URL and this is a URL
-- [ ] cafe-car `CLAUDE.md` / `README`: the endpoint, and why the browser does
+- [x] cafe-car `CLAUDE.md` / `README`: the endpoint, and why the browser does
       not fetch the public URL
+
+**Discoveries.** `static_feed.py`'s `_headers`/`_not_modified` were private
+functions in that module; they are now exported as `upload_headers` and
+`not_modified` and imported by `feeds.py` rather than duplicated. Neither
+`Feed` model nor `FeedCreate` allows a `url`-sourced feed with no
+`static_feed_url`, so the "linked feed with no URL" case in the plan's test
+list can't occur through the API; the linked branch's 404 covers only a feed
+with neither an upload nor a URL, which the hosted branch's own no-upload 404
+already exercises the same code path for. Timeout and oversize-upstream tests
+mock the outbound `httpx.AsyncClient` via `httpx.MockTransport`, monkeypatched
+onto `cafe_car.api.feeds.httpx.AsyncClient`.
 
 **Gotchas.** The linked branch is a proxy and must not become an open one: the
 URL comes from the feed row, never from a query parameter. `publicScheduleUrl`

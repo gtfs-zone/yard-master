@@ -12,9 +12,11 @@
  * The two URLs are deliberately different functions. `publicScheduleUrl` is
  * what cafe-car tells a *consumer*, which is an absolute prod URL by design
  * (its `PUBLIC_RT_BASE` is hardcoded rather than deploy config in a response
- * body). `scheduleFetchUrl` is what *this browser* downloads, which has to
- * resolve against `CONFIG.RT_BASE` for the same reason the realtime links do:
- * a feed created against a local stack has no prod URL that answers.
+ * body). `scheduleFetchUrl` is what *this browser* downloads, and it is
+ * always same-origin: `GET /api/feeds/{id}/schedule.zip` serves a hosted
+ * feed's current upload and proxies a linked feed's URL server-side, so
+ * `CONFIG.RT_BASE`, which may point at prod, never decides where a download
+ * goes, and a linked feed's CORS policy never reaches the browser.
  */
 
 import { CONFIG } from '../config';
@@ -35,9 +37,8 @@ export function publicScheduleUrl(feed: Feed): string | null {
  * yet — a hosted feed created a moment ago, before its first upload.
  */
 export function scheduleFetchUrl(feed: Feed): string | null {
-  if (!isHosted(feed)) return feed.static_feed_url;
-  if (!feed.current_upload) return null;
-  return `${CONFIG.RT_BASE}/${encodeURIComponent(feed.feed_name)}/gtfs.zip`;
+  const hasSchedule = isHosted(feed) ? feed.current_upload !== null : feed.static_feed_url !== null;
+  return hasSchedule ? `${CONFIG.API_BASE}/feeds/${feed.id}/schedule.zip` : null;
 }
 
 /** How the source reads in a sentence, for a label or a toast. */
