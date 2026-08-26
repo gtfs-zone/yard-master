@@ -38,13 +38,19 @@ Keycloak (brokers GitHub / Google / GitLab)
 Same host on purpose. Same origin means no CORS, no preflight on writes, and
 the existing `X-Auth-Request-*` headers reach the API untouched.
 
-The static GTFS feed is downloaded and parsed **in the browser** from the feed's
-`static_feed_url`, the same way test-track does it. The API serves the managed
-objects (feeds, trackers, rules, alerts, members) and never the schedule.
+The static GTFS feed is downloaded and parsed **in the browser**, the same way
+test-track does it, but from `GET /api/feeds/{id}/schedule.zip` rather than
+from the feed's `static_feed_url` directly: same origin for both source kinds,
+so there is no CORS refusal on a linked feed's zip and no stale prod URL for a
+hosted one. The API serves the managed objects (feeds, trackers, rules, alerts,
+members) and never the schedule otherwise.
+
+A feed's schedule is set by one of two buttons on the feed page, *Upload GTFS
+schedule* and *Load schedule from URL*, never by a `source_kind` field in a
+form; whichever is used decides what the feed is.
 
 ## Rules
 
-- Never include `Co-Authored-By: Claude ...` trailers in commit messages.
 - Do NOT use Playwright or any browser automation. The user does visual
   verification themselves. Stop at `pnpm typecheck` / `pnpm build` and hand off.
 - `Tracker.device_key` is the Traccar provisioning credential. It must never
@@ -71,6 +77,10 @@ objects (feeds, trackers, rules, alerts, members) and never the schedule.
   in `issues.vehiclesUnmatched`. Nickname is the label the map shows, unique
   within a feed but never the key.
 - All magic numbers live in `src/config.ts`.
+- The calendar's month grid (`src/modules/calendar-modal.ts`) is vendored from
+  coloring-book at `modified`: the cell shape and its scrolling chip stack are
+  coloring-book's, the chips themselves, the `FeedSession` data source and the
+  timeline half are this repo's own. See `VENDORED.md`.
 - Anything auth-shaped is verified at music-student's `:4180`, not at vite's
   `:8091`. Session expiry, the cookie, the CSRF header on a write and SSE
   through the proxy only exist behind the real oauth2-proxy; the dev proxy
@@ -89,35 +99,3 @@ objects (feeds, trackers, rules, alerts, members) and never the schedule.
 | landing-zone | Static marketing/status site | https://git.kcfam.us/gtfs.zone/landing-zone |
 | test-track | GTFS-RT visualizer, and this repo's vendor upstream | https://git.kcfam.us/gtfs.zone/test-track |
 | coloring-book | GTFS editor, where most vendored modules were born; reached through test-track, not vendored from directly | https://git.kcfam.us/gtfs.zone/coloring-book |
-
-## Forgejo Workflow
-
-This project uses an offline-first workflow. Claude reads/writes `CURRENT_PLAN.md`
-locally and only touches Forgejo when explicitly asked.
-
-### Making a plan (triggered by "make a plan for issue #N" or "let's plan X")
-
-1. If the user said "fetch issue #N", use `mcp__forgejo__get_issue_by_index` with
-   `owner: "gtfs.zone"`, `repo: "yard-master"`; otherwise work from the context provided
-2. Explore the codebase as needed
-3. Ask clarifying questions inline; wait for answers before writing
-4. Write the plan to `CURRENT_PLAN.md` (format: Summary, Relevant Context,
-   numbered Phases each with prose + checklist + gotchas)
-5. Do not start implementation
-
-### Completing a phase (triggered by "complete phase N" or "do phase N")
-
-1. Read `CURRENT_PLAN.md` directly, do not fetch from Forgejo
-2. Implement everything in the phase; commit as you go with conventional commits
-3. After completing, update `CURRENT_PLAN.md`: check off completed items, append
-   discoveries to that phase's prose
-4. Do not update the Forgejo issue; do not start the next phase; stop for review
-
-### Updating Forgejo (triggered by "update issue #N")
-
-1. Use `mcp__forgejo__update_issue` to overwrite the issue body with `CURRENT_PLAN.md`
-
-### Creating a PR (triggered by "make a PR closing #N")
-
-1. Use `mcp__forgejo__create_pull_request` with `owner: "gtfs.zone"`,
-   `repo: "yard-master"`, current branch as `head`, `main` as `base`
