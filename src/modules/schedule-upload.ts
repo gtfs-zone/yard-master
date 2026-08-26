@@ -1,38 +1,28 @@
 /**
- * Choosing a schedule zip: the drop zone, the preview under it, and the two
- * dialogs that put a zip on a feed.
+ * Choosing a schedule zip: the drop zone, the preview under it, and the
+ * new-feed dialog.
  *
- * Both dialogs share one field so that both get the preview. That preview is
- * the feature rather than decoration — the counts and the service dates are
- * how somebody notices they picked last year's export before they upload it,
- * and cafe-car cannot tell them that because cafe-car only sees the file after
- * it has been sent.
+ * The preview is the feature rather than decoration — the counts and the
+ * service dates are how somebody notices they picked last year's export
+ * before they upload it, and cafe-car cannot tell them that because cafe-car
+ * only sees the file after it has been sent.
  *
- * A create is two requests, deliberately: `POST /feeds` makes a hosted feed
- * with no schedule, and `POST /feeds/{id}/uploads` gives it one and queues the
- * load. There is no combined endpoint, and a multipart create would have to
- * carry the feed fields as form parts for the sake of saving a round trip on
- * an action nobody takes twice.
+ * A new feed is created with no schedule at all: `POST /feeds` makes a hosted
+ * feed with nothing uploaded, and the feed page it lands on is where a zip is
+ * uploaded or a URL is linked.
  */
 
 import { CONFIG } from '../config';
 import type { Feed, GtfsUpload } from '../types/api';
-import { ApiError, createFeed, getFeed, uploadSchedule } from './api-client';
+import { createFeed, uploadSchedule } from './api-client';
 import { formatBytes } from './feed-download';
 import type { FormField } from './entity-form';
 import { showEntityForm } from './entity-form';
 import { previewGtfsZip } from './gtfs-zip-preview';
-import { notify } from './notification-system';
 import { escHtml } from './render-utils';
 
 /** Mirrors cafe-car's `_FEED_NAME_RE`, so the refusal happens before the request. */
 const FEED_NAME_RE = /^[a-z][a-z0-9_-]{2,63}$/;
-
-/** The `source_kind` choice, worded as the two things somebody is deciding between. */
-const SOURCE_OPTIONS = [
-  { value: 'url', label: 'Link a URL' },
-  { value: 'hosted', label: 'Upload a zip' },
-];
 
 /**
  * Render one preview result into the slot under a drop zone.
@@ -104,7 +94,7 @@ export function scheduleZipField(overrides: Partial<FormField> = {}): FormField 
 }
 
 /** What cafe-car's `AnyHttpUrl` accepts: an absolute http or https URL. */
-function isHttpUrl(value: string): boolean {
+export function isHttpUrl(value: string): boolean {
   try {
     const parsed = new URL(value);
     return parsed.protocol === 'http:' || parsed.protocol === 'https:';
@@ -119,13 +109,11 @@ export async function putSchedule(feedId: number, file: File): Promise<GtfsUploa
 }
 
 /**
- * The new-feed dialog: a name, a source, and whichever half of the form that
- * source needs.
+ * The new-feed dialog: a name, nothing else.
  *
- * Resolves to the created feed, or null if the dialog was closed. A hosted
- * feed whose upload fails is *still created* — the row exists and the dialog
- * has already closed — so the failure is reported as what it is: a feed with
- * no schedule yet, which the feed page offers to fix.
+ * The feed is created hosted, with no schedule at all — the two buttons on
+ * the feed page it lands on give it one. Resolves to the created feed, or
+ * null if the dialog was closed.
  */
 export async function showNewFeedForm(): Promise<Feed | null> {
   return showEntityForm<Feed>({
@@ -142,22 +130,6 @@ export async function showNewFeedForm(): Promise<Feed | null> {
                characters. It appears in every public GTFS-RT URL this feed serves, so it
                cannot be changed casually.`,
       },
-      {
-        name: 'source_kind',
-        label: 'Schedule source',
-        type: 'select',
-        value: 'url',
-        options: SOURCE_OPTIONS,
-        tooltip: 'A linked feed is re-downloaded from its URL; an uploaded one is stored and served here.',
-      },
-      {
-        name: 'static_feed_url',
-        label: 'Static feed URL',
-        type: 'url',
-        placeholder: 'https://example.com/gtfs.zip',
-        visibleWhen: { field: 'source_kind', equals: 'url' },
-      },
-      scheduleZipField({ visibleWhen: { field: 'source_kind', equals: 'hosted' } }),
     ],
     validate: (values): Record<string, string> | null => {
       if (!FEED_NAME_RE.test(values.feed_name.trim())) {
@@ -166,42 +138,12 @@ export async function showNewFeedForm(): Promise<Feed | null> {
             'Starts with a lowercase letter, then lowercase letters, digits, - and _, 3-64 characters',
         };
       }
-      if (values.source_kind === 'url') {
-        const url = values.static_feed_url.trim();
-        if (!url) return { static_feed_url: 'A linked feed needs a static feed URL' };
-        if (!isHttpUrl(url)) return { static_feed_url: 'Must be a valid http or https URL' };
-      }
-      if (values.source_kind === 'hosted' && !values.file) {
-        return { file: 'Choose a schedule zip to upload' };
-      }
       return null;
     },
-    submit: async (values, files) => {
-      const hosted = values.source_kind === 'hosted';
-      const feed = await createFeed({
+    submit: (values) =>
+      createFeed({
         feed_name: values.feed_name.trim(),
-        source_kind: hosted ? 'hosted' : 'url',
-        ...(hosted ? {} : { static_feed_url: values.static_feed_url.trim() }),
-      });
-      if (!hosted) return feed;
-
-      try {
-        await putSchedule(feed.id, files.file!);
-      } catch (err) {
-        // The feed is already made, so this cannot be reported as a failed
-        // save: closing the form and saying what is missing is the honest
-        // answer, and the feed page is where the retry lives.
-        notify.error(
-          `Created ${feed.feed_name}, but the schedule did not upload: ${
-            err instanceof ApiError ? err.message : String(err)
-          }`
-        );
-        return feed;
-      }
-      // Re-read rather than returned as created: the upload is what flipped
-      // `source_kind` and filled in `current_upload`, so the row this dialog
-      // holds is a revision behind, and the caller selects whatever it gets.
-      return getFeed(feed.id);
-    },
+        source_kind: 'hosted',
+      }),
   });
 }

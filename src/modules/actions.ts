@@ -23,7 +23,6 @@ import type {
   Alert,
   AlertWrite,
   Feed,
-  FeedSourceKind,
   GtfsUpload,
   InformedEntityWrite,
   RuleWrite,
@@ -62,9 +61,9 @@ import {
   updateTracker,
 } from './api-client';
 import { confirmAction, confirmTyped } from './confirm';
-import { isHosted, publicScheduleUrl, scheduleFetchUrl } from './feed-source';
+import { isHosted, publicScheduleUrl } from './feed-source';
 import { formatBytes } from './feed-download';
-import { putSchedule, scheduleZipField } from './schedule-upload';
+import { isHttpUrl, putSchedule, scheduleZipField } from './schedule-upload';
 import { rtEnum } from '../gtfs-rt-spec/index';
 import type { FieldOption, FormField } from './entity-form';
 import { showEntityForm, weekdayBits, weekdayValue } from './entity-form';
@@ -179,6 +178,8 @@ export class Actions {
           return await this.reloadSchedule();
         case 'feed:replace-schedule':
           return await this.replaceSchedule();
+        case 'feed:link-schedule':
+          return await this.linkSchedule();
         case 'feed:copy-schedule-url':
           return await this.copyScheduleUrl();
         case 'upload:activate':
@@ -249,13 +250,6 @@ export class Actions {
     const feed = this.feedOrWarn();
     if (!feed) return;
 
-    // Hosting is only offered to a feed that has a zip to host. The server
-    // says the same thing — a PATCH carries no bytes, so it cannot be what
-    // makes a feed hosted — and offering the option to a feed with no uploads
-    // would be offering a guaranteed 422.
-    const canHost = feed.current_upload !== null;
-    const before = scheduleFetchUrl(feed);
-
     const updated = await showEntityForm<Feed>({
       title: `Edit ${feed.feed_name}`,
       conflictField: 'feed_name',
@@ -267,49 +261,59 @@ export class Actions {
           autofocus: true,
           tooltip: 'Appears in every public GTFS-RT URL this feed serves, so renaming it moves them.',
         },
-        {
-          name: 'source_kind',
-          label: 'Schedule source',
-          type: 'select',
-          value: feed.source_kind,
-          options: [
-            { value: 'url', label: 'Link a URL' },
-            ...(canHost ? [{ value: 'hosted', label: 'Serve the uploaded zip' }] : []),
-          ],
-          tooltip: canHost
-            ? 'Switching back to a URL leaves the uploads in place.'
-            : 'Upload a zip to host this feed. Replace schedule does that.',
-        },
-        {
-          name: 'static_feed_url',
-          label: 'Static feed URL',
-          type: 'url',
-          value: feed.static_feed_url,
-          visibleWhen: { field: 'source_kind', equals: 'url' },
-          tooltip: 'Changing it re-downloads the schedule, here and on the server.',
-        },
       ],
-      validate: (values): Record<string, string> | null =>
-        values.source_kind === 'url' && !values.static_feed_url.trim()
-          ? { static_feed_url: 'A linked feed needs a static feed URL' }
-          : null,
-      submit: (values) => {
-        const kind = values.source_kind as FeedSourceKind;
-        return updateFeed(feed.id, {
-          feed_name: values.feed_name.trim(),
-          source_kind: kind,
-          // Omitted for a hosted feed rather than sent as null: the server
-          // refuses a hosted feed that names a URL at all.
-          ...(kind === 'url' ? { static_feed_url: values.static_feed_url.trim() } : {}),
-        });
-      },
+      submit: (values) => updateFeed(feed.id, { feed_name: values.feed_name.trim() }),
     });
     if (!updated) return;
 
     // Owns the hash rewrite: `feed_name` is what a shareable link carries.
     this.app.adoptFeedRow(updated);
     notify.success(`Saved ${updated.feed_name}`);
-    if (scheduleFetchUrl(updated) !== before) this.app.reloadStatic();
+  }
+
+  /**
+   * Point the feed at a URL, which is also how a hosted feed becomes a linked
+   * one.
+   *
+   * One field, prefilled from whatever the feed is already linked to (empty
+   * for a hosted feed). The server re-downloads the zip on this PATCH; this
+   * browser re-downloads it too, so both copies match what the URL now says.
+   */
+  private async linkSchedule(): Promise<void> {
+    const feed = this.feedOrWarn();
+    if (!feed) return;
+
+    const updated = await showEntityForm<Feed>({
+      title: 'Load schedule from URL',
+      submitLabel: 'Load',
+      fields: [
+        {
+          name: 'static_feed_url',
+          label: 'Static feed URL',
+          type: 'url',
+          value: feed.static_feed_url,
+          autofocus: true,
+          placeholder: 'https://example.com/gtfs.zip',
+          tooltip: 'Changing it re-downloads the schedule, here and on the server.',
+        },
+      ],
+      validate: (values): Record<string, string> | null => {
+        const url = values.static_feed_url.trim();
+        if (!url) return { static_feed_url: 'A linked feed needs a static feed URL' };
+        if (!isHttpUrl(url)) return { static_feed_url: 'Must be a valid http or https URL' };
+        return null;
+      },
+      submit: (values) =>
+        updateFeed(feed.id, {
+          source_kind: 'url',
+          static_feed_url: values.static_feed_url.trim(),
+        }),
+    });
+    if (!updated) return;
+
+    this.app.adoptFeedRow(updated);
+    notify.success(`Saved ${updated.feed_name}`);
+    this.app.reloadStatic();
   }
 
   /**

@@ -307,19 +307,15 @@ function renderScheduled(ctx: RenderContext, feed: Feed): string {
           : ''
       }
       ${
-        load
+        published
           ? ''
-          : `<p class="text-xs opacity-60">This feed has never been handed to the loader. Its
-             schedule is not on the server yet, so the published realtime feed has nothing to
-             match against.</p>`
+          : `<p class="text-xs opacity-60">This feed has no schedule yet. Upload a zip or load one
+             from a URL below to give it one.</p>`
       }
       ${propList(rows)}
       <div class="flex flex-wrap gap-2 pt-1">
-        ${actionButton(
-          'feed:replace-schedule',
-          '',
-          hosted ? 'Replace schedule' : 'Upload a schedule'
-        )}
+        ${actionButton('feed:replace-schedule', '', 'Upload GTFS schedule')}
+        ${actionButton('feed:link-schedule', '', 'Load schedule from URL')}
         ${hosted ? '' : reloadButton(feed)}
         ${published ? actionButton('feed:copy-schedule-url', '', 'Copy URL') : ''}
         <a class="btn btn-xs btn-outline" target="_blank" rel="noopener"
