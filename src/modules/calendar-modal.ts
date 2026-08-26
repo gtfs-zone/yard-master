@@ -48,6 +48,7 @@ import {
   WEEKDAY_LABELS,
   type ServiceDate,
 } from './service-date';
+import { assignmentCounts } from './service-catalog';
 import { renderTimelineChart, weekdayFlags, type TimelineRow } from './timeline-chart';
 import { tripName } from './trip-picker';
 
@@ -262,6 +263,17 @@ function renderRuleChart(ctx: RenderContext, month: ServiceDate): string {
   );
 }
 
+function unassignedLine(ctx: RenderContext): string {
+  const feed = ctx.session.staticFeed;
+  if (!feed) return '';
+  const counts = assignmentCounts(ctx.session, feed.trips.keys());
+  if (!counts) return '';
+  const unassigned = counts.total - counts.assigned;
+  if (unassigned === 0) return '';
+  return `<p class="text-xs opacity-50">${unassigned} of ${counts.total} trips on this feed have no
+    rule assigned.</p>`;
+}
+
 function renderTimeline(ctx: RenderContext, month: ServiceDate): string {
   return `
     <div class="space-y-4">
@@ -270,7 +282,8 @@ function renderTimeline(ctx: RenderContext, month: ServiceDate): string {
         `${renderRuleChart(ctx, month)}
          <p class="text-xs opacity-50">A shaded week is a week the rule runs on its weekdays. A
          triangle is a date <span class="text-success">added</span> or
-         <span class="text-error">removed</span> by hand.</p>`
+         <span class="text-error">removed</span> by hand.</p>
+         ${unassignedLine(ctx)}`
       )}
     </div>`;
 }

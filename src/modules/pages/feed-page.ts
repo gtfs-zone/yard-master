@@ -40,6 +40,7 @@ import { resolveRealtimeUrl } from '../feed-url-resolve';
 import { isHosted, publicScheduleUrl, sourceLabel } from '../feed-source';
 import { formatBytes } from '../feed-download';
 import { routeSortKey } from '../route-sort';
+import { assignmentCounts } from '../service-catalog';
 
 /** Where a section heading's `(?)` sends a reader who wants the whole thing. */
 const SCHEDULE_REFERENCE_URL = 'https://gtfs.org/documentation/schedule/reference/';
@@ -155,14 +156,15 @@ function renderRoutes(ctx: RenderContext): string {
 
   const shown = routes.slice(0, CONFIG.ROUTE_LIST_MAX);
   const rows = shown.map((route) => {
-    const trips = (feed.tripsByRoute.get(route.id) ?? []).length;
+    const tripIds = (feed.tripsByRoute.get(route.id) ?? []).map((t) => t.trip_id);
+    const counts = assignmentCounts(ctx.session, tripIds);
     return entityRow(ctx, {
       state: { type: 'route', route_id: route.id },
       // The badge already carries the route's colour, so the row's dot would
       // say the same thing twice.
       leadHtml: routeBadge(ctx, route),
       label: route.long_name || route.short_name || route.id,
-      badge: `${trips} trip${trips === 1 ? '' : 's'}`,
+      badge: counts ? `${counts.assigned}/${counts.total} assigned` : `${tripIds.length} trip${tripIds.length === 1 ? '' : 's'}`,
     });
   });
 
@@ -266,8 +268,13 @@ function renderScheduled(ctx: RenderContext, feed: Feed): string {
   const published = publicScheduleUrl(feed);
   const current = feed.current_upload;
   const load = feed.load;
+  const staticFeed = ctx.session.staticFeed;
 
   const rows = [prop('Source', escHtml(sourceLabel(feed)))];
+  if (staticFeed) {
+    const counts = assignmentCounts(ctx.session, staticFeed.trips.keys());
+    rows.push(prop('Trips assigned', counts ? `${counts.assigned} of ${counts.total}` : '—'));
+  }
   if (hosted) {
     rows.push(
       published

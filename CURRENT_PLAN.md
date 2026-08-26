@@ -273,22 +273,32 @@ the loud thing on the row. Four counts, all off one helper.
 `assignmentCounts(session, tripIds): {assigned, total}`, because four callers
 now want it and it walks every rule each time it is asked.
 
-- [ ] The helper, memoised per rules-revision if the profile asks for it
-- [ ] `route-page.ts::renderTrips`: `Unassigned` badge, and the section heading
+- [x] The helper, memoised per rules-revision if the profile asks for it
+- [x] `route-page.ts::renderTrips`: `Unassigned` badge, and the section heading
       carries `N unassigned` beside its count, per direction
-- [ ] `feed-page.ts::renderRoutes`: the row badge becomes
+- [x] `feed-page.ts::renderRoutes`: the row badge becomes
       `12/40 assigned` in place of the bare trip count
-- [ ] `feed-page.ts::renderScheduled`: a `Trips assigned` prop reading
+- [x] `feed-page.ts::renderScheduled`: a `Trips assigned` prop reading
       `N of M`
-- [ ] `calendar-modal.ts`, timeline tab: a line under the chart saying how many
+- [x] `calendar-modal.ts`, timeline tab: a line under the chart saying how many
       of the feed's trips no rule touches
-- [ ] `trip-page.ts` already says "No tracker is assigned to this trip"; leave it
+- [x] `trip-page.ts` already says "No tracker is assigned to this trip"; leave it
 
 **Gotchas.** All four counts need `session.rules`, which is fetched on the trip
 page and by the calendar. The feed page must ask for it too, or its counts read
 zero on first paint — extend `ensureLoaded`'s `home` branch the way phase 6
 extends it for uploads. Until the rules land, the count renders as `—`, never
 as `0`: the same rule the calendar badge already follows.
+
+**Discoveries.** No profile asked for memoisation, so `assignmentCounts` walks
+`session.rules` once per call rather than being cached; every call site is a
+single page render, not a hot loop, so this stayed simple rather than adding a
+revision counter nothing needs yet. `route-page.ts::assignedTrackers` (the
+per-trip nickname map for the *assigned* badge) was kept as its own function
+rather than folded into `assignedTripIds`: the two answer different questions
+(which tracker vs. how many), and `assignedTripIds` is the `Set` the count
+helpers share. `app-state.ts::loadPageData`'s `home` branch now also requests
+rules whenever `session.rules` is unset, alongside uploads and members.
 
 ---
 

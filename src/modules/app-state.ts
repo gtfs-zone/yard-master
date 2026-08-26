@@ -533,13 +533,17 @@ export class AppState {
       // with the feed rather than on the way in: opening it should not be a
       // round trip.
       const needsMembers = !session.members;
-      if (needsUploads || needsMembers) {
+      // The feed page's assignment counts need the whole rule set too, or
+      // they read zero on first paint instead of "—".
+      const needsRules = !session.rules;
+      if (needsUploads || needsMembers || needsRules) {
         load = async () => {
           await Promise.all([
             needsUploads ? this.refreshUploads() : Promise.resolve(),
             needsMembers
               ? getMembers(feed.id).then((m) => session.setMembers(m))
               : Promise.resolve(),
+            needsRules ? this.refreshRules() : Promise.resolve(),
           ]);
         };
       }

@@ -52,8 +52,8 @@ import {
 } from '../route-strip';
 import type { RowDot } from '../route-strip';
 import type { RenderContext } from '../render-utils';
-import { cappedNote, entityRow, entityRowList, rowSection } from '../entity-row';
-import { servicesForTrips, weekdaysLabel } from '../service-catalog';
+import { cappedNote, countBadge, entityRow, entityRowList, rowSection } from '../entity-row';
+import { assignmentCounts, servicesForTrips, weekdaysLabel } from '../service-catalog';
 import {
   OCCUPANCY_LABELS,
   ROUTE_TYPE_LABELS,
@@ -428,6 +428,9 @@ function assignedTrackers(ctx: RenderContext): Map<string, string> {
   return byTrip;
 }
 
+/** `Unassigned`, in the same style a badge from the API would render in. */
+const UNASSIGNED_BADGE = '<span class="badge badge-ghost badge-xs opacity-60">Unassigned</span>';
+
 /**
  * The route's trips in this direction, ordered by first departure, so the tree
  * can be walked down to a trip page. A busy route has thousands of them, so the
@@ -456,7 +459,7 @@ function renderTrips(ctx: RenderContext, routeId: string, directionId: string): 
       state: { type: 'trip', trip_id: trip.trip_id, route_id: routeId },
       label: trip.raw.trip_short_name?.trim() || trip.headsign || trip.trip_id,
       sublabel: formatScheduledTime(departure(trip.trip_id) || undefined, false),
-      ...(assigned.has(trip.trip_id) ? { badge: assigned.get(trip.trip_id)! } : {}),
+      ...(assigned.has(trip.trip_id) ? { badge: assigned.get(trip.trip_id)! } : { badgeHtml: UNASSIGNED_BADGE }),
     }),
   );
 
@@ -467,6 +470,9 @@ function renderTrips(ctx: RenderContext, routeId: string, directionId: string): 
         )}</p>`
       : '';
 
+  const counts = assignmentCounts(ctx.session, ordered.map(trip => trip.trip_id));
+  const unassigned = counts ? counts.total - counts.assigned : null;
+
   return rowSection(
     'Trips',
     ordered.length,
@@ -474,6 +480,7 @@ function renderTrips(ctx: RenderContext, routeId: string, directionId: string): 
       rows,
       'No trips in this direction.',
     )}</div>${more}`,
+    unassigned === null ? countBadge('—') : unassigned > 0 ? countBadge(`${unassigned} unassigned`) : '',
   );
 }
 

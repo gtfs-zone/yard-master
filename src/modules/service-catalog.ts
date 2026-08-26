@@ -17,6 +17,7 @@
  */
 
 import type { Calendar, GTFSStatic, Trip } from '../gtfs-static';
+import type { FeedSession } from './feed-session';
 import type { ServiceDate } from './service-date';
 import { ruleWeekdayIndex, WEEKDAY_DISPLAY, WEEKDAY_LABELS } from './service-date';
 
@@ -151,4 +152,32 @@ export function servicesForTrips(feed: GTFSStatic, trips: Iterable<Trip>): Servi
   const ids = new Set<string>();
   for (const trip of trips) ids.add(trip.service_id);
   return sortByCascade([...catalog.values()].filter((service) => ids.has(service.id)));
+}
+
+/** Every trip a rule names, from the feed's whole rule set. */
+export function assignedTripIds(session: Pick<FeedSession, 'rules'>): Set<string> {
+  const ids = new Set<string>();
+  for (const rule of session.rules?.values() ?? []) ids.add(rule.trip_id);
+  return ids;
+}
+
+/**
+ * How many of the given trips a rule touches, against how many there are.
+ *
+ * Null until `session.rules` has been fetched: a feed with no rules loaded
+ * yet reads as "unknown", not as "none assigned".
+ */
+export function assignmentCounts(
+  session: Pick<FeedSession, 'rules'>,
+  tripIds: Iterable<string>
+): { assigned: number; total: number } | null {
+  if (!session.rules) return null;
+  const assigned = assignedTripIds(session);
+  let total = 0;
+  let hit = 0;
+  for (const id of tripIds) {
+    total++;
+    if (assigned.has(id)) hit++;
+  }
+  return { assigned: hit, total };
 }
