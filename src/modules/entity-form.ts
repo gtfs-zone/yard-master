@@ -125,6 +125,12 @@ export interface FormField {
    * caller decides what to do with it; nothing here guesses.
    */
   visibleWhen?: { field: string; equals: string };
+  /**
+   * Read a different label while another field holds a given value, for a
+   * field whose meaning changes with a sibling control (`Starting` becomes
+   * `On` for a one-off rule, which has no range to start).
+   */
+  labelWhen?: { field: string; equals: string; label: string };
 }
 
 export interface EntityFormOptions<T> {
@@ -375,14 +381,20 @@ function renderField(field: FormField): string {
       ? 'div'
       : 'label';
   const when = field.visibleWhen;
+  const labelWhen = field.labelWhen;
   const input = renderInput(field);
+  const labelAttrs = labelWhen
+    ? ` data-label-field="${escHtml(labelWhen.field)}" data-label-equals="${escHtml(labelWhen.equals)}"
+        data-label-default="${escHtml(labelContent(field))}"
+        data-label-alt="${escHtml(labelContent({ ...field, label: labelWhen.label }))}"`
+    : '';
   return `
     <${tag} class="form-control"${
       when
         ? ` data-when-field="${escHtml(when.field)}" data-when-equals="${escHtml(when.equals)}"`
         : ''
     }>
-      <span class="label-text text-xs">${labelContent(field)}</span>
+      <span class="label-text text-xs"${labelAttrs}>${labelContent(field)}</span>
       ${input}
       <span class="label-text-alt text-error hidden" data-error="${escHtml(field.name)}"></span>
     </${tag}>`;
@@ -446,6 +458,10 @@ export async function showEntityForm<T>(options: EntityFormOptions<T>): Promise<
         root.querySelectorAll<HTMLElement>('[data-when-field]').forEach((el) => {
           const on = now[el.dataset.whenField!] === el.dataset.whenEquals;
           el.classList.toggle('hidden', !on);
+        });
+        root.querySelectorAll<HTMLElement>('[data-label-field]').forEach((el) => {
+          const on = now[el.dataset.labelField!] === el.dataset.labelEquals;
+          el.innerHTML = on ? el.dataset.labelAlt! : el.dataset.labelDefault!;
         });
       };
 

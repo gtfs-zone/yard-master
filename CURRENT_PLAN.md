@@ -228,18 +228,18 @@ meant. The `end_mode` radio is deleted; a radio pair whose only job was to say
 `Starting` keeps its label under `Weekly` and reads `On` under `Once`, because
 a one-off has no range to start.
 
-- [ ] `actions.ts::ruleFields`: the `repeats` radio, `visibleWhen` on
+- [x] `actions.ts::ruleFields`: the `repeats` radio, `visibleWhen` on
       `weekdays` and `end_date`, `end_mode` deleted
-- [ ] `ruleFields` opening an *existing* rule picks `Once` when the rule has no
+- [x] `ruleFields` opening an *existing* rule picks `Once` when the rule has no
       weekday set and `Weekly` otherwise, so an edit opens on what it is
-- [ ] `isOneOff` reads `values.repeats === 'once'` rather than inferring from
+- [x] `isOneOff` reads `values.repeats === 'once'` rather than inferring from
       the weekday bits
-- [ ] `ruleBody`: `end_date` is `start_date` for a one-off, the trimmed
+- [x] `ruleBody`: `end_date` is `start_date` for a one-off, the trimmed
       `end_date` or null otherwise
-- [ ] `validateRule`: the "pick a last service date" error goes; a `Weekly`
+- [x] `validateRule`: the "pick a last service date" error goes; a `Weekly`
       rule with no weekday selected is now an error, since `Once` is where that
       used to land
-- [ ] `managed-render.ts::describeRecurrence`: a one-off reads `Once on
+- [x] `managed-render.ts::describeRecurrence`: a one-off reads `Once on
       2026-08-26`, not `1 date only · 2026-08-26 to 2026-08-26`
 
 **Gotchas.** The one-off's `added` exception is still written by the second
@@ -248,6 +248,17 @@ request in `newAssignment.submit`, after `createRule`. Editing a rule from
 to remove it, or a rule flips to weekly and keeps a stray exception on its
 start date. `assign:day` and the calendar's cell menu write exceptions on
 existing rules and are not touched.
+
+**Discoveries.** `Starting` reading `On` under `Once` needed a label that
+switches with a sibling field's value, which `entity-form.ts` had no way to
+say. Added `FormField.labelWhen` (mirrors `visibleWhen`'s shape) rather than
+splitting `start_date` into two fields with the same value to keep in sync by
+hand. `ruleIsOneOff(rule)` is `isOneOff`'s counterpart for a rule already on
+the server, used both to pick the radio's opening value on edit and to decide
+whether an edit is leaving `Once`. `ruleBody` zeroes every weekday itself for
+`Once` rather than trusting the hidden `weekdays` field's value, since a
+one-off's day pills still carry whatever they were showing when the radio was
+`Weekly`.
 
 ---
 

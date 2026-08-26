@@ -138,14 +138,17 @@ function orNullNumber(value: string): number | null {
 }
 
 /**
- * A rule with no weekday on runs once, on its starting date.
- *
- * That day is written afterwards as an `added` exception, so a one-off and a
- * day added to a recurrence are the same object and the form needs no separate
- * question to tell them apart.
+ * `Once` writes every weekday false; the date it runs on is written
+ * afterwards as an `added` exception, so a one-off and a day added to a
+ * recurrence are the same object.
  */
 function isOneOff(values: Record<string, string>): boolean {
-  return !weekdayBits(values.weekdays).some(Boolean);
+  return values.repeats === 'once';
+}
+
+/** The same question, asked of a rule already on the server. */
+function ruleIsOneOff(rule: TrackerRule): boolean {
+  return !WEEKDAY_KEYS.some((key) => rule[key]);
 }
 
 export class Actions {
@@ -1003,9 +1006,9 @@ export class Actions {
    * overnight run is written and there is no "next day" checkbox inventing a
    * second way to say the same number.
    *
-   * There is no "does this repeat" question. A rule with no weekday on runs
-   * once, on its starting date, which is what `ruleBody` has always written;
-   * asking as well as showing was two ways to say the same thing.
+   * `Repeats` is `Once` or `Weekly`. A one-off writes every weekday false,
+   * which is what `ruleBody` has always written for it; the radio just says so
+   * up front instead of leaving it to be read off an empty set of day pills.
    */
   private ruleFields(
     rule: TrackerRule | null,
@@ -1016,13 +1019,23 @@ export class Actions {
     return [
       this.tripField(scopeRoute, rule?.trip_id ?? tripId),
       {
+        name: 'repeats',
+        label: 'Repeats',
+        type: 'radio',
+        value: rule ? (ruleIsOneOff(rule) ? 'once' : 'weekly') : 'weekly',
+        options: [
+          { value: 'once', label: 'Once' },
+          { value: 'weekly', label: 'Weekly' },
+        ],
+      },
+      {
         name: 'weekdays',
         label: 'Runs on',
         type: 'weekdays',
         value: weekdayValue(
           WEEKDAY_KEYS.map((key) => (rule ? Boolean(rule[key]) : key === weekdayKey(startDate)))
         ),
-        tooltip: 'Every day off runs it once, on the starting date.',
+        visibleWhen: { field: 'repeats', equals: 'weekly' },
       },
       {
         name: 'start_date',
@@ -1030,23 +1043,14 @@ export class Actions {
         type: 'date',
         value: rule?.start_date ?? startDate,
         tooltip: 'In the feed\u2019s timezone, not yours.',
-      },
-      {
-        name: 'end_mode',
-        label: 'Repeats',
-        type: 'radio',
-        value: rule?.end_date ? 'until' : 'forever',
-        options: [
-          { value: 'forever', label: 'forever' },
-          { value: 'until', label: 'until a last service date' },
-        ],
+        labelWhen: { field: 'repeats', equals: 'once', label: 'On' },
       },
       {
         name: 'end_date',
         label: 'Until',
         type: 'date',
         value: rule?.end_date ?? '',
-        visibleWhen: { field: 'end_mode', equals: 'until' },
+        visibleWhen: { field: 'repeats', equals: 'weekly' },
       },
       {
         name: 'start_time',
@@ -1078,10 +1082,10 @@ export class Actions {
     if (start_time !== null && end_time !== null && end_time <= start_time) {
       errors.end_time = 'The window ends before it starts';
     }
-    // "until" with no date is the one thing the radio pair can say and the
-    // API cannot: a null end_date is forever, which is the other choice.
-    if (values.end_mode === 'until' && !values.end_date) {
-      errors.end_date = 'Pick a last service date, or choose forever';
+    // `Once` is where a rule with no weekday now belongs; `Weekly` with none
+    // picked is a rule that never runs.
+    if (values.repeats === 'weekly' && !weekdayBits(values.weekdays).some(Boolean)) {
+      errors.weekdays = 'Pick at least one day, or choose Once';
     }
     return Object.keys(errors).length ? errors : null;
   }
@@ -1095,10 +1099,10 @@ export class Actions {
    * means a one-off and a skipped recurrence are the same kind of object.
    */
   private ruleBody(values: Record<string, string>): RuleWrite {
-    const days = weekdayBits(values.weekdays);
     const once = isOneOff(values);
+    const days = once ? [false, false, false, false, false, false, false] : weekdayBits(values.weekdays);
     const startDate = values.start_date.trim();
-    const endDate = values.end_mode === 'until' ? values.end_date.trim() : '';
+    const endDate = values.end_date.trim();
     return {
       trip_id: values.trip_id.trim(),
       monday: days[0],
@@ -1239,6 +1243,14 @@ export class Actions {
             date: body.start_date,
             exception_type: 'added',
           });
+        } else if (ruleIsOneOff(rule)) {
+          // Flipped the other way: drop the exception the one-off wrote on
+          // its start date, or a rule that is `Weekly` now keeps running a
+          // day that stray exception added.
+          const stray = rule.exceptions.find(
+            (e) => e.date === rule.start_date && e.exception_type === 'added'
+          );
+          if (stray) await deleteRuleException(rule.id, stray.id);
         }
         return saved;
       },

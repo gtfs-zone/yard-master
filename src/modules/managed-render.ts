@@ -252,21 +252,13 @@ export function formatWindow(start: number, end: number): string {
  * When a rule runs, in one line: the weekdays, then the date range that bounds
  * them.
  *
- * A rule with no weekday at all is not broken — it is a one-off, running only
- * on the dates its exceptions add — so it is described as one rather than as
- * "never".
+ * A rule with no weekday at all is `Once`, not broken: it is the form's
+ * one-off, running only on the date its exception adds.
  */
 export function describeRecurrence(rule: TrackerRule): string {
   const days = WEEKDAY_LABELS.filter((_, slot) => rule[WEEKDAY_KEYS[WEEKDAY_DISPLAY[slot]]]);
-  const added = rule.exceptions.filter((e) => e.exception_type === 'added').length;
-  const recurrence =
-    days.length === 7
-      ? 'Every day'
-      : days.length
-        ? days.join(', ')
-        : added
-          ? `${added} date${added === 1 ? '' : 's'} only`
-          : 'No days set';
+  if (days.length === 0) return `Once on ${rule.start_date}`;
+  const recurrence = days.length === 7 ? 'Every day' : days.join(', ');
   const range = rule.end_date
     ? `${rule.start_date} to ${rule.end_date}`
     : `from ${rule.start_date}`;
