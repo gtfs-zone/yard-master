@@ -326,14 +326,14 @@ cells are real neighbouring-month days from `monthGrid` rather than blanks, and
 the timeline half has no counterpart upstream — plus a `VENDORED.md` row, and
 the paragraph there listing it as having no upstream is corrected.
 
-- [ ] `tab` defaults to `'timeline'`
-- [ ] `renderHeader`: `tabs tabs-border`
-- [ ] `route-page.ts`: the same tab classes
-- [ ] `renderDayCell`: coloring-book's cell, scrolling chips, no `+n more`
-- [ ] `CONFIG.CALENDAR_CELL_CHIPS` deleted
-- [ ] The banner, the `@changes` list, the `VENDORED.md` row, and the
+- [x] `tab` defaults to `'timeline'`
+- [x] `renderHeader`: `tabs tabs-border`
+- [x] `route-page.ts`: the same tab classes
+- [x] `renderDayCell`: coloring-book's cell, scrolling chips, no `+n more`
+- [x] `CONFIG.CALENDAR_CELL_CHIPS` deleted
+- [x] The banner, the `@changes` list, the `VENDORED.md` row, and the
       correction to the "no upstream at all" paragraph
-- [ ] `pnpm vendor:check` still passes
+- [x] `pnpm vendor:check` still passes
 
 **Gotchas.** The month nav and the tab bar sit in one header row here and in
 two places in coloring-book; keep this app's header. The chip class is shared
@@ -341,6 +341,17 @@ with the assignment chip and both must keep `truncate`, or a long nickname
 widens the cell and the seven columns stop being equal. A scrolling cell inside
 a modal that also scrolls needs `overscroll-contain` or a flick past the end of
 the chips scrolls the modal.
+
+**Discoveries.** `pnpm vendor:check` only diffs `verbatim` rows against a
+recorded SHA; a `modified` row like this one (and `modal-utils.ts`,
+`spec-markup.ts` before it) is listed but never re-diffed automatically, so
+the new `calendar-modal.ts` row does not appear in its output at all. The
+pre-existing `STALE`/`DRIFT` lines for other files (`scs.ts`,
+`route-sequence.ts`, `route-graph.ts`, and the rest) are unrelated to this
+phase — the same lines print on `main` before this change. `route-page.ts`'s
+direction tabs are test-track's `modified` row, not a bare file, so the class
+change there was recorded as one more `@changes` bullet on its existing
+banner rather than a new vendor row.
 
 ---
 

@@ -1,8 +1,24 @@
+/* @vendored-from coloring-book:src/modules/calendar-modal.ts
+   @sha 6ef855e
+   @status modified
+   @changes
+   - The chips are this repo's: a service chip and an assignment chip, coloured
+     by route where the trip has one, each a link where coloring-book's is a
+     click handler
+   - Data comes from a FeedSession's serviceCatalog/assignmentsOn, not an
+     IndexedDB read through ServiceTimelineSource
+   - The month grid's leading/trailing cells are real neighbouring-month days
+     from monthGrid(), not blank filler cells
+   - The timeline half (renderRuleChart/renderTimeline) has no counterpart
+     upstream; coloring-book's service-timeline.ts answers a different question
+   - The header combines the month nav and the tab bar in one row; upstream
+     keeps them separate */
+
 /**
  * The calendar: one month of the feed at a time, and the same waterfall the
  * rest of the app draws.
  *
- * yard-master's own file. Two questions are asked of a feed's calendar and
+ * Two questions are asked of a feed's calendar and
  * they have different shapes: "does this run today" is a month grid, and "who
  * is covering it over the next few weeks" is the timeline chart. Both are here,
  * as two tabs over one set of data, because the answer to either is the other
@@ -147,27 +163,18 @@ function renderDayCell(
     ...assignments.map((assignment) => assignmentChip(ctx, assignment)),
   ];
 
-  const shown = chips.slice(0, CONFIG.CALENDAR_CELL_CHIPS);
-  const hidden = chips.length - shown.length;
-  const more =
-    hidden > 0
-      ? `<span class="${CHIP_CLASS} opacity-60"
-          title="${escHtml(`${hidden} more on ${dayLabel(date)}`)}">${escHtml(
-          `+${hidden} more`
-        )}</span>`
-      : '';
-
   const isToday = date === today();
   const outside = !sameMonth(date, month);
 
-  return `<div class="min-h-16 rounded-lg border p-1 space-y-0.5 ${
-    outside ? 'border-base-300/40 bg-base-200/30' : 'border-base-300'
+  return `<div class="min-h-16 p-1 rounded bg-base-200/20 border overflow-hidden ${
+    outside ? 'border-base-300/30 opacity-40' : 'border-base-300/30'
   }">
-    <span class="block text-[11px] leading-4 tabular-nums font-medium ${
-      outside ? 'opacity-40' : 'opacity-70'
-    } ${isToday ? 'text-primary font-bold' : ''}" title="${escHtml(dayLabel(date))}"
+    <span class="block text-[11px] leading-4 tabular-nums font-medium opacity-70
+      ${isToday ? 'text-primary font-bold' : ''}" title="${escHtml(dayLabel(date))}"
       >${dayOfMonth(date)}</span>
-    ${shown.join('')}${more}
+    <div class="max-h-24 overflow-y-auto overscroll-contain">
+      <div class="flex flex-col gap-0.5">${chips.join('')}</div>
+    </div>
   </div>`;
 }
 
@@ -303,7 +310,7 @@ function renderHeader(month: ServiceDate, tab: CalendarTab): string {
         <button type="button" class="btn btn-xs btn-ghost" data-cal-month="1">›</button>
         <button type="button" class="btn btn-xs btn-ghost" data-cal-today>Today</button>
       </div>
-      <div role="tablist" class="tabs tabs-boxed tabs-sm">
+      <div role="tablist" class="tabs tabs-border tabs-sm">
         ${tabButton('grid', 'Month grid')}${tabButton('timeline', 'Timeline')}
       </div>
     </div>`;
@@ -328,7 +335,7 @@ export async function showCalendarModal(hooks: CalendarModalHooks): Promise<void
   const session = ctx.session;
 
   let month = startOfMonth(today());
-  let tab: CalendarTab = 'grid';
+  let tab: CalendarTab = 'timeline';
   let root: HTMLElement | null = null;
 
   const draw = (): void => {

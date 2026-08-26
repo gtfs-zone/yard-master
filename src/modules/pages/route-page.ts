@@ -13,6 +13,8 @@
    - The Trips and Unplaced trackers lists render through this repo's
      `entity-row.ts`, the one row shape every list in the app uses. The strip
      itself is untouched: a vehicle chip sits in a rail row, not in a list.
+   - The direction tabs use `tabs-border`, matching the calendar modal's tab
+     bar rather than upstream's `tabs-box`.
  */
 /**
  * The route page: a vertical transit-map strip with live vehicles sitting in
@@ -476,7 +478,7 @@ function renderTrips(ctx: RenderContext, routeId: string, directionId: string): 
   return rowSection(
     'Trips',
     ordered.length,
-    `<div class="max-h-96 overflow-y-auto overflow-x-hidden">${entityRowList(
+    `<div class="max-h-96 overflow-y-auto overflow-x-hidden px-2">${entityRowList(
       rows,
       'No trips in this direction.',
     )}</div>${more}`,
@@ -521,7 +523,7 @@ function renderDirectionTabs(
   active: string,
 ): string {
   if (directions.length < 2) return '';
-  return `<div role="tablist" class="tabs tabs-box tabs-sm">
+  return `<div role="tablist" class="tabs tabs-border tabs-sm">
     ${directions
       .map(d => {
         const state: PageState = { type: 'route', route_id: routeId, direction_id: d.direction_id };

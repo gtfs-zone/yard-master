@@ -42,7 +42,7 @@ has no counterpart to, because test-track edits nothing.
 
 `src/modules/pages/feed-page.ts`, `src/modules/pages/tracker-page.ts`,
 `src/modules/pages/trip-page.ts`, `src/modules/share-modal.ts`,
-`src/modules/alerts-modal.ts`, `src/modules/calendar-modal.ts`,
+`src/modules/alerts-modal.ts`,
 `src/modules/managed-render.ts`, `src/modules/service-date.ts`,
 `src/modules/entity-row.ts` and `src/modules/trip-picker.ts` are in neither
 tier and deliberately absent from the table: they are yard-master's own files
@@ -52,8 +52,9 @@ Feed -> Route -> Trip, its home page is the feed itself with the trackers and
 routes hanging off it as scrollboxes rather than as pages, and the managed half
 of that hierarchy — feeds, trackers, assignments, alerts and members — has no
 counterpart upstream at all, because test-track owns none of those objects.
-Sharing, the alert list and the calendar are navbar modals for the same reason:
-nothing upstream has an object to put in them. `entity-row.ts` is the same
+Sharing and the alert list are navbar modals for the same reason: nothing
+upstream has an object to put in them. The calendar is a navbar modal too, but
+its month grid does have an upstream now — see the table. `entity-row.ts` is the same
 kind of file for a different reason: coloring-book's
 `utils/entity-references.ts` is its visual model and nothing else, so there is
 no upstream to diff it against and nothing about it is checked.
@@ -78,6 +79,7 @@ left alone.
 |---|---|---|---|---|---|
 | `src/styles/main.css` | `test-track` | `src/styles/main.css` | 56f120a | verbatim | The whole stylesheet: daisyUI theme block, the panel/map grid and its 768px collapse, the bottom-sheet transforms, and the MapLibre control overrides. test-track's copy is already the no-editor form of coloring-book's, so it is taken from there rather than re-stripped |
 | `src/modules/modal-utils.ts` | `coloring-book` | `src/modules/modal-utils.ts` | 52baec7 | modified | `showModal` plus the shared icon builders. Taken from coloring-book, which is a superset of test-track's older copy everywhere except `renderWarningIcon`; see the banner's `@changes`. `notification-system.ts` imports `renderCloseIcon` from here |
+| `src/modules/calendar-modal.ts` | `coloring-book` | `src/modules/calendar-modal.ts` | 6ef855e | modified | The month grid's cell shape: `min-h-16 p-1 rounded bg-base-200/20 border border-base-300/30 overflow-hidden`, the day number line, and a `max-h-24 overflow-y-auto` chip stack in place of a fixed count plus `+n more`. See the banner's `@changes`: the chips, the data source and the timeline half are all this repo's own |
 | `src/modules/notification-system.ts` | `test-track` | `src/modules/notification-system.ts` | 56f120a | verbatim | Toast system; the `notify` singleton needs an explicit `.initialize()`. Born in coloring-book; test-track carries it verbatim |
 | `src/modules/feed-progress-indicator.ts` | `test-track` | `src/modules/feed-progress-indicator.ts` | 56f120a | verbatim | Top loading bar, keyed by operation name. The singleton touches `document.body` at import time, so it cannot be imported before the DOM exists. Born in coloring-book; test-track carries it verbatim |
 | `src/modules/theme-controller.ts` | `test-track` | `src/modules/theme-controller.ts` | 56f120a | verbatim | Applies `data-theme` and persists the choice. Every theme change has to be followed by `clearThemeColorCache()` or MapLibre keeps painting the old accent. Born in coloring-book; test-track carries it verbatim |
