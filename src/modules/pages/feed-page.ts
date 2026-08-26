@@ -104,7 +104,7 @@ function renderStaticStatus(ctx: RenderContext): string {
 
 /** The scroll container every list on this page shares. */
 function scrollbox(body: string): string {
-  return `<div class="max-h-96 overflow-y-auto overflow-x-hidden">${body}</div>`;
+  return `<div class="max-h-96 overflow-y-auto overflow-x-hidden px-2">${body}</div>`;
 }
 
 /**
@@ -215,11 +215,22 @@ function reloadButton(feed: Feed): string {
  * current state. Rendered for a feed that has any, not only for a hosted one:
  * a feed switched back to a URL still has its history, and that history is the
  * only way to undo the switch.
+ *
+ * `ctx.session.uploads` carries three states: `undefined` while the request is
+ * still out, `null` if it failed, and the array once it has loaded. A failure
+ * gets a retry button rather than a spinner that never resolves.
  */
 function renderHistory(ctx: RenderContext, feed: Feed): string {
   const uploads = ctx.session.uploads;
-  if (uploads === null) {
+  if (uploads === undefined) {
     return isHosted(feed) ? '<p class="text-xs opacity-60">Loading upload history…</p>' : '';
+  }
+  if (uploads === null) {
+    return `
+      <p class="text-xs opacity-60">
+        Could not load upload history.
+        ${actionButton('feed:retry-uploads', '', 'Retry', 'btn-ghost btn-xs')}
+      </p>`;
   }
   if (uploads.length === 0) return '';
 

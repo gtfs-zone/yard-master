@@ -69,7 +69,7 @@ import {
   listUploads,
   SessionExpiredError,
 } from './api-client';
-import { isHosted, scheduleFetchUrl } from './feed-source';
+import { scheduleFetchUrl } from './feed-source';
 import type { ServiceDate } from './service-date';
 import { getMe } from './api-client';
 import { notify } from './notification-system';
@@ -350,9 +350,13 @@ export class AppState {
   async refreshUploads(): Promise<void> {
     const feed = this.session.feed;
     if (!feed) return;
-    await this.fetchInto('uploads', () => listUploads(feed.id), (rows) =>
-      this.session.setUploads(rows)
-    );
+    try {
+      this.session.setUploads(await listUploads(feed.id));
+    } catch (err) {
+      if (err instanceof SessionExpiredError) return;
+      this.session.failedUploads();
+      notify.error(`Could not load uploads: ${describe(err)}`);
+    }
   }
 
   /** Re-read the feed's assignment rules. */
@@ -525,10 +529,10 @@ export class AppState {
       const id = Number(state.alert_id);
       if (Number.isFinite(id)) load = async () => session.setAlertDetail(await getAlert(id));
     } else if (state.type === 'home' && session.feed) {
-      // A linked feed has no history worth a request; a hosted one's is the
-      // rollback list, so it is fetched when the page that shows it opens.
+      // A feed linked now may still have upload history from when it was
+      // hosted, so this is asked for regardless of the current source kind.
       const feed = session.feed;
-      const needsUploads = session.uploads === null && isHosted(feed);
+      const needsUploads = session.uploads === undefined;
       // Sharing is a modal over whatever page is open, so its rows are fetched
       // with the feed rather than on the way in: opening it should not be a
       // round trip.

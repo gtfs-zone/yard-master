@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/breadcrumbs.ts
-   @sha fa12a57
+   @sha 5570228
    @status modified
    @changes
    - The variant set is yard-master's. `vehicle` became `tracker` and resolves
@@ -27,11 +27,17 @@
  * backed lookups coloring-book needs.
  */
 
-import type { BreadcrumbItem, PageState } from '../types/page-state';
+import type { PageState } from '../types/page-state';
+import type { BreadcrumbItem } from './breadcrumb-trail';
+import { stopTypeLabel } from './breadcrumb-trail';
 import type { FeedSession } from './feed-session';
 
 function home(session: FeedSession): BreadcrumbItem {
-  return { label: session.feed?.feed_name ?? 'Feed', pageState: { type: 'home' } };
+  return {
+    typeLabel: 'Feed',
+    label: session.feed?.feed_name ?? 'Feed',
+    pageState: { type: 'home' },
+  };
 }
 
 /** Human label for a route: short name, long name, or the bare id. */
@@ -43,6 +49,11 @@ export function routeLabel(session: FeedSession, routeId: string): string {
 
 export function stopLabel(session: FeedSession, stopId: string): string {
   return session.staticFeed?.stops.get(stopId)?.name || stopId;
+}
+
+/** The crumb eyebrow for a stop: its `location_type`, or a plain stop. */
+function stopEyebrow(session: FeedSession, stopId: string): string {
+  return stopTypeLabel(session.staticFeed?.stops.get(stopId)?.location_type);
 }
 
 export function tripLabel(session: FeedSession, tripId: string): string {
@@ -115,6 +126,7 @@ function alertParent(session: FeedSession, alertId: string): AlertParent | null 
 
 function routeCrumb(session: FeedSession, routeId: string): BreadcrumbItem {
   return {
+    typeLabel: 'Route',
     label: routeLabel(session, routeId),
     pageState: { type: 'route', route_id: routeId },
   };
@@ -128,7 +140,11 @@ export function buildBreadcrumbs(session: FeedSession, state: PageState): Breadc
     case 'tracker':
       return [
         home(session),
-        { label: trackerLabel(session, state.tracker_id), pageState: state },
+        {
+          typeLabel: 'Tracker',
+          label: trackerLabel(session, state.tracker_id),
+          pageState: state,
+        },
       ];
 
     case 'route':
@@ -138,10 +154,15 @@ export function buildBreadcrumbs(session: FeedSession, state: PageState): Breadc
       return [
         home(session),
         ...stopAncestors(session, state.stop_id).map((id) => ({
+          typeLabel: stopEyebrow(session, id),
           label: stopLabel(session, id),
           pageState: { type: 'stop' as const, stop_id: id },
         })),
-        { label: stopLabel(session, state.stop_id), pageState: state },
+        {
+          typeLabel: stopEyebrow(session, state.stop_id),
+          label: stopLabel(session, state.stop_id),
+          pageState: state,
+        },
       ];
 
     case 'trip': {
@@ -149,7 +170,7 @@ export function buildBreadcrumbs(session: FeedSession, state: PageState): Breadc
       return [
         home(session),
         ...(routeId ? [routeCrumb(session, routeId)] : []),
-        { label: tripLabel(session, state.trip_id), pageState: state },
+        { typeLabel: 'Trip', label: tripLabel(session, state.trip_id), pageState: state },
       ];
     }
 
@@ -160,6 +181,8 @@ export function buildBreadcrumbs(session: FeedSession, state: PageState): Breadc
         ...(parent
           ? [
               {
+                typeLabel:
+                  parent.type === 'route' ? 'Route' : stopEyebrow(session, parent.stop_id),
                 label:
                   parent.type === 'route'
                     ? routeLabel(session, parent.route_id)
@@ -168,7 +191,11 @@ export function buildBreadcrumbs(session: FeedSession, state: PageState): Breadc
               },
             ]
           : []),
-        { label: alertLabel(session, state.alert_id), pageState: state },
+        {
+          typeLabel: 'Service alert',
+          label: alertLabel(session, state.alert_id),
+          pageState: state,
+        },
       ];
     }
   }

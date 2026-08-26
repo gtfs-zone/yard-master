@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/panel-renderer.ts
-   @sha fa12a57
+   @sha 5570228
    @status modified
    @changes
    - The session events are yard-master's: `change`, `vehicles`, `assignments`
@@ -23,7 +23,9 @@
      pages pure string renderers.
    - The feed page takes no map-issue counts. Upstream reads them off its own
      status page; here the map draws what it could draw and the feed page is
-     the feed, not a report on it. */
+     the feed, not a report on it.
+   - `renderBreadcrumbs` no longer inlined here: it calls the shared
+     `renderBreadcrumbTrail` from `breadcrumb-trail.ts`. */
 /**
  * The right panel's object pages: one dispatcher over `PageState`, plus the
  * furniture every page shares.
@@ -35,11 +37,13 @@
  * tracked by key in a set that outlives the DOM.
  */
 
-import type { BreadcrumbItem, PageState } from '../types/page-state';
+import type { PageState } from '../types/page-state';
+import type { BreadcrumbItem } from './breadcrumb-trail';
+import { renderBreadcrumbTrail } from './breadcrumb-trail';
 import type { FeedSession } from './feed-session';
 import { RtIndex } from './rt-index';
 import type { RenderContext } from './render-utils';
-import { escHtml, formatRelative } from './render-utils';
+import { formatRelative } from './render-utils';
 import { renderAlertPage } from './pages/alert-page';
 import { renderRoutePage } from './pages/route-page';
 import { renderStopPage } from './pages/stop-page';
@@ -58,22 +62,6 @@ export interface PanelRendererHooks {
   meUserId: () => number | null;
   /** Run a write, named by the button that asked for it. */
   action: (action: string, arg: string) => void;
-}
-
-function renderBreadcrumbs(ctx: RenderContext, items: BreadcrumbItem[]): string {
-  if (items.length === 0) return '';
-  return `
-    <nav class="text-xs breadcrumbs opacity-70 py-0">
-      <ul>${items
-        .map((item, i) =>
-          i === items.length - 1
-            ? `<li>${escHtml(item.label)}</li>`
-            : `<li><a href="${escHtml(ctx.href(item.pageState))}" data-nav="${escHtml(
-                JSON.stringify(item.pageState),
-              )}">${escHtml(item.label)}</a></li>`,
-        )
-        .join('')}</ul>
-    </nav>`;
 }
 
 export class PanelRenderer {
@@ -231,7 +219,7 @@ export class PanelRenderer {
 
     this.host.innerHTML = `
       <div class="space-y-4">
-        ${renderBreadcrumbs(ctx, this.breadcrumbs)}
+        ${renderBreadcrumbTrail(this.breadcrumbs, this.hooks.href)}
         ${this.renderPage(ctx)}
       </div>`;
 

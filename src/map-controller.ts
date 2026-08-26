@@ -473,10 +473,10 @@ export class MapController {
         this.tripShapes = path ? [path] : [];
         this.drawnTripKey = '';
         this.drawTripShape();
-        // Spotlight the parent route so the trip reads as one pattern within
-        // it. A trip whose route is unknown still draws its own path.
-        const routeId = state.route_id ?? this.feed?.trips.get(state.trip_id)?.route_id;
-        this.layers.setFocus(routeId ? { kind: 'route', id: routeId } : null);
+        // No route-wide spotlight here: dimming every stop but the route's
+        // would leave only whichever of them fall in the trip's own tight
+        // bounds looking highlighted, which reads as one stop lit at random.
+        this.layers.setFocus(null);
         const bounds = boundsOf(path);
         if (bounds) {
           this.map.fitBounds(bounds, {

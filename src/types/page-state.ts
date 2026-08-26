@@ -18,7 +18,10 @@
    - `trip` added, with `route_id` alongside `trip_id` so a trip page can render
      its breadcrumb before the zip has finished parsing.
    - `isPageState` no longer counts keys per variant; the optional members make
-     an exact-count check say nothing useful, so each field is checked by type. */
+     an exact-count check say nothing useful, so each field is checked by type.
+   - `BreadcrumbItem` moved out to `breadcrumb-trail.ts`, vendored from
+     coloring-book; it now carries a `typeLabel` this file has no reason to know
+     about. */
 
 /**
  * Union of every page yard-master can display. Each variant carries the minimal
@@ -37,12 +40,6 @@ export type PageState =
   | { type: 'trip'; trip_id: string; route_id?: string };
 
 export type PageStateType = PageState['type'];
-
-/** A single item in the breadcrumb trail: a label plus where it navigates. */
-export type BreadcrumbItem = {
-  label: string;
-  pageState: PageState;
-};
 
 function isOptionalString(value: unknown): boolean {
   return value === undefined || typeof value === 'string';

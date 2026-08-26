@@ -87,12 +87,13 @@ export class FeedSession extends EventTarget {
   members: Members | null = null;
 
   /**
-   * The feed's schedule uploads, newest first, or null until they have been
-   * asked for. Empty is a real answer — a linked feed has none — so the null
-   * matters: a page that read `[]` as "no uploads" would say so while the
-   * request was still out.
+   * The feed's schedule uploads, newest first: `undefined` until they have
+   * been asked for, `null` if that request failed, or the list once it has
+   * loaded. Empty is a real answer — a linked feed has none — so neither
+   * `undefined` nor `null` may collapse into it: a page that read `[]` as "no
+   * uploads" would say so while the request was still out, or after it failed.
    */
-  uploads: GtfsUpload[] | null = null;
+  uploads: GtfsUpload[] | null | undefined = undefined;
 
   /**
    * The feed's assignment rules as stored, keyed by rule id, or null until
@@ -342,6 +343,12 @@ export class FeedSession extends EventTarget {
     this.dispatchEvent(new CustomEvent('change'));
   }
 
+  /** Record that the upload history request failed, so `renderHistory` can offer a retry. */
+  failedUploads(): void {
+    this.uploads = null;
+    this.dispatchEvent(new CustomEvent('change'));
+  }
+
   /**
    * Say plainly that there is no zip to fetch, rather than leaving the panel
    * on "downloading" forever.
@@ -450,7 +457,7 @@ export class FeedSession extends EventTarget {
     this.serviceAlerts = new Map();
     this.alertDetails = new Map();
     this.members = null;
-    this.uploads = null;
+    this.uploads = undefined;
     this.rules = null;
     this.assignments = new Map();
     this.assignmentsRange = null;

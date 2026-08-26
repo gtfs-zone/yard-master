@@ -185,6 +185,8 @@ export class Actions {
           return await this.linkSchedule();
         case 'feed:copy-schedule-url':
           return await this.copyScheduleUrl();
+        case 'feed:retry-uploads':
+          return await this.app.refreshUploads();
         case 'upload:activate':
           return await this.activateSchedule(arg);
         case 'upload:delete':
@@ -988,8 +990,6 @@ export class Actions {
       name: 'trip_id',
       label: 'Trip',
       value: tripId,
-      tooltip:
-        'Nothing checks a trip id against the schedule, so a reloaded feed can outlive one.',
     };
     if (options.length && options.length <= CONFIG.TRIP_SELECT_MAX) {
       return { ...base, type: 'select', options };

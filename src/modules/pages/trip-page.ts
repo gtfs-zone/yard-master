@@ -21,6 +21,7 @@ import { entityRow, entityRowList, rowSection } from '../entity-row';
 import { actionButton, describeRecurrence, formatWindow } from '../managed-render';
 import { zoneLabel } from '../feed-time';
 import type { Prediction, RtIndex } from '../rt-index';
+import { STRIP_ROW_CLASS } from '../route-strip';
 import type { RenderContext } from '../render-utils';
 import {
   entityLink,
@@ -106,7 +107,7 @@ function renderSchedule(ctx: RenderContext, rt: RtIndex, trip: Trip): string {
     .map((time) => {
       const stop = feed.stops.get(time.stop_id);
       const prediction = bySequence.get(time.stop_sequence) ?? byStop.get(time.stop_id);
-      return `<tr>
+      return `<tr class="${STRIP_ROW_CLASS}" data-stop-id="${escHtml(time.stop_id)}">
         <td class="opacity-50 tabular-nums text-right">${escHtml(String(time.stop_sequence))}</td>
         <td class="max-w-0 truncate">${entityLink(
           ctx,

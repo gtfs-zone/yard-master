@@ -39,13 +39,13 @@
      data for. */
 
 import type {
-  BreadcrumbItem,
   NavigationEvent,
   PageState,
   PageStateManagerConfig,
   StateValidator,
 } from '../types/page-state';
 import { isPageState } from '../types/page-state';
+import type { BreadcrumbItem } from './breadcrumb-trail';
 
 const MAX_NAVIGATION_HISTORY = 50;
 
