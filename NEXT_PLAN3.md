@@ -646,6 +646,24 @@ not let it grow into a general cross-linking habit.
       `page-state.ts` and `breadcrumbs.ts` are already `modified` and their
       `@changes` lists are now wrong in almost every bullet; rewrite both.
 - [ ] Hand off for visual verification. No browser automation.
+- [ ] Adopt the shared crumb shell from coloring-book (queued by test-track's
+      breadcrumb/title plan, which deliberately did not edit this repo):
+      - vendor `src/modules/breadcrumb-trail.ts` from coloring-book as
+        `verbatim`. It owns the `BreadcrumbItem` shape (a crumb now carries a
+        `typeLabel` above its name), the two-line crumb render, the header
+        eyebrow and `pageTitle(state)`.
+      - rebuild `breadcrumbs.ts` on it, keeping the six yard-master variants and
+        the tracker / managed-object label sources. Only the build stays local;
+        the render and the vocabulary come from the shell.
+      - promote `breadcrumbs.ts` to `adopted` if the rebuild leaves it far enough
+        from test-track's copy that an `@changes` list is no longer a useful
+        diff, which is what the tier is for. Its row is already marked stale by
+        design.
+      - add `pageTitle` wiring so `document.title` and each page's header eyebrow
+        read from the same type label. The app name is `manage.rt.gtfs.zone`.
+      - sweep the remaining "Static load" strings to the scheduled vocabulary.
+        Phase 3 already merged the section into "GTFS Scheduled", so this is a
+        string sweep, not a redesign.
 
 Nothing crossed a tier. `vendor:check` reports every `verbatim` entry matching,
 which is the point of the tier: the refactor stayed inside the files that were
