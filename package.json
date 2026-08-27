@@ -22,7 +22,7 @@
     "admin"
   ],
   "author": "gtfs.zone contributors",
-  "license": "MIT",
+  "license": "AGPL-3.0",
   "devDependencies": {
     "@types/geojson": "^7946.0.16",
     "@types/node": "^24.12.2",
