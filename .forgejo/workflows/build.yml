@@ -85,7 +85,7 @@ jobs:
           git config user.name "forgejo-actions"
           git config user.email "actions@${{ vars.REGISTRY_DOMAIN }}"
           git add "${SITE_DIR}/kustomization.yaml"
-          git commit -m "deploy(manage-next.rt.gtfs.zone): yard-master ${{ github.ref_name }}"
+          git commit -m "deploy(manage.rt.gtfs.zone): yard-master ${{ github.ref_name }}"
           # Concurrent site releases race on the same file; rebase and retry
           # rather than failing the release.
           for i in 1 2 3; do
