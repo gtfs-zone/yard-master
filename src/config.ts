@@ -48,6 +48,19 @@ export const CONFIG = {
   STATION_FADE_ZOOM_MIN: 7.5,
   STATION_FADE_ZOOM_MAX: 9.5,
 
+  // Below this many stops the zoom fade is skipped and every stop draws at
+  // full opacity. The fade exists to stop thousands of dots piling up; a small
+  // feed has no pile to avoid, and the tracker being watched needs its one
+  // nearby stop visible at any zoom.
+  STOP_FADE_MIN_STOPS: 50,
+
+  // Zoom range over which the direction arrows on the single spotlighted route
+  // fade in, and their opacity once faded in. Sits above STOP_FADE_ZOOM_MAX so
+  // arrows are the last thing to appear as you zoom in.
+  ROUTE_ARROW_FADE_ZOOM_MIN: 12,
+  ROUTE_ARROW_FADE_ZOOM_MAX: 13.5,
+  ROUTE_ARROW_OPACITY: 0.85,
+
   // Spotlight treatment when a route (and its stops) is focused. Non-matching
   // routes and stops dim; the matched route's line and casing get a width bump.
   SPOTLIGHT_STOP_DIM: 0.15,
