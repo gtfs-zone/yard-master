@@ -1,8 +1,8 @@
 /* @vendored-from test-track:src/modules/route-graph.ts
-   @sha fa12a57
+   @sha 7347ce9
    @status verbatim */
 /* @vendored-from coloring-book:src/modules/route-graph.ts
-   @sha 9f1f986
+   @sha 04f48c3
    @status verbatim */
 /**
  * The branch structure of a route strip: which lane each stop sits in, and

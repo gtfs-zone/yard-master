@@ -1,8 +1,8 @@
 /* @vendored-from test-track:src/modules/scs.ts
-   @sha fa12a57
+   @sha 7347ce9
    @status verbatim */
 /* @vendored-from coloring-book:src/modules/scs.ts
-   @sha a4b5ee1
+   @sha 04f48c3
    @status verbatim */
 /**
  * Shortest Common Supersequence (SCS) module.

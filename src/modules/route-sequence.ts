@@ -1,8 +1,8 @@
 /* @vendored-from test-track:src/modules/route-sequence.ts
-   @sha fa12a57
+   @sha 7347ce9
    @status verbatim */
 /* @vendored-from coloring-book:src/modules/route-sequence.ts
-   @sha a4b5ee1
+   @sha 04f48c3
    @status verbatim */
 /**
  * The canonical stop order for one direction of one route, plus the mapping

@@ -1,6 +1,8 @@
 /* @vendored-from test-track:src/gtfs-static.ts
-   @sha 56f120a
-   @status verbatim */
+   @sha fa12a57
+   @status modified
+   @changes
+   - Two arrow characters in comments replaced with `->`. */
 import JSZip from 'jszip';
 import Papa from 'papaparse';
 import { splitInnerZipPath } from './modules/feed-url-resolve';
@@ -229,11 +231,11 @@ export class GTFSStatic {
    */
   async loadFromUrl(url: string, hooks: LoadHooks = {}): Promise<void> {
     const { url: fetchUrl, innerPaths } = splitInnerZipPath(url);
-    const buffer = await downloadWithProgress(fetchUrl, {
+    const blob = await downloadWithProgress(fetchUrl, {
       onProgress: hooks.onDownload,
       signal: hooks.signal,
     });
-    let zip = await JSZip.loadAsync(buffer);
+    let zip = await JSZip.loadAsync(blob);
     for (const inner of innerPaths) {
       zip = await openInnerZip(zip, inner);
     }
