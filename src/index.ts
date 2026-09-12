@@ -27,8 +27,13 @@ import { calendarBadgeCount, showCalendarModal } from './modules/calendar-modal'
 import { alertsBadgeCount, showAlertsModal } from './modules/alerts-modal';
 import { showShareModal } from './modules/share-modal';
 import { personLabel } from './modules/managed-render';
+import { renderNavbarActions } from './modules/navbar-actions';
 
 // ─── Shell ────────────────────────────────────────────────────────────────────
+// The navbar's action row is data, not markup. It has to be rendered before
+// anything below looks a control up by id.
+renderNavbarActions(document.getElementById('navbar-actions')!);
+
 const version = document.getElementById('app-version');
 if (version) version.textContent = __APP_VERSION__;
 
@@ -240,7 +245,12 @@ void appState.boot().then(() => {
   const me = appState.me;
   const url = me?.account_url;
   if (me && url) {
-    userBtn.textContent = personLabel(me);
+    // Their own name, or the address they signed in with. `personLabel`'s last
+    // resort is the surrogate user id, which says nothing to the person
+    // reading it, so the navbar falls back to the generic word instead.
+    const label = me.display_name || me.email ? personLabel(me) : 'Account';
+    userBtn.textContent = label;
+    userBtn.setAttribute('aria-label', label);
     userBtn.href = url;
     userBtn.classList.remove('hidden');
   } else {

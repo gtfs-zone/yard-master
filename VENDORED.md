@@ -41,7 +41,10 @@ RT spec below — spec-driven form labels are a coloring-book idea that test-tra
 has no counterpart to, because test-track edits nothing. `breadcrumb-trail.ts`
 is the fourth: the crumb shell is shared by all three apps and coloring-book is
 where it was written, so both test-track and yard-master vendor it straight
-from there rather than through each other.
+from there rather than through each other. `navbar-actions.ts` is the fifth, and
+the only one test-track does not have at all: it took `nav-icons.ts` alone and
+left its navbar in markup, so the descriptor list comes from coloring-book
+directly.
 
 `src/modules/pages/feed-page.ts`, `src/modules/pages/tracker-page.ts`,
 `src/modules/pages/trip-page.ts`, `src/modules/share-modal.ts`,
@@ -85,6 +88,8 @@ left alone.
 | `src/modules/sidebar-modal.ts` | `test-track` | `src/modules/sidebar-modal.ts` | bf5cc8c | verbatim | The shared sidebar-modal scaffold: a grouped entry list on the left, one rendered pane on the right. `help-modal.ts` renders through it and imports `installGuideButtons` back; the cycle is upstream's and resolves at call time |
 | `src/modules/help-modal.ts` | `test-track` | `src/modules/help-modal.ts` | bf5cc8c | verbatim | The help viewer: maps `HELP_PAGES` onto sidebar entries, owns first-run state via `showHelpPageOnce`, and exports the shared `eyebrow`/`lede`/`footnote`/`glyphList` render helpers plus `installGuideButtons` |
 | `src/utils/escape-html.ts` | `test-track` | `src/utils/escape-html.ts` | bf5cc8c | verbatim | Regex-based HTML escaping for string-building renderers. Pulled in as a dependency of `help-modal.ts` and `sidebar-modal.ts` |
+| `src/modules/nav-icons.ts` | `test-track` | `src/modules/nav-icons.ts` | bf5cc8c | verbatim | The shared navbar/dock icon path map and `renderNavIcon`, plus the filled `renderSunIcon` / `renderMoonIcon` pair. Only `calendar`, `guide` and `load` are drawn here; the rest of the map is coloring-book's editor actions and is kept so the file stays one copy. Born in coloring-book; test-track carries it verbatim |
+| `src/modules/navbar-actions.ts` | `coloring-book` | `src/modules/navbar-actions.ts` | dca23b3 | modified | The navbar action row as a descriptor list: one `renderAction` gives every control the same box, tooltip and `aria-label`, so reordering the navbar is a data change. Not vendored through test-track, which took `nav-icons.ts` alone and kept its own markup. See the banner's `@changes`: this repo's own action list, a `link` kind for the account control, `labelId` and `badgeClass`, local `alerts`/`share` icon paths, and no dock |
 | `src/modules/calendar-modal.ts` | `coloring-book` | `src/modules/calendar-modal.ts` | 6ef855e | modified | The month grid's cell shape: `min-h-16 p-1 rounded bg-base-200/20 border border-base-300/30 overflow-hidden`, the day number line, and a `max-h-24 overflow-y-auto` chip stack in place of a fixed count plus `+n more`. See the banner's `@changes`: the chips, the data source and the timeline half are all this repo's own |
 | `src/modules/notification-system.ts` | `test-track` | `src/modules/notification-system.ts` | 56f120a | verbatim | Toast system; the `notify` singleton needs an explicit `.initialize()`. Born in coloring-book; test-track carries it verbatim |
 | `src/modules/feed-progress-indicator.ts` | `test-track` | `src/modules/feed-progress-indicator.ts` | 56f120a | verbatim | Top loading bar, keyed by operation name. The singleton touches `document.body` at import time, so it cannot be imported before the DOM exists. Born in coloring-book; test-track carries it verbatim |
