@@ -83,10 +83,10 @@ export async function confirmTyped(options: ConfirmTypedOptions): Promise<boolea
       <div class="space-y-3">
         <p class="text-sm">${escHtml(options.question)}</p>
         ${consequenceList(options.consequences ?? [])}
-        <label class="form-control">
-          <span class="label-text text-xs">Type the ${escHtml(label)}
+        <label class="fieldset">
+          <span class="label">Type the ${escHtml(label)}
             <span class="font-mono">${escHtml(options.phrase)}</span> to confirm</span>
-          <input data-confirm-input class="input input-bordered input-sm w-full"
+          <input data-confirm-input class="input input-bordered w-full"
                  autocomplete="off" autofocus />
         </label>
       </div>`,

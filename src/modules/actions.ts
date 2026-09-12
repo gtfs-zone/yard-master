@@ -615,20 +615,20 @@ export class Actions {
           <div class="bg-white rounded-lg p-3 flex justify-center [&>svg]:h-48 [&>svg]:w-48">
             ${provisioning.qr_svg}
           </div>
-          <label class="form-control">
-            <span class="label-text text-xs">Configuration link</span>
-            <input class="input input-bordered input-sm w-full font-mono text-xs" readonly
+          <label class="fieldset">
+            <span class="label">Configuration link</span>
+            <input class="input input-bordered w-full font-mono text-xs" readonly
                    value="${escHtml(provisioning.config_url)}" />
           </label>
           <a class="btn btn-sm btn-outline w-full" href="${escHtml(provisioning.config_url)}">
             Open in Traccar Client
           </a>
-          <label class="form-control">
-            <span class="label-text text-xs">${tooltipLabelContent(
+          <label class="fieldset">
+            <span class="label">${tooltipLabelContent(
               'Device key',
               'Type this in by hand if the QR flow fails.'
             )}</span>
-            <input class="input input-bordered input-sm w-full font-mono text-xs" readonly
+            <input class="input input-bordered w-full font-mono text-xs" readonly
                    value="${escHtml(provisioning.device_key)}" />
           </label>
         </div>`,
@@ -711,6 +711,23 @@ export class Actions {
     ];
   }
 
+  /**
+   * The two ends of the active period, before the write.
+   *
+   * The date half of a `datetime` is a typeable box, so an unreadable window
+   * would otherwise reach `fromLocalInput`, come back null, and publish the
+   * alert with no window at all.
+   */
+  private validateAlert(values: Record<string, string>): Record<string, string> | null {
+    const errors: Record<string, string> = {};
+    for (const name of ['active_period_start', 'active_period_end']) {
+      if (values[name].trim() && fromLocalInput(values[name]) === null) {
+        errors[name] = 'A date as YYYY-MM-DD, and a time';
+      }
+    }
+    return Object.keys(errors).length ? errors : null;
+  }
+
   /** The form's values as the API's body. Every field is sent on every save. */
   private alertBody(values: Record<string, string>): AlertWrite {
     return {
@@ -735,6 +752,7 @@ export class Actions {
         'It applies to the whole feed until you add informed entities naming a route, stop or trip.',
       submitLabel: 'Publish',
       fields: this.alertFields(null),
+      validate: (values) => this.validateAlert(values),
       submit: (values) => createAlert(feed.id, this.alertBody(values)),
     });
     if (!created) return;
@@ -751,6 +769,7 @@ export class Actions {
     const updated = await showEntityForm<Alert>({
       title: 'Edit alert',
       fields: this.alertFields(alert),
+      validate: (values) => this.validateAlert(values),
       submit: (values) => updateAlert(alert.id, this.alertBody(values)),
     });
     if (!updated) return;
@@ -1072,9 +1091,14 @@ export class Actions {
   private validateRule(values: Record<string, string>): Record<string, string> | null {
     const errors: Record<string, string> = {};
     if (!values.trip_id.trim()) errors.trip_id = 'A rule needs a trip';
-    // The input is a `date`, so its shape is the browser's problem and the
-    // only thing left to check is that one was picked at all.
-    if (!values.start_date) errors.start_date = 'A rule needs a first service date';
+    // The date boxes are typeable, so the shape is this form's to check: the
+    // month grid can only produce a service date, but a person can type
+    // anything into the box it fills in.
+    const startDate = values.start_date.trim();
+    const endDate = values.end_date.trim();
+    if (!startDate) errors.start_date = 'A rule needs a first service date';
+    else if (!isServiceDate(startDate)) errors.start_date = 'A date as YYYY-MM-DD';
+    if (endDate && !isServiceDate(endDate)) errors.end_date = 'A date as YYYY-MM-DD';
     const start_time = parseRuleTime(values.start_time);
     const end_time = parseRuleTime(values.end_time);
     if (start_time === null) errors.start_time = 'A clock time as HH:MM';

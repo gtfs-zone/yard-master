@@ -29,6 +29,7 @@
  */
 
 import { CONFIG } from '../config';
+import { attachCalendarInput, ISO_DATE_CODEC } from '../utils/calendar-input';
 import { ApiError, SessionExpiredError } from './api-client';
 import { showModal } from './modal-utils';
 import { escHtml } from './render-utils';
@@ -228,6 +229,12 @@ function readFiles(root: HTMLElement, fields: FormField[]): Record<string, File 
 /** Makes each radio group's `name` unique, so stacked forms cannot share one. */
 let radioGroupSeq = 0;
 
+/** What a `date` box, and the date half of a `datetime`, asks for. */
+const DATE_PLACEHOLDER = 'YYYY-MM-DD';
+
+/** A complete date, which is when a `datetime`'s time half is worth filling in. */
+const DATE_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
+
 function renderInput(field: FormField): string {
   const type = field.type ?? 'text';
   const value = field.value === null || field.value === undefined ? '' : String(field.value);
@@ -238,13 +245,13 @@ function renderInput(field: FormField): string {
     (field.placeholder ? ` placeholder="${escHtml(field.placeholder)}"` : '');
 
   if (type === 'textarea') {
-    return `<textarea ${common} class="textarea textarea-bordered textarea-sm w-full"
+    return `<textarea ${common} class="textarea textarea-bordered w-full"
       rows="3">${escHtml(value)}</textarea>`;
   }
   if (type === 'select') {
     const options = field.options ?? [];
     const hasEmpty = options.some((o) => o.value === '');
-    return `<select ${common} class="select select-bordered select-sm w-full">
+    return `<select ${common} class="select select-bordered w-full">
       ${hasEmpty ? '' : '<option value="">—</option>'}
       ${options
         .map(
@@ -263,7 +270,7 @@ function renderInput(field: FormField): string {
     return `<div class="relative" data-combo-wrap="${escHtml(field.name)}">
       <input ${common} type="text" value="${escHtml(value)}" role="combobox"
         aria-expanded="false" aria-autocomplete="list" autocomplete="off"
-        class="input input-bordered input-sm w-full" />
+        class="input input-bordered w-full" />
       <ul class="hidden absolute left-0 right-0 top-full z-[60] mt-1 max-h-56 overflow-y-auto
         rounded-box border border-base-300 bg-base-100 shadow-lg py-1"
         role="listbox" data-combo="${escHtml(field.name)}"></ul>
@@ -314,31 +321,53 @@ function renderInput(field: FormField): string {
               data-field="${escHtml(field.name)}" value="${escHtml(o.value)}"${
                 o.value === value ? ' checked' : ''
               }${field.readonly ? ' disabled' : ''} />
-            <span class="label-text text-xs">${escHtml(o.label)}</span>
+            <span class="text-sm">${escHtml(o.label)}</span>
           </label>`
         )
         .join('')}
     </div>`;
   }
   if (type === 'checkbox') {
-    return `<input ${common} type="checkbox" class="toggle toggle-sm"${
+    return `<input ${common} type="checkbox" class="toggle"${
       value === 'true' ? ' checked' : ''
     } />`;
+  }
+  if (type === 'date') {
+    // A text box, not `type="date"`: the month grid behind it is
+    // `calendar-input.ts`'s, so it draws like the rest of the app and starts
+    // its weeks where this app says rather than where the browser's locale
+    // does. The box keeps the stored string verbatim and stays typeable, which
+    // is why the shape is now this form's to check.
+    return `<input ${common} type="text" value="${escHtml(value)}"
+      class="input input-bordered w-full" autocomplete="off"${
+        field.placeholder ? '' : ` placeholder="${DATE_PLACEHOLDER}"`
+      } />`;
+  }
+  if (type === 'datetime') {
+    // An instant is a date and a time, so it is two inputs over one hidden
+    // value: the date half gets the same month grid as a `date` field and the
+    // time half stays native, there being no shared time control upstream.
+    // The hidden input carries whatever the two halves say, typos included,
+    // so a date entered wrong reaches `validate` instead of quietly becoming
+    // an empty window.
+    const [datePart = '', timePart = ''] = value.split('T');
+    const off = field.readonly ? ' disabled' : '';
+    return `<div class="flex gap-2" data-datetime="${escHtml(field.name)}">
+      <input data-field="${escHtml(field.name)}" type="hidden" value="${escHtml(value)}" />
+      <input data-datetime-date type="text" value="${escHtml(datePart)}"
+        class="input input-bordered w-full" autocomplete="off"
+        placeholder="${escHtml(field.placeholder ?? DATE_PLACEHOLDER)}"${off} />
+      <input data-datetime-time type="time" value="${escHtml(timePart)}"
+        class="input input-bordered w-36"${off} />
+    </div>`;
   }
 
   // `url` is deliberately a text input: `type="url"` brings the browser's own
   // validation bubble, which fires before the request and cannot be styled to
   // match the field errors the server sends back.
-  const inputType =
-    type === 'number'
-      ? 'number'
-      : type === 'datetime'
-        ? 'datetime-local'
-        : type === 'date'
-          ? 'date'
-          : 'text';
+  const inputType = type === 'number' ? 'number' : 'text';
   return `<input ${common} type="${inputType}" value="${escHtml(value)}"
-    class="input input-bordered input-sm w-full" autocomplete="off" />`;
+    class="input input-bordered w-full" autocomplete="off" />`;
 }
 
 /** The label's own markup: a spec entry's tooltip, this app's, or neither. */
@@ -373,15 +402,18 @@ function renderField(field: FormField): string {
         data-label-default="${escHtml(labelContent(field))}"
         data-label-alt="${escHtml(labelContent({ ...field, label: labelWhen.label }))}"`
     : '';
+  // `fieldset` / `label` is daisyUI 5's form row and what the other two apps
+  // render, so a field here has the same box, label face and spacing as one in
+  // the editor.
   return `
-    <${tag} class="form-control"${
+    <${tag} class="fieldset"${
       when
         ? ` data-when-field="${escHtml(when.field)}" data-when-equals="${escHtml(when.equals)}"`
         : ''
     }>
-      <span class="label-text text-xs"${labelAttrs}>${labelContent(field)}</span>
+      <span class="label"${labelAttrs}>${labelContent(field)}</span>
       ${input}
-      <span class="label-text-alt text-error hidden" data-error="${escHtml(field.name)}"></span>
+      <span class="text-error text-xs hidden" data-error="${escHtml(field.name)}"></span>
     </${tag}>`;
 }
 
@@ -393,6 +425,9 @@ export async function showEntityForm<T>(options: EntityFormOptions<T>): Promise<
   let result: T | null = null;
   // Assigned by `onMount`, which runs before any button can be clicked.
   let save: () => Promise<boolean> = async () => true;
+  // A month grid is a body child, so it outlives the modal box it was opened
+  // from and has to be closed with the form.
+  const closeCalendars: Array<() => void> = [];
 
   await showModal({
     title: escHtml(options.title),
@@ -638,6 +673,64 @@ export async function showEntityForm<T>(options: EntityFormOptions<T>): Promise<
       }
 
       /**
+       * The date halves: the month grid on a `date` field, and on the date box
+       * of a `datetime`.
+       *
+       * `weekStart` is this app's, not the browser's locale's, which is the
+       * whole reason the grid is ours. The codec is `YYYY-MM-DD` either way:
+       * a service date is already that shape, and a `datetime`'s date half is
+       * the part of its value before the `T`.
+       */
+      for (const field of options.fields) {
+        if (field.type !== 'date' && field.type !== 'datetime') continue;
+        if (field.readonly) continue;
+        const input =
+          field.type === 'date'
+            ? root.querySelector<HTMLInputElement>(
+                `input[data-field="${CSS.escape(field.name)}"]`
+              )
+            : root.querySelector<HTMLInputElement>(
+                `[data-datetime="${CSS.escape(field.name)}"] [data-datetime-date]`
+              );
+        if (!input) continue;
+        closeCalendars.push(
+          attachCalendarInput(input, {
+            codec: ISO_DATE_CODEC,
+            weekStart: CONFIG.WEEK_START,
+            allowEmpty: true,
+            // Writing `.value` in script fires nothing, and an `input` event is
+            // what recomposes a `datetime` and re-enables Save.
+            onPick: () => input.dispatchEvent(new Event('input', { bubbles: true })),
+          })
+        );
+      }
+
+      /**
+       * The `datetime` pairs: two visible boxes over the hidden input everything
+       * else reads.
+       *
+       * The listener is on the wrapper rather than on the two inputs, so it has
+       * already run by the time the same event reaches `syncButtons` on `root`.
+       */
+      for (const field of options.fields) {
+        if (field.type !== 'datetime') continue;
+        const wrap = root.querySelector<HTMLElement>(
+          `[data-datetime="${CSS.escape(field.name)}"]`
+        );
+        const hidden = wrap?.querySelector<HTMLInputElement>('input[type="hidden"]');
+        const dateInput = wrap?.querySelector<HTMLInputElement>('[data-datetime-date]');
+        const timeInput = wrap?.querySelector<HTMLInputElement>('[data-datetime-time]');
+        if (!wrap || !hidden || !dateInput || !timeInput) continue;
+        wrap.addEventListener('input', () => {
+          const date = dateInput.value.trim();
+          // A whole date with no time is midnight; a time with no date is
+          // nothing, since what this writes is an instant or it is empty.
+          if (DATE_SHAPE.test(date) && !timeInput.value) timeInput.value = '00:00';
+          hidden.value = date ? `${date}T${timeInput.value}` : '';
+        });
+      }
+
+      /**
        * The weekday pills.
        *
        * The buttons are the control and the hidden input is the value, so
@@ -764,5 +857,6 @@ export async function showEntityForm<T>(options: EntityFormOptions<T>): Promise<
     },
   });
 
+  closeCalendars.forEach((close) => close());
   return result;
 }

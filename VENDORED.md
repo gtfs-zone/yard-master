@@ -44,7 +44,8 @@ where it was written, so both test-track and yard-master vendor it straight
 from there rather than through each other. `navbar-actions.ts` is the fifth, and
 the only one test-track does not have at all: it took `nav-icons.ts` alone and
 left its navbar in markup, so the descriptor list comes from coloring-book
-directly.
+directly. `calendar-input.ts` is the sixth, and the second test-track does not
+have: it edits nothing, so it has no date to pick.
 
 `src/modules/pages/feed-page.ts`, `src/modules/pages/tracker-page.ts`,
 `src/modules/pages/trip-page.ts`, `src/modules/share-modal.ts`,
@@ -135,4 +136,5 @@ left alone.
 | `src/modules/panel-renderer.ts` | `test-track` | `src/modules/panel-renderer.ts` | 5570228 | modified | The panel dispatcher, its scroll/`<details>` restore and the shared ticker. See the banner's `@changes`: yard-master's session events (`change`, `vehicles`, `assignments`, `staticloaded`), no status page to hand back to, the six-variant switch, the `meUserId` and `action` hooks the pages emit buttons against, and the breadcrumb trail rendered through the shared `renderBreadcrumbTrail` rather than inline |
 | `src/modules/feed-session.ts` | `test-track` | `src/feed-session.ts` | 56f120a | adopted | Not a copy: written here, and deliberately shaped so the vendored modules that read a `FeedSession` compile against it unchanged. test-track's owns a GTFS-RT poller; here the managed objects come from the API and the live half arrives on the SSE channel, so only the `staticFeed` / `vehicles` / `alerts` / `tripUpdates` surface is held in common. Listed so the seam is inventoried rather than invisible |
 | `src/utils/tooltip-position.ts` | `coloring-book` | `src/utils/tooltip-position.ts` | 3c3f412 | verbatim | The portal behind every spec tooltip: delegated document listeners, `position: fixed` off the trigger's rect, clamped to the viewport. A CSS tooltip is clipped by the scrollable modal body these labels live in, which is what this exists to sidestep. Its doc comment names coloring-book's own paths, which is what verbatim means |
+| `src/utils/calendar-input.ts` | `coloring-book` | `src/utils/calendar-input.ts` | 47a4341 | verbatim | The month grid behind every date box: `openCalendar`, `attachCalendarInput` and `ISO_DATE_CODEC`. It imports nothing and holds no value — the codec, the week start and the anchor input are all handed in, which is what lets one component serve a service date and the date half of an alert window. `entity-form.ts` attaches it to every `date` field and to a `datetime`'s date box |
 | `src/utils/spec-markup.ts` | `coloring-book` | `src/utils/spec-markup.ts` | dca23b3 | modified | Renders a verbatim reference description as HTML: `<br>`, backticks, bold, links, bullets and tables. See the banner's `@changes`: image support removed with the three schedule SVGs it resolved against, `escHtml` from this repo's `render-utils`, and the anchor base pointed at the realtime reference |
