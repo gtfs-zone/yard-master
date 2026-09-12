@@ -65,6 +65,7 @@ import { isHosted, publicScheduleUrl } from './feed-source';
 import { formatBytes } from './feed-download';
 import { isHttpUrl, putSchedule, scheduleZipField } from './schedule-upload';
 import { rtEnum } from '../gtfs-rt-spec/index';
+import { tooltipLabelContent } from './spec-field';
 import type { FieldOption, FormField } from './entity-form';
 import { showEntityForm, weekdayBits, weekdayValue } from './entity-form';
 import {
@@ -623,10 +624,12 @@ export class Actions {
             Open in Traccar Client
           </a>
           <label class="form-control">
-            <span class="label-text text-xs">Device key</span>
+            <span class="label-text text-xs">${tooltipLabelContent(
+              'Device key',
+              'Type this in by hand if the QR flow fails.'
+            )}</span>
             <input class="input input-bordered input-sm w-full font-mono text-xs" readonly
                    value="${escHtml(provisioning.device_key)}" />
-            <span class="label-text-alt opacity-50">Type this in by hand if the QR flow fails.</span>
           </label>
         </div>`,
       actions: [{ label: 'Close', onClick: () => {} }],
@@ -667,7 +670,6 @@ export class Actions {
         label: 'Cause',
         spec: { message: 'Alert', field: 'cause' },
         type: 'select',
-        enumName: 'Cause',
         value: alert?.cause ?? '',
         options: enumOptions(ALERT_CAUSES, 'Cause'),
       },
@@ -676,7 +678,6 @@ export class Actions {
         label: 'Effect',
         spec: { message: 'Alert', field: 'effect' },
         type: 'select',
-        enumName: 'Effect',
         value: alert?.effect ?? '',
         options: enumOptions(ALERT_EFFECTS, 'Effect'),
       },
@@ -685,7 +686,6 @@ export class Actions {
         label: 'Severity',
         spec: { message: 'Alert', field: 'severity_level' },
         type: 'select',
-        enumName: 'SeverityLevel',
         value: alert?.severity_level ?? '',
         options: enumOptions(ALERT_SEVERITIES, 'SeverityLevel'),
       },

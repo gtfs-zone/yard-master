@@ -18,9 +18,9 @@
  * column, and this one is built around an `RTFieldSpec`.
  */
 
-import type { RTEnumSpec, RTFieldSpec, RTPresence } from '../gtfs-rt-spec/types';
-import { rtEnum, rtField } from '../gtfs-rt-spec/index';
-import { renderSpecDescription, renderSpecDescriptionPlain } from '../utils/spec-markup';
+import type { RTFieldSpec, RTPresence } from '../gtfs-rt-spec/types';
+import { rtField } from '../gtfs-rt-spec/index';
+import { renderSpecDescription } from '../utils/spec-markup';
 import { escHtml } from './render-utils';
 
 /** Which message field a form field is. Resolved against `src/gtfs-rt-spec/`. */
@@ -112,18 +112,4 @@ export function specLabelContent(label: string, ref?: SpecRef): string {
 export function tooltipLabelContent(label: string, tooltip: string): string {
   return `<span class="field-tooltip-trigger cursor-help" tabindex="0"
     data-tooltip-content="${escHtml(tooltip)}">${escHtml(label)}</span>`;
-}
-
-/**
- * One enum value's description, flattened to a line.
- *
- * `Cause`, `Effect` and `SeverityLevel` are listed in the reference as bare
- * values with no Comment column, so this is empty for every value the alert
- * form offers. It is not dead: the enums that do carry comments render through
- * the same path, and a reference refresh can give any of them one.
- */
-export function enumValueDescription(enumName: string, value: string): string {
-  const spec: RTEnumSpec | undefined = rtEnum(enumName);
-  const entry = spec?.values.find((v) => v.value === value);
-  return entry?.description ? renderSpecDescriptionPlain(entry.description) : '';
 }

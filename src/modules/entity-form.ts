@@ -34,7 +34,7 @@ import { showModal } from './modal-utils';
 import { escHtml } from './render-utils';
 import { WEEKDAY_DISPLAY, WEEKDAY_KEYS, WEEKDAY_LABELS } from './service-date';
 import type { SpecRef } from './spec-field';
-import { enumValueDescription, specLabelContent, tooltipLabelContent } from './spec-field';
+import { specLabelContent, tooltipLabelContent } from './spec-field';
 
 export type FieldType =
   | 'text'
@@ -98,11 +98,6 @@ export interface FormField {
    * and its presence, in a tooltip. See `spec-field.ts`.
    */
   spec?: SpecRef;
-  /**
-   * For `select`. Names the `RTEnumSpec` the options came from, so the row
-   * under the input can show what the chosen value means.
-   */
-  enumName?: string;
   /** For `file`. Passed straight to the input's `accept`. */
   accept?: string;
   /**
@@ -249,10 +244,6 @@ function renderInput(field: FormField): string {
   if (type === 'select') {
     const options = field.options ?? [];
     const hasEmpty = options.some((o) => o.value === '');
-    // The description row is empty for most enums: the reference lists Cause,
-    // Effect and SeverityLevel as bare values with no Comment column. It is
-    // `empty:hidden` rather than conditional so the ones that do carry
-    // comments need nothing else here.
     return `<select ${common} class="select select-bordered select-sm w-full">
       ${hasEmpty ? '' : '<option value="">—</option>'}
       ${options
@@ -263,13 +254,7 @@ function renderInput(field: FormField): string {
             )}</option>`
         )
         .join('')}
-    </select>
-    ${
-      field.enumName
-        ? `<span class="label-text-alt opacity-60 pt-1 empty:hidden"
-             data-enum-note="${escHtml(field.name)}"></span>`
-        : ''
-    }`;
+    </select>`;
   }
   if (type === 'combo') {
     // The popup is a sibling of the input inside the modal's own DOM, not a
@@ -686,21 +671,6 @@ export async function showEntityForm<T>(options: EntityFormOptions<T>): Promise<
         });
       }
 
-      /** The chosen enum value's meaning, under the select that offers it. */
-      const syncEnumNotes = (): void => {
-        for (const field of options.fields) {
-          if (!field.enumName) continue;
-          const note = root.querySelector<HTMLElement>(
-            `[data-enum-note="${CSS.escape(field.name)}"]`
-          );
-          const el = root.querySelector<HTMLSelectElement>(
-            `select[data-field="${CSS.escape(field.name)}"]`
-          );
-          if (!note || !el) continue;
-          note.textContent = el.value ? enumValueDescription(field.enumName, el.value) : '';
-        }
-      };
-
       const clearErrors = (): void => {
         banner.classList.add('hidden');
         banner.textContent = '';
@@ -738,7 +708,6 @@ export async function showEntityForm<T>(options: EntityFormOptions<T>): Promise<
         const dirty = isDirty();
         saveBtn.disabled = !dirty && !options.allowPristine;
         syncVisibility();
-        syncEnumNotes();
       };
 
       /**

@@ -1,5 +1,5 @@
 /* @vendored-from coloring-book:src/utils/tooltip-position.ts
-   @sha 6ee1372
+   @sha 3c3f412
    @status verbatim */
 /**
  * Portal-based positioning for field label tooltips.
