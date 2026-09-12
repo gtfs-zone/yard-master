@@ -1,6 +1,7 @@
 /**
  * Two passes over VENDORED.md. Every row names its own `Source repo` and is
- * resolved against that sibling checkout, which is all but one row test-track:
+ * resolved against that sibling checkout, which is all but a few rows
+ * test-track today:
  *
  * - drift: every `verbatim` entry must still match its source at the *recorded*
  *   SHA. A mismatch means someone edited the local copy.
@@ -8,10 +9,16 @@
  *   on the source path since the recorded SHA. Drift-clean says nothing about
  *   freshness, so without this a file ten commits behind reports `ok`.
  *
- * `adopted` rows are exempt from both. They are yard-master's files now, so
- * there is nothing to re-sync and upstream commits on them are not news. They
- * are counted in the summary so the tier stays visible rather than silently
- * unchecked.
+ * Two statuses are exempt from both passes, and both are counted in the summary
+ * so the tier stays visible rather than silently unchecked:
+ *
+ * - `adopted`: was vendored, is yard-master's file now. The banner records
+ *   where it came from, but feature work has taken it over far enough that
+ *   re-syncing has stopped being meaningful, so upstream commits on it are
+ *   not news.
+ * - `origin`: never vendored. yard-master is the canonical source another repo
+ *   vendors *from*, so the row carries no source repo, no source path and no
+ *   SHA. It is listed only so the table is the whole map of what is shared.
  *
  * Staleness is a warning by default, since a routine build should not break
  * the day someone commits upstream. `--strict` makes it fatal.
@@ -51,6 +58,12 @@ function parseVendoredTable(markdown: string): Entry[] {
     if (cells.length < 5) continue;
     const [localPath, sourceRepo, sourcePath, sha, status] = cells;
     if (localPath === 'Local path' || /^-+$/.test(localPath)) continue;
+    // An `origin` row has nothing upstream, so its source cells are dashes.
+    // Every other row is dropped unless it resolves to a real commit.
+    if (status === 'origin') {
+      entries.push({ localPath, sourceRepo: '', sourcePath: '', sha: '', status });
+      continue;
+    }
     if (!sourceRepo || !sourcePath || !/^[0-9a-f]{7,40}$/.test(sha)) continue;
     entries.push({ localPath, sourceRepo, sourcePath, sha, status });
   }
@@ -101,16 +114,23 @@ let checked = 0;
 let stale = 0;
 let skipped = 0;
 let adopted = 0;
+let origin = 0;
 
 // One line per absent sibling rather than one per row it would have covered.
 const reportedMissing = new Set<string>();
 
 for (const entry of entries) {
-  // Adopted before the sibling lookup: an adopted row needs no checkout, so it
-  // must not count towards `skipped` and trip the all-skipped early exit.
+  // Both of these come before the sibling lookup: neither needs a checkout, so
+  // neither may count towards `skipped` and trip the all-skipped early exit.
   if (entry.status === 'adopted') {
     adopted++;
     console.log(`adopted  ${entry.localPath}`);
+    continue;
+  }
+
+  if (entry.status === 'origin') {
+    origin++;
+    console.log(`origin   ${entry.localPath}`);
     continue;
   }
 
@@ -174,7 +194,9 @@ if (entries.length === 0) {
   process.exit(1);
 }
 
-if (skipped > 0 && skipped + adopted === entries.length) {
+const unchecked = adopted + origin;
+
+if (skipped > 0 && skipped + unchecked === entries.length) {
   console.log('vendor:check skipped - no sibling repo present');
   process.exit(0);
 }
@@ -184,13 +206,18 @@ if (drift > 0) {
   process.exit(1);
 }
 
+const notChecked = [
+  adopted > 0 ? `${adopted} adopted` : null,
+  origin > 0 ? `${origin} origin` : null,
+].filter(Boolean);
+
 console.log(
   `\n${checked} verbatim entries match` +
-    (adopted > 0 ? `, ${adopted} adopted not checked.` : '.')
+    (notChecked.length > 0 ? `, ${notChecked.join(' and ')} not checked.` : '.')
 );
 
 if (stale > 0) {
-  const message = `${stale} of ${entries.length - adopted} checked entries are behind their source repo's HEAD.`;
+  const message = `${stale} of ${entries.length - unchecked} checked entries are behind their source repo's HEAD.`;
   if (strict) {
     console.error(message);
     process.exit(1);
