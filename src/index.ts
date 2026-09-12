@@ -21,7 +21,8 @@ import { PanelRenderer } from './modules/panel-renderer';
 import { Actions } from './modules/actions';
 import { addDays, startOfWeek, today } from './modules/service-date';
 import { initFieldTooltipPortal } from './utils/tooltip-position';
-import { showAboutModal } from './modules/about-modal';
+import { showHelpModal } from './modules/help-modal';
+import { setHelpRuntimeData } from './modules/help-pages';
 import { calendarBadgeCount, showCalendarModal } from './modules/calendar-modal';
 import { alertsBadgeCount, showAlertsModal } from './modules/alerts-modal';
 import { showShareModal } from './modules/share-modal';
@@ -31,9 +32,10 @@ import { personLabel } from './modules/managed-render';
 const version = document.getElementById('app-version');
 if (version) version.textContent = __APP_VERSION__;
 
+setHelpRuntimeData({ version: __APP_VERSION__ });
 document
   .getElementById('about-btn')
-  ?.addEventListener('click', () => void showAboutModal(__APP_VERSION__));
+  ?.addEventListener('click', () => void showHelpModal('about'));
 
 const appContainer = document.querySelector<HTMLElement>('.app-container')!;
 restorePanelWidth(appContainer);
