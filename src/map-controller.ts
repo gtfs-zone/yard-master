@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/map-controller.ts
-   @sha 459c4e7
+   @sha bac60b6
    @status modified
    @changes
    - The `vehicle` PageState variant became `tracker`, keyed by `Tracker.id`. The
@@ -279,9 +279,9 @@ export class MapController {
       for (const fn of queued) fn();
     });
 
-    // setStyle drops every source and layer we own, so each basemap or
-    // projection change has to re-add them. This is the single highest-risk
-    // path in the map: without it, switching basemaps blanks all GTFS data.
+    // setStyle drops every source and layer we own, so each basemap change
+    // has to re-add them. This is the single highest-risk path in the map:
+    // without it, switching basemaps blanks all GTFS data.
     this.map.on('basemap:changed', () => {
       this.layers.rebuild();
       // setStyle dropped the trip source along with LayerManager's, so it has
