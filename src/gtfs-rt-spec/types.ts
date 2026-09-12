@@ -48,7 +48,7 @@ export interface RTEnumSpec {
   referenceOccurrence?: number;
 }
 
-/** Curated: the static GTFS column a field names, for the phase 8 id pickers. */
+/** Curated: the scheduled GTFS column a field names, for the phase 8 id pickers. */
 export interface RTGtfsFieldRef {
   file: string;
   field: string;

@@ -1,8 +1,8 @@
 /* @vendored-from test-track:src/modules/theme-controller.ts
-   @sha 56f120a
+   @sha 59e26c4
    @status verbatim */
 /* @vendored-from coloring-book:src/modules/theme-controller.ts
-   @sha a4b5ee1
+   @sha cbe72e1
    @status verbatim */
 export class ThemeController {
   private listeners: ((theme: string) => void)[] = [];

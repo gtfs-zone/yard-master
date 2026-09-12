@@ -1,17 +1,17 @@
 /* @vendored-from test-track:src/modules/route-source.ts
-   @sha fa12a57
+   @sha 9abe974
    @status verbatim */
 /* @vendored-from coloring-book:src/modules/route-source.ts
-   @sha a4b5ee1
+   @sha dca23b3
    @status verbatim */
 /**
  * Storage-agnostic view of the data `route-sequence.ts` and `route-graph.ts`
- * need. Both modules originate in test-track, which reads from `GTFSStatic`;
+ * need. Both modules originate in test-track, which reads from `GTFSScheduled`;
  * coloring-book reads from `GTFSParser`'s virtual tables. Narrowing to this
  * interface is what lets the same engine run over either.
  */
 
-import type { StopTimeRef } from '../types/gtfs-flex.js';
+import type { StopTimeRef } from '../types/gtfs-flex';
 
 export interface RouteSourceTrip {
   trip_id: string;

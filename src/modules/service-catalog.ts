@@ -16,7 +16,7 @@
  * nothing downstream sees the zip's form.
  */
 
-import type { Calendar, GTFSStatic, Trip } from '../gtfs-static';
+import type { Calendar, GTFSScheduled, Trip } from '../gtfs-scheduled';
 import type { FeedSession } from './feed-session';
 import type { ServiceDate } from './service-date';
 import { ruleWeekdayIndex, WEEKDAY_DISPLAY, WEEKDAY_LABELS } from './service-date';
@@ -59,7 +59,7 @@ export function weekdaysLabel(days: readonly boolean[]): string {
  * for the callers that only need to know whether a service exists, or how many
  * there are.
  */
-export function serviceIds(feed: GTFSStatic): Set<string> {
+export function serviceIds(feed: GTFSScheduled): Set<string> {
   const ids = new Set<string>();
   for (const row of feed.calendar) ids.add(row.service_id);
   for (const row of feed.calendarDates) ids.add(row.service_id);
@@ -77,7 +77,7 @@ export function serviceIds(feed: GTFSStatic): Set<string> {
  * realtime poll and a feed has tens of thousands of trips; a caller that needs
  * the services behind a set of trips passes them to `servicesForTrips`.
  */
-export function serviceCatalog(feed: GTFSStatic): Map<string, ServiceSummary> {
+export function serviceCatalog(feed: GTFSScheduled): Map<string, ServiceSummary> {
   const services = new Map<string, ServiceSummary>();
 
   const ensure = (id: string): ServiceSummary => {
@@ -147,7 +147,7 @@ export function sortByCascade(services: ServiceSummary[]): ServiceSummary[] {
 }
 
 /** The services the given trips run on, deduplicated and in cascade order. */
-export function servicesForTrips(feed: GTFSStatic, trips: Iterable<Trip>): ServiceSummary[] {
+export function servicesForTrips(feed: GTFSScheduled, trips: Iterable<Trip>): ServiceSummary[] {
   const catalog = serviceCatalog(feed);
   const ids = new Set<string>();
   for (const trip of trips) ids.add(trip.service_id);

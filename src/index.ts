@@ -6,7 +6,7 @@
  * session's events. Everything here does is tell it which page to show.
  */
 import { MapController } from './map-controller';
-import type { GTFSStatic } from './gtfs-static';
+import type { GTFSScheduled } from './gtfs-scheduled';
 import type { PageState } from './types/page-state';
 import { notify } from './modules/notification-system';
 import { PanelResizer, restorePanelWidth } from './modules/panel-resizer';
@@ -72,10 +72,10 @@ bottomSheet.onSnapChange((covered) => mapCtrl.setBottomPadding(covered));
 // ─── Feed session ─────────────────────────────────────────────────────────────
 const session = new FeedSession();
 
-session.addEventListener('staticloaded', (e) => {
-  // `loadStaticFeed` replaces the previous feed's data in place; an explicit
+session.addEventListener('scheduleloaded', (e) => {
+  // `loadScheduledFeed` replaces the previous feed's data in place; an explicit
   // clear would only cost an extra empty repaint.
-  mapCtrl.loadStaticFeed((e as CustomEvent<GTFSStatic>).detail);
+  mapCtrl.loadScheduledFeed((e as CustomEvent<GTFSScheduled>).detail);
   // The vehicles are pushed back rather than cleared: a fleet can arrive long
   // before a slow zip does, and clearing here would blank a map that was
   // already right. Repainting also re-colors every dot, since which route a
@@ -106,7 +106,7 @@ const appState = new AppState(session, {
   onFeedChange: (feed) => {
     feedSwitcherLabel.textContent = feed ? feed.feed_name : 'Select feed';
     if (!feed) {
-      mapCtrl.clearStaticFeed();
+      mapCtrl.clearScheduledFeed();
       mapCtrl.clearVehicles();
     }
     // Selecting a feed is what gives the sheet something to show; dropping one

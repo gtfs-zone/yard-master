@@ -1,8 +1,8 @@
 /* @vendored-from test-track:src/modules/route-graph.ts
-   @sha 7347ce9
+   @sha 9abe974
    @status verbatim */
 /* @vendored-from coloring-book:src/modules/route-graph.ts
-   @sha 04f48c3
+   @sha dca23b3
    @status verbatim */
 /**
  * The branch structure of a route strip: which lane each stop sits in, and
@@ -26,7 +26,7 @@
  * single column, exactly as it looks today.
  */
 
-import type { RouteSequence } from './route-sequence.js';
+import type { RouteSequence } from './route-sequence';
 
 /**
  * More lanes than this and the gutter costs more width than the branching is

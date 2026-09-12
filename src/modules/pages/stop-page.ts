@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/pages/stop-page.ts
-   @sha fa12a57
+   @sha bf5cc8c
    @status modified
    @changes
    - The `vehicle` PageState variant became `tracker`, keyed by `Tracker.id`.
@@ -26,15 +26,15 @@
  */
 
 import type { AlertRecord } from '../../gtfs-rt';
-import type { Stop, Trip } from '../../gtfs-static';
+import type { Stop, Trip } from '../../gtfs-scheduled';
 import type { PageState } from '../../types/page-state';
 import { alertsForStop } from '../alerts';
+import { stopTypeLabel } from '../breadcrumb-trail';
 import { zoneLabel } from '../feed-time';
 import type { RtIndex } from '../rt-index';
 import type { RenderContext } from '../render-utils';
 import { cappedNote, entityRow, entityRowList, rowSection } from '../entity-row';
 import {
-  LOCATION_TYPE_LABELS,
   VEHICLE_STATUS_LABELS,
   entityLink,
   escHtml,
@@ -42,6 +42,7 @@ import {
   formatEpochTime,
   formatScheduledTime,
   missing,
+  pageHeader,
   prop,
   propList,
   renderRawFields,
@@ -72,7 +73,7 @@ function fromChild(ctx: RenderContext, stopId: string): string {
 
 /** The same name as plain text, for a row's sublabel. */
 function childName(ctx: RenderContext, stopId: string): string {
-  const stop = ctx.session.staticFeed!.stops.get(stopId);
+  const stop = ctx.session.scheduledFeed!.stops.get(stopId);
   return stop ? platformLabel(stop) : stopId;
 }
 
@@ -85,7 +86,7 @@ function aggregationNote(count: number): string {
 // ─── Routes ─────────────────────────────────────────────────────────────────
 
 function renderRoutes(ctx: RenderContext, serviceIds: string[], isStation: boolean): string {
-  const feed = ctx.session.staticFeed!;
+  const feed = ctx.session.scheduledFeed!;
   // route_id -> the platforms that serve it
   const routePlatforms = new Map<string, Set<string>>();
   for (const id of serviceIds) {
@@ -138,7 +139,7 @@ function renderDepartures(
   serviceIds: string[],
   isStation: boolean,
 ): string {
-  const feed = ctx.session.staticFeed!;
+  const feed = ctx.session.scheduledFeed!;
   const upcoming = isStation
     ? rt.upcomingAtStops(serviceIds, MAX_DEPARTURES)
     : rt.upcomingAtStop(serviceIds[0], MAX_DEPARTURES);
@@ -201,7 +202,7 @@ function renderTrackersHere(
       rows.push(
         entityRow(ctx, {
           state: { type: 'tracker', tracker_id: v.trackerId },
-          label: vehicleDisplayName(ctx.session.staticFeed, v),
+          label: vehicleDisplayName(ctx.session.scheduledFeed, v),
           sublabel: isStation ? `@ ${childName(ctx, id)}` : undefined,
           badge: VEHICLE_STATUS_LABELS[v.currentStatus ?? -1] ?? '',
         }),
@@ -243,7 +244,7 @@ function renderStationAlerts(ctx: RenderContext, ids: string[]): string {
  * cannot bury the platforms (South Station has 131 of them over 23 platforms).
  */
 function renderPlatforms(ctx: RenderContext, stopId: string): string {
-  const feed = ctx.session.staticFeed!;
+  const feed = ctx.session.scheduledFeed!;
   const children = feed.descendants(stopId).map(id => feed.stops.get(id)!).filter(Boolean);
   if (children.length === 0) {
     return section('Platforms', '<p class="text-xs opacity-60">No platforms in this feed.</p>');
@@ -282,7 +283,7 @@ function renderPlatforms(ctx: RenderContext, stopId: string): string {
              entityRow(ctx, {
                state: { type: 'stop', stop_id: s.id },
                label: s.name || s.id,
-               badge: LOCATION_TYPE_LABELS[s.location_type] ?? `type ${s.location_type}`,
+               badge: stopTypeLabel(s.location_type),
              }),
            ),
            '',
@@ -295,7 +296,7 @@ function renderPlatforms(ctx: RenderContext, stopId: string): string {
 
 /** For a platform: the parent's other platforms. Stations use renderPlatforms. */
 function renderSiblingPlatforms(ctx: RenderContext, stop: Stop): string {
-  const feed = ctx.session.staticFeed!;
+  const feed = ctx.session.scheduledFeed!;
   if (!stop.parent_station) return '';
   const siblings = (feed.childrenByParent.get(stop.parent_station) ?? [])
     .filter(id => id !== stop.id)
@@ -329,7 +330,7 @@ function renderSiblingPlatforms(ctx: RenderContext, stop: Stop): string {
  * row is a fact rather than a link.
  */
 function renderServices(ctx: RenderContext, stopIds: string[]): string {
-  const feed = ctx.session.staticFeed!;
+  const feed = ctx.session.scheduledFeed!;
   const trips: Trip[] = [];
   for (const stopId of stopIds) {
     for (const tripId of feed.stopTrips.get(stopId) ?? []) {
@@ -364,7 +365,7 @@ export function renderStopPage(
   rt: RtIndex,
   state: Extract<PageState, { type: 'stop' }>,
 ): string {
-  const feed = ctx.session.staticFeed;
+  const feed = ctx.session.scheduledFeed;
   const stop = feed?.stops.get(state.stop_id);
   if (!feed || !stop) return missing(`Stop ${state.stop_id}`);
 
@@ -381,11 +382,7 @@ export function renderStopPage(
   return `
     <div class="space-y-4">
       <div class="space-y-1">
-        <p class="text-xs uppercase tracking-wide opacity-50">${escHtml(
-          LOCATION_TYPE_LABELS[stop.location_type] ?? `location_type ${stop.location_type}`,
-        )}</p>
-        <h2 class="text-lg font-semibold leading-tight">${escHtml(stop.name || stop.id)}</h2>
-        <p class="text-xs opacity-60 font-mono">${escHtml(stop.id)}</p>
+        ${pageHeader(stop.name || stop.id, stop.id)}
         ${
           parent
             ? `<p class="text-xs">Part of ${entityLink(

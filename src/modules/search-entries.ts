@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/search-entries.ts
-   @sha 56f120a
+   @sha f54ae79
    @status modified
    @changes
    - The vehicle loop became a tracker loop over the API's tracker list rather
@@ -43,7 +43,7 @@ function haystack(...parts: (string | undefined)[]): string {
 }
 
 export function buildSearchEntries(session: FeedSession): SearchEntry<PageState>[] {
-  const feed = session.staticFeed;
+  const feed = session.scheduledFeed;
   const entries: SearchEntry<PageState>[] = [];
 
   for (const stop of feed?.stops.values() ?? []) {

@@ -1,8 +1,8 @@
 /* @vendored-from test-track:src/modules/feed-url-resolve.ts
-   @sha 56f120a
+   @sha 4350635
    @status verbatim */
 /* @vendored-from coloring-book:src/modules/feed-url-resolve.ts
-   @sha 27587a0
+   @sha 2d40667
    @status verbatim */
 /**
  * Turning what someone typed into a URL that can actually be fetched.

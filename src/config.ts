@@ -92,7 +92,7 @@ export const CONFIG = {
   WEEK_START: 0,
 
   // Neutral fill for a vehicle whose trip/route cannot be resolved against the
-  // static feed.
+  // scheduled feed.
   VEHICLE_UNMATCHED_COLOR: '#94a3b8',
 
   // Weeks listed on the assignments page, and so the window its expansion is

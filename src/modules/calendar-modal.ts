@@ -1,5 +1,5 @@
 /* @vendored-from coloring-book:src/modules/calendar-modal.ts
-   @sha 6ef855e
+   @sha dca23b3
    @status modified
    @changes
    - The chips are this repo's: a service chip and an assignment chip, coloured
@@ -131,7 +131,7 @@ function serviceChip(service: ServiceSummary): string {
  * what the map draws, and the title carries the trip and the window.
  */
 function assignmentChip(ctx: RenderContext, assignment: Assignment): string {
-  const feed = ctx.session.staticFeed;
+  const feed = ctx.session.scheduledFeed;
   const trip = feed?.trips.get(assignment.trip_id);
   const route = trip ? feed?.routes.get(trip.route_id) : undefined;
   const style = route
@@ -168,7 +168,7 @@ function renderDayCell(
 
   return `<div class="min-h-16 p-1 rounded bg-base-200/20 border overflow-hidden ${
     outside ? 'border-base-300/30 opacity-40' : 'border-base-300/30'
-  }">
+  }${isToday ? ' ring-1 ring-primary bg-primary/5' : ''}">
     <span class="block text-[11px] leading-4 tabular-nums font-medium opacity-70
       ${isToday ? 'text-primary font-bold' : ''}" title="${escHtml(dayLabel(date))}"
       >${dayOfMonth(date)}</span>
@@ -179,7 +179,7 @@ function renderDayCell(
 }
 
 function renderGrid(ctx: RenderContext, month: ServiceDate): string {
-  const feed = ctx.session.staticFeed;
+  const feed = ctx.session.scheduledFeed;
   const services = feed ? sortByCascade([...serviceCatalog(feed).values()]) : [];
   const days = monthGrid(month);
 
@@ -212,7 +212,7 @@ function renderGrid(ctx: RenderContext, month: ServiceDate): string {
  * infinite; a span has to name a last date.
  */
 function ruleRow(ctx: RenderContext, rule: TrackerRule, openEnd: ServiceDate): TimelineRow {
-  const feed = ctx.session.staticFeed;
+  const feed = ctx.session.scheduledFeed;
   const trip = feed?.trips.get(rule.trip_id);
   const route = trip ? feed?.routes.get(trip.route_id) : undefined;
   const nickname = ctx.session.trackers.get(rule.tracker_id)?.nickname ?? rule.tracker_id;
@@ -271,7 +271,7 @@ function renderRuleChart(ctx: RenderContext, month: ServiceDate): string {
 }
 
 function unassignedLine(ctx: RenderContext): string {
-  const feed = ctx.session.staticFeed;
+  const feed = ctx.session.scheduledFeed;
   if (!feed) return '';
   const counts = assignmentCounts(ctx.session, feed.trips.keys());
   if (!counts) return '';
@@ -369,7 +369,7 @@ export async function showCalendarModal(hooks: CalendarModalHooks): Promise<void
   };
 
   const onSessionChange = (): void => draw();
-  for (const event of ['change', 'assignments', 'staticloaded'] as const) {
+  for (const event of ['change', 'assignments', 'scheduleloaded'] as const) {
     session.addEventListener(event, onSessionChange);
   }
 
@@ -421,7 +421,7 @@ export async function showCalendarModal(hooks: CalendarModalHooks): Promise<void
     },
   });
 
-  for (const event of ['change', 'assignments', 'staticloaded'] as const) {
+  for (const event of ['change', 'assignments', 'scheduleloaded'] as const) {
     session.removeEventListener(event, onSessionChange);
   }
 }

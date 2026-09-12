@@ -1,8 +1,8 @@
 /* @vendored-from test-track:src/modules/search-controller.ts
-   @sha 56f120a
+   @sha e1dbca4
    @status verbatim */
 /* @vendored-from coloring-book:src/modules/search-controller.ts
-   @sha a4b5ee1
+   @sha b19718e
    @status verbatim */
 /**
  * The map search box.

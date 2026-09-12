@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/page-state-manager.ts
-   @sha 56f120a
+   @sha e1dbca4
    @status modified
    @changes
    - `pageStateToURL` / `urlToPageState` rewritten for yard-master's six

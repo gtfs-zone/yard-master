@@ -14,7 +14,7 @@
  * schedule either.
  */
 
-import type { GTFSStatic, Trip } from '../gtfs-static';
+import type { GTFSScheduled, Trip } from '../gtfs-scheduled';
 import type { FieldOption } from './entity-form';
 import type { FeedSession } from './feed-session';
 import { formatScheduleTime } from './feed-time';
@@ -25,12 +25,12 @@ export function tripName(trip: Trip): string {
 }
 
 /** The trip's first departure as a clock reading, or null if it has no times. */
-function firstDeparture(feed: GTFSStatic, trip: Trip): string | null {
+function firstDeparture(feed: GTFSScheduled, trip: Trip): string | null {
   const first = feed.stopTimesByTrip.get(trip.trip_id)?.[0];
   return first?.departure_time || first?.arrival_time || null;
 }
 
-function routeLabel(feed: GTFSStatic, trip: Trip): string {
+function routeLabel(feed: GTFSScheduled, trip: Trip): string {
   const route = feed.routes.get(trip.route_id);
   return route ? route.short_name || route.long_name || route.id : trip.route_id;
 }
@@ -41,7 +41,7 @@ function routeLabel(feed: GTFSStatic, trip: Trip): string {
  * The departure comes first because it is what tells two runs of the same
  * route apart, which is the whole question being asked of this list.
  */
-export function tripLabel(feed: GTFSStatic, trip: Trip): string {
+export function tripLabel(feed: GTFSScheduled, trip: Trip): string {
   const departure = firstDeparture(feed, trip);
   return [departure ? formatScheduleTime(departure) : null, routeLabel(feed, trip), tripName(trip)]
     .filter(Boolean)
@@ -54,7 +54,7 @@ export function tripLabel(feed: GTFSStatic, trip: Trip): string {
  * `detail` is the id, so the combo's own filter matches a typed id as well as
  * a typed name and nothing has to search twice.
  */
-export function tripOptions(feed: GTFSStatic | null, trips?: Iterable<Trip>): FieldOption[] {
+export function tripOptions(feed: GTFSScheduled | null, trips?: Iterable<Trip>): FieldOption[] {
   if (!feed) return [];
   const list = [...(trips ?? feed.trips.values())];
   list.sort((a, b) => {
@@ -78,7 +78,7 @@ export function tripOptions(feed: GTFSStatic | null, trips?: Iterable<Trip>): Fi
  * run of something already being tracked.
  */
 export function assignableTrips(session: FeedSession, routeId: string | null): Trip[] {
-  const feed = session.staticFeed;
+  const feed = session.scheduledFeed;
   if (!feed) return [];
   if (routeId) return [...feed.trips.values()].filter((trip) => trip.route_id === routeId);
 

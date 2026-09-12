@@ -1,8 +1,8 @@
 /* @vendored-from test-track:src/utils/theme-color.ts
-   @sha 56f120a
+   @sha 868909e
    @status verbatim */
 /* @vendored-from coloring-book:src/utils/theme-color.ts
-   @sha a4b5ee1
+   @sha cbe72e1
    @status verbatim */
 /**
  * Resolve a DaisyUI theme token to an sRGB hex string MapLibre can parse.

@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/app-state.ts
-   @sha fa12a57
+   @sha f9d3e2c
    @status modified
    @changes
    - Selection is a feed row from the API, not a `FeedSelection` of URLs, so
@@ -8,9 +8,13 @@
      `GET /feeds`, falling back to the admin-only server-wide list.
    - `boot()` fetches `/api/me` first, and falls back to the last feed in
      localStorage when the hash names none.
-   - `selectFeed()` added: it does not await the static download, because the
+   - `selectFeed()` added: it does not await the schedule download, because the
      managed half of the app is usable without it and an unreachable
      `static_feed_url` must not make the tree unusable.
+   - `f9d3e2c`'s `bootSeed` is not taken: it carries a half-filled
+     `FeedSelection` out of `boot()` so the load modal can be seeded with it.
+     There is no such modal and no `FeedSelection` here — a feed is one of your
+     own rows, named in the hash by `feed_name`.
    - A pending focus is held rather than resolved once. test-track can decide
      immediately because it awaits the load; here a `route`/`stop`/`trip` link
      cannot resolve until the zip parses, so `applyPendingFocus` runs at each
@@ -41,7 +45,7 @@
  * like the thing it points at. Resolving a name to a row costs one list
  * request at boot, which the app makes anyway to populate the switcher.
  *
- * Selection and the static download are deliberately separate. A feed is
+ * Selection and the schedule download are deliberately separate. A feed is
  * selected the moment its API row is in hand, and its trackers, rules and
  * managers are reachable from that instant; the zip lands whenever it lands, or
  * never, if `static_feed_url` is unreachable. Nothing in the managed half is
@@ -149,7 +153,7 @@ export class AppState {
     // The parsed feed is the last thing a linked route/stop/trip was waiting
     // for, and the first thing that can invalidate a focus carried over from
     // the previous feed.
-    session.addEventListener('staticloaded', () => this.onStaticLoaded());
+    session.addEventListener('scheduleloaded', () => this.onScheduleLoaded());
   }
 
   get focus(): PageState {
@@ -246,7 +250,7 @@ export class AppState {
 
   /**
    * Adopt a feed: write it into the hash, fetch its managed objects, and start
-   * the static download without waiting for it.
+   * the schedule download without waiting for it.
    *
    * `restore` is the focus a link asked for. It is applied as soon as it
    * resolves, which for a managed page is immediately and for a GTFS page is
@@ -274,28 +278,28 @@ export class AppState {
     this.applyPendingFocus({ reportMiss: false });
 
     // Not awaited: the tree above is already usable, and a feed whose zip is
-    // slow or unreachable must not hold it hostage. `loadStatic` reports its
-    // own failure through `session.staticError` rather than throwing.
-    this.reloadStatic();
+    // slow or unreachable must not hold it hostage. `loadScheduled` reports its
+    // own failure through `session.scheduleError` rather than throwing.
+    this.reloadScheduled();
   }
 
   /**
    * Re-download the selected feed's zip into this browser.
    *
    * Where the zip *is* depends on the feed's source, which is why nothing
-   * calls `loadStatic` with a URL of its own any more. A hosted feed with no
+   * calls `loadScheduled` with a URL of its own any more. A hosted feed with no
    * upload yet has no zip anywhere, and saying so is better than a progress
    * bar that never moves.
    */
-  reloadStatic(): void {
+  reloadScheduled(): void {
     const feed = this.session.feed;
     if (!feed) return;
     const url = scheduleFetchUrl(feed);
     if (!url) {
-      this.session.noStatic('This feed has no schedule yet. Upload a zip to give it one.');
+      this.session.noScheduled('This feed has no schedule yet. Upload a zip to give it one.');
       return;
     }
-    void this.session.loadStatic(url, feed.feed_name);
+    void this.session.loadScheduled(url, feed.feed_name);
   }
 
   /**
@@ -657,7 +661,7 @@ export class AppState {
     }
   }
 
-  private onStaticLoaded(): void {
+  private onScheduleLoaded(): void {
     // A focus carried over from a previous feed almost never names an object in
     // this one, and rendering an object page for something the feed does not
     // describe is worse than going home.

@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/breadcrumbs.ts
-   @sha 5570228
+   @sha df7813b
    @status modified
    @changes
    - The variant set is yard-master's. `vehicle` became `tracker` and resolves
@@ -32,32 +32,41 @@ import type { BreadcrumbItem } from './breadcrumb-trail';
 import { stopTypeLabel } from './breadcrumb-trail';
 import type { FeedSession } from './feed-session';
 
+/**
+ * Cap a breadcrumb label's length. Some GTFS-RT producers put full sentences
+ * in an alert's `header_text` rather than a short title, which wraps a crumb
+ * across several lines and reads as body copy instead of a breadcrumb.
+ */
+function truncate(text: string, max = 40): string {
+  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
+}
+
 function home(session: FeedSession): BreadcrumbItem {
   return {
     typeLabel: 'Feed',
-    label: session.feed?.feed_name ?? 'Feed',
+    label: truncate(session.feed?.feed_name ?? 'Feed'),
     pageState: { type: 'home' },
   };
 }
 
 /** Human label for a route: short name, long name, or the bare id. */
 export function routeLabel(session: FeedSession, routeId: string): string {
-  const route = session.staticFeed?.routes.get(routeId);
+  const route = session.scheduledFeed?.routes.get(routeId);
   if (!route) return routeId;
   return route.short_name || route.long_name || route.id;
 }
 
 export function stopLabel(session: FeedSession, stopId: string): string {
-  return session.staticFeed?.stops.get(stopId)?.name || stopId;
+  return session.scheduledFeed?.stops.get(stopId)?.name || stopId;
 }
 
 /** The crumb eyebrow for a stop: its `location_type`, or a plain stop. */
 function stopEyebrow(session: FeedSession, stopId: string): string {
-  return stopTypeLabel(session.staticFeed?.stops.get(stopId)?.location_type);
+  return stopTypeLabel(session.scheduledFeed?.stops.get(stopId)?.location_type);
 }
 
 export function tripLabel(session: FeedSession, tripId: string): string {
-  const trip = session.staticFeed?.trips.get(tripId);
+  const trip = session.scheduledFeed?.trips.get(tripId);
   return trip?.headsign || tripId;
 }
 
@@ -81,7 +90,7 @@ export function alertLabel(session: FeedSession, alertId: string): string {
  * feed with a cycle rather than hanging on one.
  */
 function stopAncestors(session: FeedSession, stopId: string): string[] {
-  const feed = session.staticFeed;
+  const feed = session.scheduledFeed;
   if (!feed) return [];
 
   const chain: string[] = [];
@@ -98,7 +107,7 @@ function stopAncestors(session: FeedSession, stopId: string): string[] {
 /** The route a trip belongs to, from the state or from the parsed feed. */
 function tripRouteId(session: FeedSession, state: PageState): string | null {
   if (state.type !== 'trip') return null;
-  return state.route_id ?? session.staticFeed?.trips.get(state.trip_id)?.route_id ?? null;
+  return state.route_id ?? session.scheduledFeed?.trips.get(state.trip_id)?.route_id ?? null;
 }
 
 type AlertParent =
@@ -127,7 +136,7 @@ function alertParent(session: FeedSession, alertId: string): AlertParent | null 
 function routeCrumb(session: FeedSession, routeId: string): BreadcrumbItem {
   return {
     typeLabel: 'Route',
-    label: routeLabel(session, routeId),
+    label: truncate(routeLabel(session, routeId)),
     pageState: { type: 'route', route_id: routeId },
   };
 }
@@ -142,7 +151,7 @@ export function buildBreadcrumbs(session: FeedSession, state: PageState): Breadc
         home(session),
         {
           typeLabel: 'Tracker',
-          label: trackerLabel(session, state.tracker_id),
+          label: truncate(trackerLabel(session, state.tracker_id)),
           pageState: state,
         },
       ];
@@ -155,12 +164,12 @@ export function buildBreadcrumbs(session: FeedSession, state: PageState): Breadc
         home(session),
         ...stopAncestors(session, state.stop_id).map((id) => ({
           typeLabel: stopEyebrow(session, id),
-          label: stopLabel(session, id),
+          label: truncate(stopLabel(session, id)),
           pageState: { type: 'stop' as const, stop_id: id },
         })),
         {
           typeLabel: stopEyebrow(session, state.stop_id),
-          label: stopLabel(session, state.stop_id),
+          label: truncate(stopLabel(session, state.stop_id)),
           pageState: state,
         },
       ];
@@ -170,7 +179,11 @@ export function buildBreadcrumbs(session: FeedSession, state: PageState): Breadc
       return [
         home(session),
         ...(routeId ? [routeCrumb(session, routeId)] : []),
-        { typeLabel: 'Trip', label: tripLabel(session, state.trip_id), pageState: state },
+        {
+          typeLabel: 'Trip',
+          label: truncate(tripLabel(session, state.trip_id)),
+          pageState: state,
+        },
       ];
     }
 
@@ -183,17 +196,18 @@ export function buildBreadcrumbs(session: FeedSession, state: PageState): Breadc
               {
                 typeLabel:
                   parent.type === 'route' ? 'Route' : stopEyebrow(session, parent.stop_id),
-                label:
+                label: truncate(
                   parent.type === 'route'
                     ? routeLabel(session, parent.route_id)
                     : stopLabel(session, parent.stop_id),
+                ),
                 pageState: parent,
               },
             ]
           : []),
         {
           typeLabel: 'Service alert',
-          label: alertLabel(session, state.alert_id),
+          label: truncate(alertLabel(session, state.alert_id)),
           pageState: state,
         },
       ];
@@ -206,7 +220,7 @@ export function buildBreadcrumbs(session: FeedSession, state: PageState): Breadc
  *
  * The GTFS variants are checked against the parsed feed, so they answer false
  * until the zip has finished — which is why the caller re-checks on
- * `staticloaded` rather than dropping a pending focus on the first miss.
+ * `scheduleloaded` rather than dropping a pending focus on the first miss.
  *
  * A tracker or alert is checked against the API list once it has arrived, and
  * accepted while it is empty: an empty map is "not fetched yet" as often as it
@@ -218,11 +232,11 @@ export function validateState(session: FeedSession, state: PageState): boolean {
     case 'home':
       return true;
     case 'route':
-      return session.staticFeed?.routes.has(state.route_id) ?? false;
+      return session.scheduledFeed?.routes.has(state.route_id) ?? false;
     case 'stop':
-      return session.staticFeed?.stops.has(state.stop_id) ?? false;
+      return session.scheduledFeed?.stops.has(state.stop_id) ?? false;
     case 'trip':
-      return session.staticFeed?.trips.has(state.trip_id) ?? false;
+      return session.scheduledFeed?.trips.has(state.trip_id) ?? false;
     case 'tracker':
       return session.trackers.size === 0 || session.trackers.has(state.tracker_id);
     case 'alert':

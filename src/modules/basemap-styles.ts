@@ -1,8 +1,8 @@
 /* @vendored-from test-track:src/modules/basemap-styles.ts
-   @sha 56f120a
+   @sha 59e26c4
    @status verbatim */
 /* @vendored-from coloring-book:src/modules/basemap-styles.ts
-   @sha f9c718c
+   @sha ec33c12
    @status verbatim */
 /**
  * Basemap style configurations for MapLibre GL

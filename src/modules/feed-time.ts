@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/feed-time.ts
-   @sha 56f120a
+   @sha f54ae79
    @status verbatim */
 /**
  * Timezone policy for everything the app prints as a *transit* time.
@@ -16,12 +16,12 @@
  * So: one display zone, taken from `agency.txt`, applied to both columns.
  *
  * The zone lives in module state rather than being threaded through every
- * formatter because exactly one static feed is loaded at a time — the session
- * owns a single `staticFeed` — and the alternative is an extra argument on
+ * formatter because exactly one scheduled feed is loaded at a time — the session
+ * owns a single `scheduledFeed` — and the alternative is an extra argument on
  * every call site of every time formatter on every page.
  */
 
-import type { GTFSStatic } from '../gtfs-static';
+import type { GTFSScheduled } from '../gtfs-scheduled';
 
 /** The IANA zone of the loaded feed, or null to mean "use the browser's". */
 let displayZone: string | null = null;
@@ -45,7 +45,7 @@ function isUsableZone(tz: string): boolean {
  * diet and near-always share one zone; the first agency that names a valid one
  * wins, which beats rendering a mix.
  */
-export function adoptFeedTimezone(feed: GTFSStatic | null): void {
+export function adoptFeedTimezone(feed: GTFSScheduled | null): void {
   const tz = feed?.agencies.map(a => a.timezone.trim()).find(t => t && isUsableZone(t));
   displayZone = tz ?? null;
 }
@@ -106,7 +106,7 @@ export function parseGtfsClock(value: string | undefined): number | null {
 }
 
 /**
- * Format a static schedule time for display next to a realtime prediction.
+ * Format a scheduled time for display next to a realtime prediction.
  *
  * No zone conversion happens — the value is already in the feed's zone, which
  * is the zone we render predictions in — so this is pure clock arithmetic. A

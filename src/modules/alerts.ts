@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/alerts.ts
-   @sha 56f120a
+   @sha f54ae79
    @status verbatim */
 /**
  * Which alerts apply to what, and at which level.
@@ -78,7 +78,7 @@ export function feedWideAlerts(session: FeedSession): AlertRecord[] {
 
 /** Route-level alerts: the route named directly, or via one of its trips. */
 export function alertsForRoute(session: FeedSession, routeId: string): AlertRecord[] {
-  const feed = session.staticFeed;
+  const feed = session.scheduledFeed;
   return all(session).filter(r =>
     selectors(r).some(e => {
       if (e.stopId) return false;

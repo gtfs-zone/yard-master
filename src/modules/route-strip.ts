@@ -1,8 +1,8 @@
 /* @vendored-from test-track:src/modules/route-strip.ts
-   @sha fa12a57
+   @sha 9abe974
    @status verbatim */
 /* @vendored-from coloring-book:src/modules/route-strip.ts
-   @sha f7a054d
+   @sha dca23b3
    @status verbatim */
 /**
  * The rail geometry for a route strip: SVG path builders for a branching
@@ -22,8 +22,8 @@
  * dot a button, which each app wires to whatever "focus this stop" means there.
  */
 
-import type { RouteGraph } from './route-graph.js';
-import type { StopStats } from './route-sequence.js';
+import type { RouteGraph } from './route-graph';
+import type { StopStats } from './route-sequence';
 
 export const RAIL_WIDTH = 9;
 

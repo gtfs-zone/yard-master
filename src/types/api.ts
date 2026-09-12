@@ -327,7 +327,7 @@ export interface ShareResult {
 // published it and this file, with no server-side schema in between.
 
 /**
- * Where the feed's static load has got to. The first frame of every stream is
+ * Where the feed's schedule load has got to. The first frame of every stream is
  * one of these carrying the current state, so a client never polls to bootstrap.
  */
 export interface LoadEvent {

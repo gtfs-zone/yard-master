@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/pages/alert-page.ts
-   @sha fa12a57
+   @sha 5570228
    @status modified
    @changes
    - `renderAlertPage` renders the *managed* alert, the row this app owns, from
@@ -57,6 +57,7 @@ import {
   formatAbsolute,
   formatDuration,
   missing,
+  pageHeader,
   prop,
   propList,
   renderRawJson,
@@ -98,34 +99,64 @@ export function renderAlertList(
   );
 }
 
+/** The languages the feed supplied beyond the one we chose to display. */
+function renderOtherTranslations(label: string, ts: ServiceAlert['headerText']): string {
+  const others = translations(ts).filter(t => t.text !== preferredText(ts));
+  if (others.length === 0) return '';
+  return `
+    <details class="text-xs" data-detail="tr:${escHtml(label)}">
+      <summary class="cursor-pointer opacity-60">${others.length} other translation${
+        others.length === 1 ? '' : 's'
+      }</summary>
+      <dl class="mt-1 space-y-1">${others
+        .map(
+          t => `<div>
+            <dt class="opacity-50 font-mono">${escHtml(t.language || '(no language)')}</dt>
+            <dd class="whitespace-pre-wrap">${escHtml(t.text)}</dd>
+          </div>`,
+        )
+        .join('')}</dl>
+    </details>`;
+}
+
 /** Every language the feed supplied, not just the one we chose to display. */
 function renderTranslations(label: string, ts: ServiceAlert['headerText']): string {
   const list = translations(ts);
   if (list.length === 0) return '';
-  const preferred = preferredText(ts);
-  const others = list.filter(t => t.text !== preferred);
   return `
     <div class="space-y-1">
       <p class="text-xs opacity-60">${escHtml(label)}</p>
-      <p class="text-sm whitespace-pre-wrap">${escHtml(preferred)}</p>
-      ${
-        others.length
-          ? `<details class="text-xs" data-detail="tr:${escHtml(label)}">
-               <summary class="cursor-pointer opacity-60">${others.length} other translation${
-                 others.length === 1 ? '' : 's'
-               }</summary>
-               <dl class="mt-1 space-y-1">${others
-                 .map(
-                   t => `<div>
-                     <dt class="opacity-50 font-mono">${escHtml(t.language || '(no language)')}</dt>
-                     <dd class="whitespace-pre-wrap">${escHtml(t.text)}</dd>
-                   </div>`,
-                 )
-                 .join('')}</dl>
-             </details>`
-          : ''
-      }
+      <p class="text-sm whitespace-pre-wrap">${escHtml(preferredText(ts))}</p>
+      ${renderOtherTranslations(label, ts)}
     </div>`;
+}
+
+/**
+ * The one-line version of the active periods, for the page header. The full
+ * list is still rendered below in its own section.
+ */
+function activeWindow(alert: ServiceAlert): string {
+  const periods = activePeriods(alert);
+  if (periods.length === 0) return 'always active';
+
+  const now = Date.now() / 1000;
+  const current = periods.find(p => (p.start ?? -Infinity) <= now && (p.end ?? Infinity) >= now);
+  const upcoming = periods.find(p => p.start !== undefined && p.start > now);
+
+  let phrase: string;
+  if (current) {
+    phrase =
+      current.end === undefined
+        ? 'active, open-ended'
+        : `active until ${formatAbsolute(current.end)}`;
+  } else if (upcoming) {
+    phrase = `starts ${formatAbsolute(upcoming.start!)}`;
+  } else {
+    const last = periods[periods.length - 1];
+    phrase = last.end === undefined ? 'not active' : `ended ${formatAbsolute(last.end)}`;
+  }
+
+  return periods.length > 1 ? `${phrase}, ${periods.length} periods` : phrase;
 }
 
 /**
@@ -158,7 +189,7 @@ function renderActivePeriods(alert: ServiceAlert): string {
 
 /** Each informed entity as links to the pages for the objects it names. */
 function renderInformedEntity(ctx: RenderContext, e: EntitySelector): string {
-  const feed = ctx.session.staticFeed;
+  const feed = ctx.session.scheduledFeed;
   const links: string[] = [];
 
   if (e.agencyId) links.push(`<span class="opacity-60">agency</span> ${escHtml(e.agencyId)}`);
@@ -237,7 +268,7 @@ function renderAffectedEntity(ctx: RenderContext, e: InformedEntity): string {
   // `alertId:entityId`: an entity is addressable only through its own alert,
   // which is how the server scopes the delete too.
   const arg = `${e.service_alert_id}:${e.id}`;
-  const feed = ctx.session.staticFeed;
+  const feed = ctx.session.scheduledFeed;
 
   const trip = e.trip_id ? feed?.trips.get(e.trip_id) : undefined;
   const route = e.route_id ? feed?.routes.get(e.route_id) : undefined;
@@ -394,12 +425,9 @@ function renderRtAlertPage(ctx: RenderContext, record: AlertRecord): string {
 
   return `
     <div class="space-y-4">
-      <div class="space-y-2">
-        <div class="flex items-center gap-2">
-          ${statusBadge(record)}
-          <span class="text-xs opacity-60">${escHtml(ALERT_LEVEL_LABELS[alertLevel(record)])}</span>
-        </div>
-        ${renderTranslations('Header', alert.headerText)}
+      <div class="space-y-1">
+        ${pageHeader(preferredText(alert.headerText) || record.id, record.id)}
+        ${renderOtherTranslations('Header', alert.headerText)}
       </div>
 
       ${alert.descriptionText ? renderTranslations('Description', alert.descriptionText) : ''}
@@ -412,7 +440,8 @@ function renderRtAlertPage(ctx: RenderContext, record: AlertRecord): string {
       ${section(
         'Properties',
         propList([
-          prop('Entity id', `<span class="font-mono">${escHtml(record.id)}</span>`),
+          prop('Status', `${statusBadge(record)} ${escHtml(activeWindow(alert))}`),
+          prop('Level', escHtml(ALERT_LEVEL_LABELS[alertLevel(record)])),
           prop('Cause', escHtml(CAUSE_LABELS[alert.cause as number] ?? String(alert.cause ?? '—'))),
           prop('Effect', escHtml(EFFECT_LABELS[alert.effect as number] ?? String(alert.effect ?? '—'))),
           prop(

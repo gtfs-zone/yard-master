@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/render-utils.ts
-   @sha 56f120a
+   @sha 846e955
    @status verbatim */
 /**
  * Shared furniture for the object pages: escaping, entity links, the raw column
@@ -11,8 +11,8 @@
  * intercepts to navigate without a reload.
  */
 
-import type { RawRow } from '../gtfs-static';
-import type { GTFSStatic, Route } from '../gtfs-static';
+import type { RawRow } from '../gtfs-scheduled';
+import type { GTFSScheduled, Route } from '../gtfs-scheduled';
 import type { VehiclePosition } from '../map-controller';
 import type { PageState } from '../types/page-state';
 import type { FeedSession } from './feed-session';
@@ -125,7 +125,7 @@ export function formatEpochTime(seconds: number | undefined, withZone = true): s
   return withZone ? `${clock} ${zoneLabel(seconds * 1000)}` : clock;
 }
 
-/** A static `stop_times` clock time, formatted to match `formatEpochTime`. */
+/** A scheduled `stop_times` clock time, formatted to match `formatEpochTime`. */
 export function formatScheduledTime(value: string | undefined, withZone = true): string {
   const clock = formatScheduleTime(value);
   if (!withZone || clock === '—') return clock;
@@ -198,6 +198,23 @@ export const OCCUPANCY_LABELS: Record<number, string> = {
   8: 'Not boardable',
 };
 
+export const TRIP_SCHEDULE_RELATIONSHIP_LABELS: Record<number, string> = {
+  0: 'SCHEDULED',
+  1: 'ADDED',
+  2: 'UNSCHEDULED',
+  3: 'CANCELED',
+  4: 'REPLACEMENT',
+  5: 'DUPLICATED',
+  6: 'DELETED',
+};
+
+export const STOP_TIME_SCHEDULE_RELATIONSHIP_LABELS: Record<number, string> = {
+  0: 'SCHEDULED',
+  1: 'SKIPPED',
+  2: 'NO_DATA',
+  3: 'UNSCHEDULED',
+};
+
 export const ROUTE_TYPE_LABELS: Record<number, string> = {
   0: 'Tram / light rail',
   1: 'Subway / metro',
@@ -211,13 +228,23 @@ export const ROUTE_TYPE_LABELS: Record<number, string> = {
   12: 'Monorail',
 };
 
-export const LOCATION_TYPE_LABELS: Record<number, string> = {
-  0: 'Stop / platform',
-  1: 'Station',
-  2: 'Entrance / exit',
-  3: 'Generic node',
-  4: 'Boarding area',
-};
+/**
+ * The header every entity page opens with: the name, then the feed's own id
+ * for it. One shape across pages, so the id is always in the same place and
+ * the facts about the entity live in its properties region instead.
+ *
+ * `extra` is for a marker that has to sit with the name, e.g. a route badge.
+ */
+export function pageHeader(title: string, id: string, extra = ''): string {
+  const heading = `<h2 class="text-lg font-semibold leading-tight whitespace-pre-wrap">${escHtml(
+    title,
+  )}</h2>`;
+  return `
+    <div class="space-y-1">
+      ${extra ? `<div class="flex items-center gap-2">${extra}${heading}</div>` : heading}
+      <p class="text-xs opacity-60 font-mono break-words">${escHtml(id)}</p>
+    </div>`;
+}
 
 /** A definition list row, used by every page's properties region. */
 export function prop(label: string, valueHtml: string): string {
@@ -247,6 +274,52 @@ export function badgeMark(label: string, title: string): string {
   return `<span class="badge badge-ghost badge-xs align-middle" title="${escHtml(title)}">${escHtml(label)}</span>`;
 }
 
+/**
+ * Marks a fact the feed reported, as against `badgeMark`'s inferred values. The two
+ * must stay visually distinct: a reader has to be able to tell what the producer said
+ * from what test-track worked out.
+ */
+export function feedMark(label: string, title: string): string {
+  return `<span class="badge badge-outline badge-xs align-middle" title="${escHtml(title)}">${escHtml(label)}</span>`;
+}
+
+/** One explanation per trip relationship, so the wording is written once. */
+const TRIP_RELATIONSHIP_TITLES: Record<number, string> = {
+  1: 'The feed reports this trip as ADDED: it is not in the static schedule by design, not by omission.',
+  2: 'The feed reports this trip as UNSCHEDULED: a frequency-based trip with exact_times=0.',
+  3: 'The feed reports this trip as CANCELED: it will not run.',
+  4: 'The feed reports this trip as REPLACEMENT: it replaces a scheduled trip (experimental).',
+  5: 'The feed reports this trip as DUPLICATED: it duplicates a scheduled trip at a new time (experimental).',
+  6: 'The feed reports this trip as DELETED: the producer states it should not be shown to users (experimental).',
+};
+
+/** One explanation per stop-time relationship. */
+const STOP_TIME_RELATIONSHIP_TITLES: Record<number, string> = {
+  1: 'The feed reports this stop as SKIPPED: the vehicle will not call there, so the times on this row are not times anyone can catch.',
+  2: 'The feed reports NO_DATA for this stop: no prediction is given, and any time shown comes from the schedule.',
+  3: 'The feed reports this stop as UNSCHEDULED: it is not in the static schedule for this trip (experimental).',
+};
+
+/** The badge for a trip's schedule_relationship, or '' when it is SCHEDULED or unreported. */
+export function tripRelationshipMark(relationship: number | undefined): string {
+  if (relationship === undefined || relationship === 0) return '';
+  const label = TRIP_SCHEDULE_RELATIONSHIP_LABELS[relationship] ?? String(relationship);
+  const title =
+    TRIP_RELATIONSHIP_TITLES[relationship] ??
+    `The feed reports this trip's schedule_relationship as ${label}.`;
+  return feedMark(label, title);
+}
+
+/** The badge for a stop_time_update's schedule_relationship, or '' when SCHEDULED or unreported. */
+export function stopTimeRelationshipMark(relationship: number | undefined): string {
+  if (relationship === undefined || relationship === 0) return '';
+  const label = STOP_TIME_SCHEDULE_RELATIONSHIP_LABELS[relationship] ?? String(relationship);
+  const title =
+    STOP_TIME_RELATIONSHIP_TITLES[relationship] ??
+    `The feed reports this stop's schedule_relationship as ${label}.`;
+  return feedMark(label, title);
+}
+
 /** The standard explanation behind every derived `current_stop_sequence`. */
 export const DERIVED_STOP_SEQUENCE_TITLE =
   'The feed reported no current_stop_sequence. This position comes from the soonest still-future stop_time_update on the same trip.';
@@ -271,7 +344,7 @@ export function stopSequenceMark(v: VehiclePosition, current: VehicleStopSequenc
 }
 
 /**
- * The name to *display* for a vehicle. Prefers the static trip's
+ * The name to *display* for a vehicle. Prefers the scheduled trip's
  * `trip_short_name` — for Amtrak this is the train number — then the trip
  * headsign, then the feed's `vehicle.label`, then the id. This is display-layer
  * only: the raw dump and the id field still show exactly what the feed sent.
@@ -281,7 +354,7 @@ export function stopSequenceMark(v: VehiclePosition, current: VehicleStopSequenc
  * distinguishes them either way.
  */
 export function vehicleDisplayName(
-  feed: GTFSStatic | null | undefined,
+  feed: GTFSScheduled | null | undefined,
   v: VehiclePosition,
 ): string {
   const trip = v.tripId ? feed?.trips.get(v.tripId) : undefined;

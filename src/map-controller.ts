@@ -1,13 +1,13 @@
 /* @vendored-from test-track:src/map-controller.ts
-   @sha 56f120a
+   @sha 459c4e7
    @status modified
    @changes
    - The `vehicle` PageState variant became `tracker`, keyed by `Tracker.id`. The
      LayerManager target kind stays `vehicle` — that is the map layer's own
      vocabulary — but carries the `trackerId` a click has to navigate by.
-   - `applyFocus` handles yard-master's managed variants (`feed`,
-     `assignments`, `managers`) alongside `alert`, all of which clear the focus
-     without moving the camera.
+   - `applyFocus` covers yard-master's variant set. `alert` clears the focus
+     without moving the camera, since a managed alert has no geometry of its
+     own; `home` reframes the whole feed.
    - `trip` draws the trip's own geometry on a source this file owns, spotlights
      its route and frames it. LayerManager has no `trip` focus kind, so the
      shape lives here instead. The same source takes a whole
@@ -19,10 +19,13 @@
      have no such object.
    - The last pushed positions are kept here so a `tracker` focus can resolve
      the tracker's vehicles. LayerManager's layer is keyed by `key`, so it
-     cannot answer "which of these is this tracker's". */
+     cannot answer "which of these is this tracker's".
+   - The shape/stops render toggle is kept: `BasemapControl` is held on a field
+     and wired to `LayerManager.setShapeMode`. Upstream dropped the control, so
+     this repo's `basemap-control.ts` keeps it too. */
 import maplibregl from 'maplibre-gl';
 import { CONFIG } from './config';
-import type { GTFSStatic } from './gtfs-static';
+import type { GTFSScheduled } from './gtfs-scheduled';
 import type { PageState } from './types/page-state';
 import { BasemapControl, initialMapStyle } from './modules/basemap-control';
 import type { MapAppearance } from './modules/basemap-control';
@@ -63,6 +66,8 @@ export interface VehiclePosition {
   directionId?: string;
   startDate?: string;
   startTime?: string;
+  /** TripDescriptor.schedule_relationship, or undefined when the producer omitted it. */
+  scheduleRelationship?: number;
   /**
    * The GTFS `stop_sequence` value of the stop the vehicle is working on — not
    * an index into the trip's stop list. Absent in many feeds, which is why the
@@ -169,7 +174,7 @@ export class MapController {
   private bottomPadding = 0;
 
   /** The parsed feed, for the geometry LayerManager does not hold: trip paths. */
-  private feed: GTFSStatic | null = null;
+  private feed: GTFSScheduled | null = null;
 
   /**
    * Flips true exactly once, on the first `load`, and never back. Work issued
@@ -321,20 +326,20 @@ export class MapController {
     else this.pending.push(fn);
   }
 
-  loadStaticFeed(feed: GTFSStatic): void {
+  loadScheduledFeed(feed: GTFSScheduled): void {
     this.feed = feed;
     this.whenLoaded(() => {
-      this.layers.setStaticFeed(feed);
+      this.layers.setScheduledFeed(feed);
       this.fitFeed();
     });
   }
 
-  clearStaticFeed(): void {
+  clearScheduledFeed(): void {
     this.feed = null;
     this.tripShapes = [];
     this.drawnTripKey = '';
     this.whenLoaded(() => {
-      this.layers.setStaticFeed(null);
+      this.layers.setScheduledFeed(null);
       this.drawTripShape();
     });
   }
@@ -383,7 +388,7 @@ export class MapController {
   }
 
   /**
-   * Frame the loaded feed. Every static load refits, reloads included: the old
+   * Frame the loaded feed. Every schedule load refits, reloads included: the old
    * "camera is already inside the bbox" bail-out skipped the fit whenever the
    * stored view happened to sit in the new feed's box, and the only thing that
    * framed the feed after that was a click-in/click-out returning focus to home.

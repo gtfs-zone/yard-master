@@ -13,7 +13,7 @@
  * either, and an alert written now is right as soon as the zip loads.
  */
 
-import type { GTFSStatic } from '../gtfs-static';
+import type { GTFSScheduled } from '../gtfs-scheduled';
 import type { FieldOption } from './entity-form';
 
 /** What a combo says when there is no schedule to suggest from. */
@@ -40,7 +40,7 @@ const ROUTE_TYPE_NAMES: Record<number, string> = {
   12: 'Monorail',
 };
 
-export function agencyOptions(feed: GTFSStatic | null): FieldOption[] {
+export function agencyOptions(feed: GTFSScheduled | null): FieldOption[] {
   if (!feed) return [];
   // A single-agency feed may leave `agency_id` blank, and a blank id is not an
   // id: offering it would put an empty string in the request body.
@@ -49,7 +49,7 @@ export function agencyOptions(feed: GTFSStatic | null): FieldOption[] {
     .map((agency) => ({ value: agency.id, label: agency.id, detail: agency.name }));
 }
 
-export function routeOptions(feed: GTFSStatic | null): FieldOption[] {
+export function routeOptions(feed: GTFSScheduled | null): FieldOption[] {
   if (!feed) return [];
   return [...feed.routes.values()].map((route) => ({
     value: route.id,
@@ -58,7 +58,7 @@ export function routeOptions(feed: GTFSStatic | null): FieldOption[] {
   }));
 }
 
-export function stopOptions(feed: GTFSStatic | null): FieldOption[] {
+export function stopOptions(feed: GTFSScheduled | null): FieldOption[] {
   if (!feed) return [];
   return [...feed.stops.values()].map((stop) => ({
     value: stop.id,
@@ -68,7 +68,7 @@ export function stopOptions(feed: GTFSStatic | null): FieldOption[] {
 }
 
 /** The distinct `route_type` values this feed uses, with how many routes each. */
-export function routeTypeOptions(feed: GTFSStatic | null): FieldOption[] {
+export function routeTypeOptions(feed: GTFSScheduled | null): FieldOption[] {
   if (!feed) return [];
   const counts = new Map<number, number>();
   for (const route of feed.routes.values()) {
@@ -92,7 +92,7 @@ export function routeTypeOptions(feed: GTFSStatic | null): FieldOption[] {
  * does not know which route is being named yet, so these are drawn from the
  * whole feed and a given route may use neither of them.
  */
-export function directionOptions(feed: GTFSStatic | null): FieldOption[] {
+export function directionOptions(feed: GTFSScheduled | null): FieldOption[] {
   if (!feed) return [];
   const counts = new Map<string, Map<string, number>>([
     ['0', new Map()],

@@ -1,10 +1,10 @@
 /* @vendored-from test-track:src/modules/notification-system.ts
-   @sha 56f120a
+   @sha 59e26c4
    @status verbatim */
 /* @vendored-from coloring-book:src/modules/notification-system.ts
-   @sha 51e8536
+   @sha dca23b3
    @status verbatim */
-import { renderCloseIcon } from './modal-utils.js';
+import { renderCloseIcon } from './modal-utils';
 
 interface NotificationAction {
   id: string;

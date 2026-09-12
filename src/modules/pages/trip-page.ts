@@ -14,7 +14,7 @@
  * silently rewrite 25:10:00 as 01:10 the wrong day.
  */
 
-import type { Trip } from '../../gtfs-static';
+import type { Trip } from '../../gtfs-scheduled';
 import type { PageState } from '../../types/page-state';
 import { alertsForTrip } from '../alerts';
 import { entityRow, entityRowList, rowSection } from '../entity-row';
@@ -48,7 +48,7 @@ import { renderAlertList } from './alert-page';
  * names it: which service, which weekdays, and over what window.
  */
 function renderService(ctx: RenderContext, trip: Trip): string {
-  const feed = ctx.session.staticFeed!;
+  const feed = ctx.session.scheduledFeed!;
   const service = serviceCatalog(feed).get(trip.service_id);
 
   if (!service) {
@@ -79,7 +79,7 @@ function renderService(ctx: RenderContext, trip: Trip): string {
 // ─── Schedule ─────────────────────────────────────────────────────────────────
 
 function renderSchedule(ctx: RenderContext, rt: RtIndex, trip: Trip): string {
-  const feed = ctx.session.staticFeed!;
+  const feed = ctx.session.scheduledFeed!;
   const times = feed.stopTimesByTrip.get(trip.trip_id) ?? [];
   if (times.length === 0) {
     return section(
@@ -166,7 +166,7 @@ function renderTrackers(ctx: RenderContext, rt: RtIndex, trip: Trip): string {
           // The tracker, not the vehicle: `key` is the tracker plus the trip
           // instance, and only `trackerId` addresses a page.
           state: { type: 'tracker', tracker_id: v.trackerId },
-          label: vehicleDisplayName(ctx.session.staticFeed, v),
+          label: vehicleDisplayName(ctx.session.scheduledFeed, v),
         })
       ),
       'Nothing is reporting this trip.'
@@ -219,7 +219,7 @@ export function renderTripPage(
   rt: RtIndex,
   state: Extract<PageState, { type: 'trip' }>
 ): string {
-  const feed = ctx.session.staticFeed;
+  const feed = ctx.session.scheduledFeed;
   const trip = feed?.trips.get(state.trip_id);
   if (!feed || !trip) return missing(`Trip ${state.trip_id}`);
 

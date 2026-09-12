@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/pages/route-page.ts
-   @sha fa12a57
+   @sha 3f5d8e2
    @status modified
    @changes
    - The `vehicle` PageState variant became `tracker`, keyed by `Tracker.id`,
@@ -31,12 +31,12 @@
 
 import { CONFIG } from '../../config';
 import type { AlertRecord } from '../../gtfs-rt';
-import type { Route } from '../../gtfs-static';
+import type { Route } from '../../gtfs-scheduled';
 import type { VehiclePosition } from '../../map-controller';
 import type { PageState } from '../../types/page-state';
 import { alertsForRoute, alertsForRouteStop, feedWideAlerts } from '../alerts';
 import { renderTriangleIcon, renderWarningIcon } from '../modal-utils';
-import { GTFSStaticRouteSource } from '../gtfs-static-route-source';
+import { GTFSScheduledRouteSource } from '../gtfs-scheduled-route-source';
 import { routeGraph } from '../route-graph';
 import type { RtIndex, VehicleStopSequence } from '../rt-index';
 import type { Prediction } from '../rt-index';
@@ -59,6 +59,7 @@ import { assignmentCounts, servicesForTrips, weekdaysLabel } from '../service-ca
 import {
   OCCUPANCY_LABELS,
   ROUTE_TYPE_LABELS,
+  TRIP_SCHEDULE_RELATIONSHIP_LABELS,
   VEHICLE_STATUS_LABELS,
   entityLink,
   escHtml,
@@ -67,12 +68,14 @@ import {
   formatEpochTime,
   formatScheduledTime,
   missing,
+  pageHeader,
   prop,
   propList,
   renderRawFields,
   routeBadge,
   section,
   stopSequenceMark,
+  tripRelationshipMark,
   vehicleDisplayName,
 } from '../render-utils';
 import { renderAlertList } from './alert-page';
@@ -81,6 +84,8 @@ import { renderAlertList } from './alert-page';
 interface Unplaced {
   vehicle: VehiclePosition;
   reason: string;
+  /** Trip schedule_relationship, when the feed gave one that explains the placement. */
+  relationship?: number;
 }
 
 interface PlacedVehicle {
@@ -115,7 +120,7 @@ function placeVehicles(
   routeId: string,
   directionId: string,
 ): { placed: PlacedVehicle[]; unplaced: Unplaced[] } {
-  const feed = ctx.session.staticFeed;
+  const feed = ctx.session.scheduledFeed;
   const placed: PlacedVehicle[] = [];
   const unplaced: Unplaced[] = [];
 
@@ -126,11 +131,19 @@ function placeVehicles(
     if (!trip) {
       // A vehicle whose trip we cannot resolve might belong to either
       // direction, so it is listed rather than guessed onto this one.
+      const relationship = vehicle.scheduleRelationship;
+      const reasonSuffix =
+        relationship !== undefined && relationship !== 0
+          ? `; the feed reports it as ${
+              TRIP_SCHEDULE_RELATIONSHIP_LABELS[relationship] ?? String(relationship)
+            }`
+          : '';
       unplaced.push({
         vehicle,
         reason: vehicle.tripId
-          ? `trip ${vehicle.tripId} is not in the static feed`
+          ? `trip ${vehicle.tripId} is not in the schedule${reasonSuffix}`
           : 'no trip_id reported',
+        relationship,
       });
       continue;
     }
@@ -212,7 +225,7 @@ function vehicleChip(
   vehicle: VehiclePosition,
   current: VehicleStopSequence,
 ): string {
-  const label = vehicleDisplayName(ctx.session.staticFeed, vehicle);
+  const label = vehicleDisplayName(ctx.session.scheduledFeed, vehicle);
   const status =
     vehicle.currentStatus === undefined
       ? ''
@@ -229,6 +242,7 @@ function vehicleChip(
     ${status ? `<span class="opacity-40">-</span>${status}` : ''}
     ${occupancy ? `<span class="opacity-40">-</span>${occupancy}` : ''}
     ${stopSequenceMark(vehicle, current)}
+    ${tripRelationshipMark(vehicle.scheduleRelationship)}
   </div>`;
 }
 
@@ -260,7 +274,7 @@ function renderStrip(
   directionId: string,
   placed: PlacedVehicle[],
 ): string {
-  const feed = ctx.session.staticFeed;
+  const feed = ctx.session.scheduledFeed;
   if (sequence.stops.length === 0) {
     return '<p class="text-sm opacity-60">No trips with stop times for this direction.</p>';
   }
@@ -402,8 +416,9 @@ function renderUnplaced(ctx: RenderContext, unplaced: Unplaced[]): string {
        unplaced.map(u =>
          entityRow(ctx, {
            state: { type: 'tracker', tracker_id: u.vehicle.trackerId },
-           label: vehicleDisplayName(ctx.session.staticFeed, u.vehicle),
+           label: vehicleDisplayName(ctx.session.scheduledFeed, u.vehicle),
            sublabel: u.reason,
+           badgeHtml: tripRelationshipMark(u.relationship),
          }),
        ),
        '',
@@ -439,7 +454,7 @@ const UNASSIGNED_BADGE = '<span class="badge badge-ghost badge-xs opacity-60">Un
  * list scrolls in place, is capped, and says how many it left out.
  */
 function renderTrips(ctx: RenderContext, routeId: string, directionId: string): string {
-  const feed = ctx.session.staticFeed!;
+  const feed = ctx.session.scheduledFeed!;
   const trips = (feed.tripsByRoute.get(routeId) ?? []).filter(
     t => (t.direction_id ?? '') === directionId,
   );
@@ -494,7 +509,7 @@ function renderTrips(ctx: RenderContext, routeId: string, directionId: string): 
  * not an object this app browses, so a row is a fact rather than a link.
  */
 function renderServices(ctx: RenderContext, route: Route): string {
-  const feed = ctx.session.staticFeed!;
+  const feed = ctx.session.scheduledFeed!;
   const services = servicesForTrips(feed, feed.tripsByRoute.get(route.id) ?? []);
   if (services.length === 0) return '';
 
@@ -540,11 +555,11 @@ export function renderRoutePage(
   rt: RtIndex,
   state: Extract<PageState, { type: 'route' }>,
 ): string {
-  const feed = ctx.session.staticFeed;
+  const feed = ctx.session.scheduledFeed;
   const route = feed?.routes.get(state.route_id);
   if (!feed || !route) return missing(`Route ${state.route_id}`);
 
-  const source = new GTFSStaticRouteSource(feed);
+  const source = new GTFSScheduledRouteSource(feed);
   const directions = directionsForRoute(source, route.id);
   const active =
     directions.find(d => d.direction_id === state.direction_id)?.direction_id ??
@@ -557,18 +572,11 @@ export function renderRoutePage(
 
   return `
     <div class="space-y-4">
-      <div class="space-y-1">
-        <div class="flex items-center gap-2">
-          ${routeBadge(ctx, route)}
-          <span class="text-xs opacity-60">${escHtml(
-            ROUTE_TYPE_LABELS[route.type] ?? `route_type ${route.type}`,
-          )}</span>
-        </div>
-        <h2 class="text-lg font-semibold leading-tight">${escHtml(
-          route.long_name || route.short_name || route.id,
-        )}</h2>
-        ${agency ? `<p class="text-xs opacity-60">${escHtml(agency.name)}</p>` : ''}
-      </div>
+      ${pageHeader(
+        route.long_name || route.short_name || route.id,
+        route.id,
+        routeBadge(ctx, route),
+      )}
 
       ${renderAlertList(ctx, feedWideAlerts(ctx.session), 'Feed-wide alerts')}
       ${renderAlertList(ctx, alertsForRoute(ctx.session, route.id), 'Route alerts')}
@@ -583,7 +591,8 @@ export function renderRoutePage(
       ${section(
         'Route',
         propList([
-          prop('route_id', escHtml(route.id)),
+          prop('Mode', escHtml(ROUTE_TYPE_LABELS[route.type] ?? `route_type ${route.type}`)),
+          agency?.name ? prop('Agency', escHtml(agency.name)) : '',
           prop('Trips', String((feed.tripsByRoute.get(route.id) ?? []).length)),
           prop('Trackers with a fix', String((rt.vehiclesByRoute.get(route.id) ?? []).length)),
           prop('Stops on strip', String(sequence.stops.length)),

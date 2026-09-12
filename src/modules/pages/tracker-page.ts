@@ -80,7 +80,7 @@ function mapsLink(position: VehiclePosition): string {
 
 /** One of the tracker's vehicles: where it is, and what it is running. */
 function renderVehicle(ctx: RenderContext, position: VehiclePosition): string {
-  const feed = ctx.session.staticFeed;
+  const feed = ctx.session.scheduledFeed;
   const routeId = position.routeId ?? (position.tripId ? feed?.trips.get(position.tripId)?.route_id : undefined);
   const route = routeId ? feed?.routes.get(routeId) : undefined;
   const stop = position.stopId ? feed?.stops.get(position.stopId) : undefined;
@@ -178,7 +178,7 @@ function renderAssignments(ctx: RenderContext, trackerId: string): string {
 
   const rules = [...session.rules.values()].filter((r) => r.tracker_id === trackerId);
   const rows = rules.map((rule) => {
-    const trip = session.staticFeed?.trips.get(rule.trip_id);
+    const trip = session.scheduledFeed?.trips.get(rule.trip_id);
     return entityRow(ctx, {
       // A trip the loaded schedule has lost has no page, so the row is its
       // bare id rather than a link that would go nowhere.

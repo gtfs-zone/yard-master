@@ -2,19 +2,19 @@
    @sha 56f120a
    @status adopted */
 /**
- * Owns whatever is currently selected: the parsed static GTFS, and the live
+ * Owns whatever is currently selected: the parsed scheduled GTFS, and the live
  * payloads the map and the panel read.
  *
  * Adopted, not copied. test-track's `feed-session.ts` is built around a GTFS-RT
  * poller it owns; here the managed objects come from the API and the live half
  * arrives on the SSE channel, so only the shape the vendored modules read
- * (`staticFeed`, `vehicles`, `alerts`, `tripUpdates`) is deliberately the same.
+ * (`scheduledFeed`, `vehicles`, `alerts`, `tripUpdates`) is deliberately the same.
  * Every module that takes a `FeedSession` reads it through that surface, which
  * is what lets them stay verbatim.
  *
- * The selected feed and its managed objects live here alongside the static
+ * The selected feed and its managed objects live here alongside the scheduled
  * half, and the two are deliberately independent: `feed` and `trackers` are
- * populated the moment a feed is chosen, while `staticFeed` arrives whenever
+ * populated the moment a feed is chosen, while `scheduledFeed` arrives whenever
  * the zip finishes downloading, or never, if `static_feed_url` is unreachable.
  * Every reader has to cope with one without the other.
  *
@@ -34,7 +34,7 @@
  * would otherwise be either immortal or invisible.
  */
 import { CONFIG } from '../config';
-import { GTFSStatic } from '../gtfs-static';
+import { GTFSScheduled } from '../gtfs-scheduled';
 import type { AlertRecord, TripUpdate } from '../gtfs-rt';
 import type {
   Alert,
@@ -117,9 +117,9 @@ export class FeedSession extends EventTarget {
   /** The window `assignments` covers, inclusive, or null if none is loaded. */
   assignmentsRange: { from: ServiceDate; to: ServiceDate } | null = null;
 
-  staticFeed: GTFSStatic | null = null;
-  staticError: string | null = null;
-  staticLoadedAt: number | null = null;
+  scheduledFeed: GTFSScheduled | null = null;
+  scheduleError: string | null = null;
+  scheduleLoadedAt: number | null = null;
 
   /**
    * Every vehicle currently reporting, keyed by `VehiclePosition.key` — the
@@ -152,7 +152,7 @@ export class FeedSession extends EventTarget {
   /**
    * Select a feed, discarding everything belonging to the previous one.
    *
-   * The static half is not started here: the caller decides whether to
+   * The scheduled half is not started here: the caller decides whether to
    * download the zip, because the managed half of the app is usable without it
    * and a slow feed must not gate the tree.
    */
@@ -356,11 +356,11 @@ export class FeedSession extends EventTarget {
    * The case is a hosted feed with no upload yet, which is every hosted feed
    * for the moment between its creation and its first zip.
    */
-  noStatic(reason: string): void {
+  noScheduled(reason: string): void {
     this.cancelLoad();
-    this.staticFeed = null;
-    this.staticError = reason;
-    this.staticLoadedAt = null;
+    this.scheduledFeed = null;
+    this.scheduleError = reason;
+    this.scheduleLoadedAt = null;
     this.dispatchEvent(new CustomEvent('change'));
   }
 
@@ -373,15 +373,15 @@ export class FeedSession extends EventTarget {
    * Download and parse a feed's zip in the browser.
    *
    * The managed half of the app stays usable throughout, so an unreachable or
-   * malformed `static_feed_url` sets `staticError` and resolves rather than
+   * malformed `static_feed_url` sets `scheduleError` and resolves rather than
    * throwing at the caller.
    */
-  async loadStatic(url: string, label: string): Promise<void> {
+  async loadScheduled(url: string, label: string): Promise<void> {
     this.cancelLoad();
     const controller = new AbortController();
     this.controller = controller;
 
-    const feed = new GTFSStatic();
+    const feed = new GTFSScheduled();
 
     // Download and parse are separate operations so the bar shows real byte
     // progress first, then per-file parse progress.
@@ -389,7 +389,7 @@ export class FeedSession extends EventTarget {
     const hooks = {
       onDownload: (loaded: number, total: number | null) => {
         feedProgressIndicator.updateProgress(
-          'static-download',
+          'scheduled-download',
           downloadPercent(loaded, total) ?? 0,
           total
             ? `Downloading ${label} - ${formatBytes(loaded)} of ${formatBytes(total)}`
@@ -399,11 +399,11 @@ export class FeedSession extends EventTarget {
       onParse: (fileName: string, done: number, total: number) => {
         if (!parsing) {
           parsing = true;
-          feedProgressIndicator.finishLoading('static-download');
-          feedProgressIndicator.startLoading('static-parse', `Parsing ${label}…`);
+          feedProgressIndicator.finishLoading('scheduled-download');
+          feedProgressIndicator.startLoading('scheduled-parse', `Parsing ${label}…`);
         }
         feedProgressIndicator.updateProgress(
-          'static-parse',
+          'scheduled-parse',
           Math.round((done / total) * 100),
           `Parsing ${label} - ${fileName}`
         );
@@ -411,29 +411,29 @@ export class FeedSession extends EventTarget {
       signal: controller.signal,
     };
 
-    feedProgressIndicator.startLoading('static-download', `Downloading ${label}…`, {
+    feedProgressIndicator.startLoading('scheduled-download', `Downloading ${label}…`, {
       onCancel: () => controller.abort(),
     });
 
     try {
       await feed.loadFromUrl(url, hooks);
-      this.staticFeed = feed;
+      this.scheduledFeed = feed;
       // Every transit time rendered from here on is anchored to this feed's zone.
       adoptFeedTimezone(feed);
-      this.staticError = null;
-      this.staticLoadedAt = Date.now();
+      this.scheduleError = null;
+      this.scheduleLoadedAt = Date.now();
       // Separate from `change` because the map has to reload its sources on
       // this and on nothing else; `change` fires for every tracker update too.
-      this.dispatchEvent(new CustomEvent<GTFSStatic>('staticloaded', { detail: feed }));
+      this.dispatchEvent(new CustomEvent<GTFSScheduled>('scheduleloaded', { detail: feed }));
     } catch (err) {
       // A cancel is not a feed error: the previously loaded feed stays live.
       if (!(err instanceof LoadCancelledError)) {
-        this.staticError = err instanceof Error ? err.message : String(err);
+        this.scheduleError = err instanceof Error ? err.message : String(err);
       }
     } finally {
       if (this.controller === controller) this.controller = null;
-      feedProgressIndicator.finishLoading('static-download');
-      feedProgressIndicator.finishLoading('static-parse');
+      feedProgressIndicator.finishLoading('scheduled-download');
+      feedProgressIndicator.finishLoading('scheduled-parse');
       this.dispatchEvent(new CustomEvent('change'));
     }
   }
@@ -461,9 +461,9 @@ export class FeedSession extends EventTarget {
     this.rules = null;
     this.assignments = new Map();
     this.assignmentsRange = null;
-    this.staticFeed = null;
-    this.staticError = null;
-    this.staticLoadedAt = null;
+    this.scheduledFeed = null;
+    this.scheduleError = null;
+    this.scheduleLoadedAt = null;
     this.vehicles = new Map();
     this.vehicleArrivals = new Map();
     this.trackerArrivals = new Map();

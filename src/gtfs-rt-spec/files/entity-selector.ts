@@ -1,7 +1,7 @@
 /**
  * EntitySelector: what an alert is about.
  *
- * Every id field carries the static table it names, which is what lets the
+ * Every id field carries the scheduled table it names, which is what lets the
  * informed-entity form offer the ids in the loaded feed instead of asking
  * somebody to type one.
  */

@@ -51,7 +51,7 @@ const LOAD_BADGE_CLASS: Record<string, string> = {
 };
 
 /**
- * How a feed's last static load is badged. A feed schedule-foamer has never
+ * How a feed's last schedule load is badged. A feed schedule-foamer has never
  * touched has no `load` at all, which is not `pending`: saying "pending" would
  * claim a brand-new feed is already on its way.
  */

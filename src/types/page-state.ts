@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/types/page-state.ts
-   @sha 56f120a
+   @sha 4be8cb1
    @status modified
    @changes
    - Variants replaced wholesale. yard-master browses a hierarchy neither

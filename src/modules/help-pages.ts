@@ -1,8 +1,10 @@
 /* @vendored-from test-track:src/modules/help-pages.ts
-   @sha bf5cc8c
+   @sha 868909e
    @status modified
    @changes
    - HELP_PAGES is [aboutPage] only: this app has no welcome or map-key page.
+     `868909e` added a direction-of-travel row to the map-key page, so there
+     is nothing here for it to land in.
    - `AboutApp` is yard-master's own, carried over from the old
      `about-modal.ts`: it says plainly that an uploaded schedule is stored and
      published, and names viz.rt.gtfs.zone as the sibling app.

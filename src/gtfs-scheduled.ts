@@ -1,8 +1,6 @@
-/* @vendored-from test-track:src/gtfs-static.ts
-   @sha fa12a57
-   @status modified
-   @changes
-   - Two arrow characters in comments replaced with `->`. */
+/* @vendored-from test-track:src/gtfs-scheduled.ts
+   @sha bf5cc8c
+   @status verbatim */
 import JSZip from 'jszip';
 import Papa from 'papaparse';
 import { splitInnerZipPath } from './modules/feed-url-resolve';
@@ -101,7 +99,7 @@ export interface LoadHooks {
   signal?: AbortSignal;
 }
 
-export interface StaticCounts {
+export interface ScheduledCounts {
   stops: number;
   routes: number;
   trips: number;
@@ -124,11 +122,11 @@ export interface PaddedColumn {
  * The GTFS reference forbids leading and trailing spaces in field values, but
  * producers that right-align numeric columns are common — RIPTA stores stop_id
  * as "      5" in stops.txt and "  29570" in stop_times.txt. The padding is
- * self-consistent within the static feed, so static-internal joins work and the
+ * self-consistent within the scheduled feed, so schedule-internal joins work and the
  * damage is invisible until a realtime id is looked up against it: the realtime
  * feed sends "29570" and nothing matches.
  *
- * Trimming here — the one choke point every static file passes through — covers
+ * Trimming here — the one choke point every scheduled file passes through — covers
  * present and future id columns without each ingest site having to remember.
  * Headers are trimmed too, so a padded header cannot produce a column name no
  * ingest function recognises. Only leading/trailing whitespace is stripped:
@@ -180,7 +178,7 @@ const PARSE_ORDER = [
   'stop_times.txt',
 ] as const;
 
-export class GTFSStatic {
+export class GTFSScheduled {
   stops = new Map<string, Stop>();
   routes = new Map<string, Route>();
   shapes = new Map<string, [number, number][]>();
@@ -193,7 +191,7 @@ export class GTFSStatic {
   /** Trip stop_times, sorted by `stop_sequence`. Drives the route strip. */
   stopTimesByTrip = new Map<string, StopTime[]>();
   tripsByRoute = new Map<string, Trip[]>();
-  /** Derived from stop_times -> trips: which routes serve a stop. */
+  /** Derived from stop_times to trips: which routes serve a stop. */
   routesByStop = new Map<string, Set<string>>();
   /** Trip ids serving a stop, in first-seen order. */
   stopTrips = new Map<string, string[]>();
@@ -210,7 +208,7 @@ export class GTFSStatic {
   /**
    * CSV columns that arrived with leading/trailing whitespace and were trimmed
    * at parse time. Surfaced on the status page rather than absorbed silently:
-   * without the trim, no realtime id would match a padded static column (see
+   * without the trim, no realtime id would match a padded scheduled column (see
    * `parseCSV`).
    */
   paddedColumns: PaddedColumn[] = [];
@@ -242,7 +240,7 @@ export class GTFSStatic {
     await this.parse(zip, hooks);
   }
 
-  counts(): StaticCounts {
+  counts(): ScheduledCounts {
     return {
       stops: this.stops.size,
       routes: this.routes.size,

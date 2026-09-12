@@ -1,8 +1,8 @@
 /* @vendored-from test-track:src/modules/stop-layer-style.ts
-   @sha 56f120a
+   @sha 868909e
    @status verbatim */
 /* @vendored-from coloring-book:src/modules/stop-layer-style.ts
-   @sha cfecd04
+   @sha f432647
    @status verbatim */
 /**
  * How a stop circle looks on the map: radius, fill, casing, and the focus /

@@ -1,16 +1,16 @@
-/* @vendored-from test-track:src/modules/gtfs-static-route-source.ts
-   @sha fa12a57
+/* @vendored-from test-track:src/modules/gtfs-scheduled-route-source.ts
+   @sha f54ae79
    @status verbatim */
 /**
- * `RouteSource` over `GTFSStatic`. The static feed is loaded once and never
+ * `RouteSource` over `GTFSScheduled`. The scheduled feed is loaded once and never
  * mutated, so this needs no invalidation and no adapter-side caching.
  */
-import type { GTFSStatic } from '../gtfs-static';
+import type { GTFSScheduled } from '../gtfs-scheduled';
 import type { StopTimeRef } from '../types/gtfs-flex';
 import type { RouteSource, RouteSourceTrip, RouteSourceStopTime } from './route-source';
 
-export class GTFSStaticRouteSource implements RouteSource {
-  constructor(private feed: GTFSStatic) {}
+export class GTFSScheduledRouteSource implements RouteSource {
+  constructor(private feed: GTFSScheduled) {}
 
   tripsForRoute(route_id: string): RouteSourceTrip[] {
     return this.feed.tripsByRoute.get(route_id) ?? [];

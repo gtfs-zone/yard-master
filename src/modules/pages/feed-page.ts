@@ -19,7 +19,7 @@
  * What this browser parsed out of the zip is deliberately not reported here.
  * cafe-car's load and this browser's parse can legitimately disagree, and the
  * page used to print both sets of counts side by side and leave the reader to
- * notice; the map draws one of them and `renderStaticStatus` says when the
+ * notice; the map draws one of them and `renderScheduledStatus` says when the
  * other has not arrived, which is the same information without the table.
  */
 
@@ -89,14 +89,14 @@ function urlRow(label: string, url: string, resolve = false): string {
  * "still downloading" and "did not load" are states this page renders in, not
  * reasons to render nothing.
  */
-function renderStaticStatus(ctx: RenderContext): string {
+function renderScheduledStatus(ctx: RenderContext): string {
   const session = ctx.session;
-  if (session.staticError) {
+  if (session.scheduleError) {
     return `<div class="alert alert-warning alert-sm text-xs">
-      <span>The static feed did not load: ${escHtml(session.staticError)}</span>
+      <span>The scheduled feed did not load: ${escHtml(session.scheduleError)}</span>
     </div>`;
   }
-  if (!session.staticFeed) {
+  if (!session.scheduledFeed) {
     return `<p class="text-xs opacity-60">Downloading the schedule…</p>`;
   }
   return '';
@@ -144,8 +144,8 @@ function renderTrackers(ctx: RenderContext): string {
  * that paints on top reads first.
  */
 function renderRoutes(ctx: RenderContext): string {
-  const feed = ctx.session.staticFeed;
-  if (!feed) return rowSection('Routes', 0, renderStaticStatus(ctx));
+  const feed = ctx.session.scheduledFeed;
+  if (!feed) return rowSection('Routes', 0, renderScheduledStatus(ctx));
 
   const routes = [...feed.routes.values()].sort((a, b) => {
     const keyA = routeSortKey(a.raw.route_type, (feed.tripsByRoute.get(a.id) ?? []).length);
@@ -279,11 +279,11 @@ function renderScheduled(ctx: RenderContext, feed: Feed): string {
   const published = publicScheduleUrl(feed);
   const current = feed.current_upload;
   const load = feed.load;
-  const staticFeed = ctx.session.staticFeed;
+  const scheduledFeed = ctx.session.scheduledFeed;
 
   const rows = [prop('Source', escHtml(sourceLabel(feed)))];
-  if (staticFeed) {
-    const counts = assignmentCounts(ctx.session, staticFeed.trips.keys());
+  if (scheduledFeed) {
+    const counts = assignmentCounts(ctx.session, scheduledFeed.trips.keys());
     rows.push(prop('Trips assigned', counts ? `${counts.assigned} of ${counts.total}` : '—'));
   }
   if (hosted) {
@@ -355,6 +355,9 @@ function renderScheduled(ctx: RenderContext, feed: Feed): string {
  * runs on somebody else's machine and has no way to reach an object here.
  */
 function renderRealtime(feed: Feed): string {
+  // `static=` rather than `scheduled=`: viz renamed the param in `f54ae79` and
+  // reads the old name as a fallback, so the old spelling reaches both the
+  // deployed viz and a newer one.
   const viz = new URLSearchParams({
     static: publicScheduleUrl(feed) ?? '',
     rt_vp: resolveRealtimeUrl(feed.vehicle_positions_url),

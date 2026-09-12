@@ -10,12 +10,12 @@
  * The file-name checks are deliberately the same ones `api/uploads.py` makes,
  * in the same order and with the same wording, so a zip that passes here and
  * then fails there is a bug rather than a difference of opinion. The counts on
- * top come from `GTFSStatic`, the same parser the map runs on.
+ * top come from `GTFSScheduled`, the same parser the map runs on.
  */
 
 import JSZip from 'jszip';
 import { CONFIG } from '../config';
-import { GTFSStatic } from '../gtfs-static';
+import { GTFSScheduled } from '../gtfs-scheduled';
 
 /** Mirrors cafe-car's `REQUIRED_FILES`. */
 const REQUIRED_FILES = [
@@ -59,7 +59,7 @@ function isoDate(compact: string): string | null {
  * A calendar-dates-only feed is common and entirely valid, which is why the
  * exceptions are read rather than treated as decoration on a calendar row.
  */
-function serviceRange(feed: GTFSStatic): { start: string | null; end: string | null } {
+function serviceRange(feed: GTFSScheduled): { start: string | null; end: string | null } {
   const dates: string[] = [];
   for (const cal of feed.calendar) {
     const start = isoDate(cal.start_date);
@@ -125,7 +125,7 @@ export async function previewGtfsZip(file: File): Promise<ZipPreview> {
   const named = rejectByName(Object.keys(zip.files));
   if (named) return { ok: false, reason: named };
 
-  const feed = new GTFSStatic();
+  const feed = new GTFSScheduled();
   try {
     await feed.loadFromFile(file);
   } catch (err) {

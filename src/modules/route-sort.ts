@@ -1,8 +1,8 @@
 /* @vendored-from test-track:src/modules/route-sort.ts
-   @sha 56f120a
+   @sha 868909e
    @status verbatim */
 /* @vendored-from coloring-book:src/modules/route-sort.ts
-   @sha a4b5ee1
+   @sha b19718e
    @status verbatim */
 /**
  * Paint-order ranking for route lines.

@@ -3,7 +3,7 @@
    @status modified
    @changes
    - The session events are yard-master's: `change`, `vehicles`, `assignments`
-     and `staticloaded` replace test-track's `vehicles` / `tripUpdates` /
+     and `scheduleloaded` replace test-track's `vehicles` / `tripUpdates` /
      `alerts`.
    - No `active` flag and no `hide()`. test-track hands the panel back to a
      status page when nothing is focused; here `home` is the feed itself, so
@@ -87,12 +87,12 @@ export class PanelRenderer {
 
   initialize(): void {
     // `change` covers every managed update, `vehicles` the live fleet,
-    // `assignments` an expanded calendar window and `staticloaded` the parsed
+    // `assignments` an expanded calendar window and `scheduleloaded` the parsed
     // zip. All four invalidate the index, since any of them can change what a
     // page can resolve. `vehicles` is separate from `change` because it fires
     // per pushed fix, which the map wants and most of the rest of the app does
     // not.
-    for (const event of ['change', 'vehicles', 'assignments', 'staticloaded'] as const) {
+    for (const event of ['change', 'vehicles', 'assignments', 'scheduleloaded'] as const) {
       this.session.addEventListener(event, () => {
         this.index = null;
         this.queueRender();

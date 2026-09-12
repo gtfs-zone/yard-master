@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/rt-index.ts
-   @sha 56f120a
+   @sha 2076877
    @status verbatim */
 /**
  * Lookups over the last realtime poll: predictions by trip and by stop,
@@ -13,7 +13,7 @@
 
 import type { TripUpdate } from '../gtfs-rt';
 import { presentNumber } from '../gtfs-rt';
-import type { GTFSStatic } from '../gtfs-static';
+import type { GTFSScheduled } from '../gtfs-scheduled';
 import type { VehiclePosition } from '../map-controller';
 import type { FeedSession } from './feed-session';
 
@@ -30,6 +30,10 @@ export interface Prediction {
   delay?: number;
   /** The best time to sort and display by. */
   time?: number;
+  /** TripDescriptor.schedule_relationship of the enclosing trip update. */
+  tripScheduleRelationship?: number;
+  /** StopTimeUpdate.schedule_relationship for this stop: SKIPPED, NO_DATA, … */
+  scheduleRelationship?: number;
 }
 
 /**
@@ -63,6 +67,23 @@ export interface FeedGaps {
 }
 
 /**
+ * Feed-wide tally of `schedule_relationship`, counted for the status page. A
+ * vehicle and a trip update for the same trip are two separate entities here —
+ * kept in separate maps so a row can say which one it is counting rather than
+ * implying a trip count.
+ */
+export interface ScheduleRelationshipCounts {
+  /** Vehicles and trip updates whose TripDescriptor carried the field at all. */
+  reported: number;
+  /** Vehicles' TripDescriptor.schedule_relationship, by value. SCHEDULED included. */
+  vehicleTrips: Map<number, number>;
+  /** Trip updates' TripDescriptor.schedule_relationship, by value. SCHEDULED included. */
+  updateTrips: Map<number, number>;
+  /** StopTimeUpdates by relationship: SKIPPED and NO_DATA are the interesting ones. */
+  stopTimes: Map<number, number>;
+}
+
+/**
  * A prediction this many seconds in the past still counts as the stop the
  * vehicle is working on: `current_stop_sequence` under `STOPPED_AT` names the
  * stop the vehicle is *at*, which a producer may have already timestamped as
@@ -84,14 +105,20 @@ export class RtIndex {
     resolvedFromStopId: 0,
     stopSequenceDerived: 0,
   };
+  readonly relationships: ScheduleRelationshipCounts = {
+    reported: 0,
+    vehicleTrips: new Map(),
+    updateTrips: new Map(),
+    stopTimes: new Map(),
+  };
 
   /** Derivation is per-trip, and several vehicles can share a trip. */
   private readonly derivedByTrip = new Map<string, number | undefined>();
-  private readonly feed: GTFSStatic | null;
+  private readonly feed: GTFSScheduled | null;
   private readonly nowSeconds: number;
 
   constructor(session: FeedSession, nowSeconds = Date.now() / 1000) {
-    const feed = session.staticFeed;
+    const feed = session.scheduledFeed;
     this.feed = feed;
     this.nowSeconds = nowSeconds;
 
@@ -103,21 +130,30 @@ export class RtIndex {
     }
   }
 
-  private ingestUpdate(update: TripUpdate, feed: GTFSStatic | null): void {
+  private ingestUpdate(update: TripUpdate, feed: GTFSScheduled | null): void {
     const tripId = update.trip?.tripId;
     if (!tripId) return;
     this.updateByTrip.set(tripId, update);
 
     const times = feed?.stopTimesByTrip.get(tripId);
     const predictions: Prediction[] = [];
+    const tripRelationship = presentNumber(update.trip, 'scheduleRelationship');
+    if (tripRelationship !== undefined) {
+      this.relationships.reported++;
+      bump(this.relationships.updateTrips, tripRelationship);
+    }
 
     for (const stu of update.stopTimeUpdate ?? []) {
       // Producers may give `stop_id`, `stop_sequence`, or both. When only the
-      // sequence is given the stop has to come from the static trip, which is
+      // sequence is given the stop has to come from the scheduled trip, which is
       // also the only way to place the prediction on the strip.
       const sequence = presentNumber(stu, 'stopSequence');
       const stopId =
         stu.stopId ?? (sequence !== undefined ? times?.find(t => t.stop_sequence === sequence)?.stop_id : undefined);
+      const stopRelationship = presentNumber(stu, 'scheduleRelationship');
+      if (stopRelationship !== undefined) bump(this.relationships.stopTimes, stopRelationship);
+      // A trip with no scheduled stop_times cannot resolve a sequence-only
+      // update, so those stop time updates are dropped here.
       if (!stopId) continue;
 
       // Every one of these is a proto2 default away from being a lie: an absent
@@ -135,6 +171,8 @@ export class RtIndex {
         departure,
         delay,
         time: departure ?? arrival,
+        scheduleRelationship: stopRelationship,
+        tripScheduleRelationship: tripRelationship,
       });
     }
 
@@ -142,13 +180,17 @@ export class RtIndex {
     for (const p of predictions) push(this.predictionsByStop, p.stop_id, p);
   }
 
-  private ingestVehicle(vehicle: VehiclePosition, feed: GTFSStatic | null): void {
+  private ingestVehicle(vehicle: VehiclePosition, feed: GTFSScheduled | null): void {
     if (vehicle.tripId) push(this.vehiclesByTrip, vehicle.tripId, vehicle);
 
     const routeId = (vehicle.tripId && feed?.trips.get(vehicle.tripId)?.route_id) || vehicle.routeId;
     if (routeId) push(this.vehiclesByRoute, routeId, vehicle);
 
     this.gaps.vehicles++;
+    if (vehicle.scheduleRelationship !== undefined) {
+      this.relationships.reported++;
+      bump(this.relationships.vehicleTrips, vehicle.scheduleRelationship);
+    }
     if (vehicle.currentStopSequence === undefined) {
       this.gaps.missingStopSequence++;
       const source = this.stopSequenceFor(vehicle)?.source;
@@ -218,7 +260,7 @@ export class RtIndex {
    * The `stop_sequence` of the trip's soonest prediction that is not already in
    * the past.
    *
-   * A prediction that carries only `stop_id` has to be looked up in the static
+   * A prediction that carries only `stop_id` has to be looked up in the schedule
    * trip. On a trip that visits a stop twice that lookup takes the first visit —
    * a known approximation, reachable only when the producer gave no sequence.
    */
@@ -241,7 +283,7 @@ export class RtIndex {
   }
 
   /** `current_stop_sequence` is a GTFS `stop_sequence`, never an array index. */
-  private resolveStopId(vehicle: VehiclePosition, feed: GTFSStatic | null): string | undefined {
+  private resolveStopId(vehicle: VehiclePosition, feed: GTFSScheduled | null): string | undefined {
     const current = this.stopSequenceFor(vehicle);
     if (!vehicle.tripId || !current) return undefined;
     return feed?.stopTimesByTrip
@@ -287,7 +329,7 @@ export class RtIndex {
     stopIds: string[],
     routeId: string,
     directionId: string,
-    feed: GTFSStatic | null,
+    feed: GTFSScheduled | null,
     nowSeconds = Date.now() / 1000,
   ): Prediction | undefined {
     let best: Prediction | undefined;
@@ -297,8 +339,8 @@ export class RtIndex {
         const trip = feed?.trips.get(p.trip_id);
         const tripRoute = trip?.route_id ?? p.update.trip?.routeId;
         if (tripRoute !== routeId) continue;
-        // Static wins; the realtime field is a number, so both are stringified.
-        // `''` from static is a known direction (the column was absent for that
+        // The schedule wins; the realtime field is a number, so both are stringified.
+        // `''` from the schedule is a known direction (the column was absent for that
         // trip) and must still match the `''` tab — only null/undefined is unknown.
         const dir = trip?.direction_id ?? p.update.trip?.directionId;
         if (dir === undefined || dir === null || String(dir) !== directionId) continue;
@@ -315,4 +357,8 @@ function push<T>(map: Map<string, T[]>, key: string, value: T): void {
   let list = map.get(key);
   if (!list) map.set(key, (list = []));
   list.push(value);
+}
+
+function bump(map: Map<number, number>, key: number): void {
+  map.set(key, (map.get(key) ?? 0) + 1);
 }

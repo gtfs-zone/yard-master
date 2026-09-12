@@ -1,7 +1,11 @@
 /* @vendored-from test-track:src/gtfs-rt.ts
-   @sha 56f120a
+   @sha e770356
    @status modified
    @changes
+   - `e770356` reaches only the decoder: it captures a `TripDescriptor`'s
+     `schedule_relationship` while building a `VehiclePosition`. Nothing here
+     builds one, so the field is declared on the type in `map-controller.ts`
+     and filled by cafe-car.
    - The poller is gone. `GTFSRealtime`, `decodeFeed`, `readHeader`,
      `deriveVehicleKeys` and the status types they answer with (`FeedStatus`,
      `EndpointStatus`, `RawFeedHeader`, `VehicleIdStrategy`,

@@ -295,7 +295,7 @@ export class Actions {
       fields: [
         {
           name: 'static_feed_url',
-          label: 'Static feed URL',
+          label: 'Scheduled feed URL',
           type: 'url',
           value: feed.static_feed_url,
           autofocus: true,
@@ -305,7 +305,7 @@ export class Actions {
       ],
       validate: (values): Record<string, string> | null => {
         const url = values.static_feed_url.trim();
-        if (!url) return { static_feed_url: 'A linked feed needs a static feed URL' };
+        if (!url) return { static_feed_url: 'A linked feed needs a scheduled feed URL' };
         if (!isHttpUrl(url)) return { static_feed_url: 'Must be a valid http or https URL' };
         return null;
       },
@@ -319,7 +319,7 @@ export class Actions {
 
     this.app.adoptFeedRow(updated);
     notify.success(`Saved ${updated.feed_name}`);
-    this.app.reloadStatic();
+    this.app.reloadScheduled();
   }
 
   /**
@@ -347,7 +347,7 @@ export class Actions {
     // only once schedule-foamer picks the task up; re-reading the row keeps the
     // gap from looking like nothing happened.
     await this.app.refreshFeed();
-    this.app.reloadStatic();
+    this.app.reloadScheduled();
   }
 
   private async replaceSchedule(): Promise<void> {
@@ -374,7 +374,7 @@ export class Actions {
     await this.app.refreshUploads();
     // Both halves re-read the new zip: the server has been asked to, and this
     // browser draws from its own copy.
-    this.app.reloadStatic();
+    this.app.reloadScheduled();
   }
 
   /** The public URL of the schedule, for pasting into whatever consumes it. */
@@ -417,7 +417,7 @@ export class Actions {
     notify.success(`Now serving ${upload.original_filename}`);
     await this.app.refreshFeed();
     await this.app.refreshUploads();
-    this.app.reloadStatic();
+    this.app.reloadScheduled();
   }
 
   /** Forget one upload. The server refuses the one being served. */
@@ -814,7 +814,7 @@ export class Actions {
    * absent, and the server does not check an id against it either.
    */
   private entityFields(): FormField[] {
-    const feed = this.session.staticFeed;
+    const feed = this.session.scheduledFeed;
     const routes = routeOptions(feed);
     const directions = directionOptions(feed);
     return [
@@ -976,7 +976,7 @@ export class Actions {
    * already assigns.
    */
   private assignScopeRoute(tripId: string | null): string | null {
-    const feed = this.session.staticFeed;
+    const feed = this.session.scheduledFeed;
     if (tripId) return feed?.trips.get(tripId)?.route_id ?? null;
     const focus = this.app.focus;
     if (focus.type === 'route') return focus.route_id;
@@ -995,7 +995,7 @@ export class Actions {
    * reloaded under a rule can lose the trip entirely.
    */
   private tripField(routeId: string | null, tripId: string): FormField {
-    const feed = this.session.staticFeed;
+    const feed = this.session.scheduledFeed;
     const options = tripOptions(feed, assignableTrips(this.session, routeId));
     if (tripId && !options.some((o) => o.value === tripId)) {
       const trip = feed?.trips.get(tripId);
@@ -1152,7 +1152,7 @@ export class Actions {
    * exactly what the column wants.
    */
   private tripWindow(tripId: string): { start: string; end: string } | null {
-    const times = this.session.staticFeed?.stopTimesByTrip.get(tripId);
+    const times = this.session.scheduledFeed?.stopTimesByTrip.get(tripId);
     if (!times || times.length === 0) return null;
     const start = parseGtfsClock(times[0].departure_time || times[0].arrival_time || undefined);
     const last = times[times.length - 1];
@@ -1184,7 +1184,7 @@ export class Actions {
     const tripId = presetTrip ?? '';
     const scopeRoute = this.assignScopeRoute(presetTrip);
 
-    const trip = tripId ? this.session.staticFeed?.trips.get(tripId) : undefined;
+    const trip = tripId ? this.session.scheduledFeed?.trips.get(tripId) : undefined;
     const window = tripId ? this.tripWindow(tripId) : null;
     const fields = this.ruleFields(null, tripId, startDate, scopeRoute);
     // Prefilled from the trip's own schedule, which is what the window is
@@ -1365,7 +1365,7 @@ export class Actions {
         .map((a) => a.rule_id)
     );
 
-    const trip = this.session.staticFeed?.trips.get(tripId);
+    const trip = this.session.scheduledFeed?.trips.get(tripId);
     const choices: MenuChoice[] = [];
 
     for (const rule of rules) {

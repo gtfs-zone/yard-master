@@ -1,8 +1,8 @@
 /* @vendored-from test-track:src/modules/route-sequence.ts
-   @sha 7347ce9
+   @sha 9abe974
    @status verbatim */
 /* @vendored-from coloring-book:src/modules/route-sequence.ts
-   @sha 04f48c3
+   @sha dca23b3
    @status verbatim */
 /**
  * The canonical stop order for one direction of one route, plus the mapping
@@ -37,9 +37,9 @@
  * the rest in linear time.
  */
 
-import type { RouteSource, RouteSourceTrip } from './route-source.js';
-import type { StopTimeRef } from '../types/gtfs-flex.js';
-import { shortestCommonSupersequence } from './scs.js';
+import type { RouteSource, RouteSourceTrip } from './route-source';
+import type { StopTimeRef } from '../types/gtfs-flex';
+import { shortestCommonSupersequence } from './scs';
 
 /**
  * One stop_time reference together with which visit it is, within a single
