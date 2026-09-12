@@ -27,3 +27,12 @@ In NEXT_PLAN:
 - If we haven't imported the realtime spec the same way we've imported the scheduled spec, lets do the import
 - Use the same input + spec tooltip style as before, and include dropdowns based on the scheduled feed
 - Vendor shared about modal
+
+### Carried over from the deleted interlocking plan
+
+- Parity review against the old SQLAdmin: feeds, trackers, provisioning,
+  alerts, members, uploads. Needs a logged-in visit to manage.rt.gtfs.zone.
+- cafe-car's `OIDCAuthBackend` and its `sqladmin` dependency are dead code,
+  noted in its `pyproject.toml`.
+- Audit `entity_router.py` for htmx routes orphaned when the SQLAdmin pages
+  that embedded them were deleted. `api/members.py` covers the same ground.
