@@ -1,9 +1,4 @@
 - Assign a trip button: Lets go directly to the form modal and include the trip dropdown there
-- Why do the inputs look different than the inputs in viz and edit? Why don't we have a calendar input like we do in viz and edit?
-- Why are we using helper text instead of putting it in a tooltip like we usually do?
-- Lets reorder the nav bar to match edit and viz
-- Lets use the same calendar svg as edit and viz
-- Lets state the currently logged in user instead of "Account"
 - Lets make the feed page ACTUALLY look like edit and viz. Idk what happened in NEXT_PLAN2.md, but it still looks like a big clustery mess of random things and not like a nice clean transparent UI. If we can, we should add NO NEW custom UI components here and only reuse existing ones.
     - We don't have buttons to random pages in the other apps. We have lists of subitems that are clickable. Every once in a while we can have a link that isn't a direct child. That's ok, but it's an exception. Lets make the heierarchy clear first so we don't have issues like this
     - If something is truly independent and top level, we can put it in the nav
@@ -26,7 +21,6 @@ In NEXT_PLAN:
 - Merge the two top level feed pages (it's confusing to have to click on the feed name to see different info)
 - If we haven't imported the realtime spec the same way we've imported the scheduled spec, lets do the import
 - Use the same input + spec tooltip style as before, and include dropdowns based on the scheduled feed
-- Vendor shared about modal
 
 ### Carried over from the deleted interlocking plan
 
