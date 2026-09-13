@@ -16,8 +16,12 @@
  * Mounted on `document.body`, outside the panel host, so both the links and the
  * New alert button are delegated here rather than by `PanelRenderer`. The links
  * are real `<a href>` elements carrying the target hash, so middle-click and
- * copy-link-address behave; a plain click closes the modal first, since the
- * page behind it is about to change.
+ * copy-link-address behave; a plain click navigates, and the modal comes down
+ * because the page state it navigates to names no modal.
+ *
+ * Hash-routed: `modal-router.ts` is what opens and closes this, so every way in
+ * — the navbar button, a pasted link, the back button — goes through a page
+ * state rather than calling `showAlertsModal` directly.
  */
 
 import type { PageState } from '../types/page-state';
@@ -29,7 +33,7 @@ import type { RenderContext } from './render-utils';
 
 export interface AlertsModalHooks {
   ctx: RenderContext;
-  /** Navigate the panel. Called after the modal has closed. */
+  /** Navigate the panel. The router closes this modal on the way. */
   navigate: (state: PageState) => void;
   /** Run a write, named by the button that asked for it. */
   action: (action: string, arg: string) => void;
@@ -88,7 +92,7 @@ export async function showAlertsModal(hooks: AlertsModalHooks): Promise<void> {
     enterAction: 0,
     escapeAction: 0,
     boxClassName: 'max-w-2xl',
-    onMount: (close) => {
+    onMount: () => {
       root = document.querySelector<HTMLElement>('[data-alerts-root]');
       draw();
 
@@ -104,15 +108,16 @@ export async function showAlertsModal(hooks: AlertsModalHooks): Promise<void> {
           return;
         }
 
-        // A link: the panel's delegation cannot see it from here, so the modal
-        // closes itself and hands the page over.
+        // A link: the panel's delegation cannot see it from here, so the row
+        // hands the page over itself. Nothing here closes the modal — the new
+        // page state carries no modal, so `modal-router.ts` takes this one
+        // down. One path, whether the alert was reached from a row, the back
+        // button or a pasted link.
         const link = source?.closest<HTMLElement>('[data-nav]');
         if (!link) return;
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
         event.preventDefault();
-        const state = JSON.parse(link.dataset.nav!) as PageState;
-        close();
-        hooks.navigate(state);
+        hooks.navigate(JSON.parse(link.dataset.nav!) as PageState);
       });
     },
   });

@@ -34,6 +34,9 @@ import { showShareModal } from './modules/share-modal';
 import { personLabel } from './modules/managed-render';
 import { renderNavbarActions } from './modules/navbar-actions';
 import { NAVBAR_ACTIONS } from './modules/navbar-action-list';
+import { createModalRouter } from './modules/modal-router';
+import { KeyboardShortcuts, describeShortcuts } from './modules/keyboard-shortcuts';
+import { managerShortcuts } from './modules/shortcut-list';
 
 // ─── Shell ────────────────────────────────────────────────────────────────────
 // The navbar's action row is data, not markup. It has to be rendered before
@@ -42,11 +45,6 @@ renderNavbarActions(document.getElementById('navbar-actions')!, NAVBAR_ACTIONS);
 
 const version = document.getElementById('app-version');
 if (version) version.textContent = __APP_VERSION__;
-
-setHelpRuntimeData({ version: __APP_VERSION__ });
-document
-  .getElementById('about-btn')
-  ?.addEventListener('click', () => void showHelpModal('about'));
 
 const appContainer = document.querySelector<HTMLElement>('.app-container')!;
 restorePanelWidth(appContainer);
@@ -118,6 +116,7 @@ userBtn.classList.add('hidden');
 let panel: PanelRenderer;
 
 const appState = new AppState(session, {
+  onStateChange: (state) => modalRouter.sync(state),
   onFeedChange: (feed) => {
     feedSwitcherLabel.textContent = feed ? feed.feed_name : 'Select feed';
     if (!feed) {
@@ -154,6 +153,23 @@ const appState = new AppState(session, {
 // so the same instance answers every button, whichever page emitted it.
 const actions = new Actions(appState, session);
 
+// ─── Modals ───────────────────────────────────────────────────────────────────
+// The two modals worth linking to live in the hash, so the router is what opens
+// and closes them: every other path — a button, a shortcut, Escape, the back
+// button — goes through a page state rather than calling `showModal`. The
+// calendar, sharing and the feed switcher are not routed: the first two hold
+// state the hash does not carry, and the third edits the selection, which is in
+// the hash already.
+const modalRouter = createModalRouter(appState.pages);
+modalRouter.register('alerts', () =>
+  showAlertsModal({
+    ctx: { session, href: (state) => appState.hrefFor(state) },
+    navigate: (state) => appState.setFocus(state),
+    action: (action, arg) => void actions.run(action, arg),
+  }),
+);
+modalRouter.register('help', (modal) => showHelpModal(modal.page));
+
 panel = new PanelRenderer(panelContent, session, {
   navigate: (state) => appState.setFocus(state),
   href: (state) => appState.hrefFor(state),
@@ -177,10 +193,11 @@ mapCtrl.onEmptySelect = () => appState.clearFocus();
 
 // ─── Map search ───────────────────────────────────────────────────────────────
 // Selecting a result is the same event as clicking the object on the map.
-new SearchController<PageState>({
+const searchController = new SearchController<PageState>({
   getEntries: () => buildSearchEntries(session),
   onSelect: (state) => appState.setFocus(state),
-}).initialize();
+});
+searchController.initialize();
 
 // ─── Feed switcher ────────────────────────────────────────────────────────────
 async function openFeedSwitcher(): Promise<void> {
@@ -230,17 +247,29 @@ document.getElementById('share-btn')?.addEventListener('click', () => {
 });
 
 // ─── Alerts ───────────────────────────────────────────────────────────────────
-// The flat list of managed alerts, and the way to write another one. Each row
-// navigates into the panel, after closing.
+// The flat list of managed alerts, and the way to write another one. Routed, so
+// the button names a state and the router opens the modal it names.
 const alertsBadge = document.getElementById('alerts-badge')!;
 
-document.getElementById('alerts-btn')?.addEventListener('click', () => {
-  void showAlertsModal({
-    ctx: { session, href: (state) => appState.hrefFor(state) },
-    navigate: (state) => appState.setFocus(state),
-    action: (action, arg) => void actions.run(action, arg),
-  });
+document
+  .getElementById('alerts-btn')
+  ?.addEventListener('click', () => appState.openModal({ type: 'alerts' }));
+
+// ─── Guide ────────────────────────────────────────────────────────────────────
+document
+  .getElementById('about-btn')
+  ?.addEventListener('click', () => appState.openModal({ type: 'help', page: 'about' }));
+
+// ─── Keyboard shortcuts ───────────────────────────────────────────────────────
+// The guide's shortcut table is built from the same list that is bound, so a
+// command cannot be documented without existing.
+const shortcuts = managerShortcuts({
+  openFeedSwitcher: () => openFeedSwitcher(),
+  openGuide: () => appState.openModal({ type: 'help' }),
+  clearSearch: () => searchController.clearSearch(),
 });
+new KeyboardShortcuts(shortcuts).initialize();
+setHelpRuntimeData({ version: __APP_VERSION__, shortcuts: describeShortcuts(shortcuts) });
 
 /** The badge: the feed's managed alerts, hidden while there are none. */
 function syncAlertsBadge(): void {
@@ -277,6 +306,8 @@ void appState.boot().then(() => {
   // Landing on no feed leaves an empty map with nothing on it to act on, so the
   // switcher opens itself: it lists the feeds worth picking, and offers the new
   // feed form when there are none. Only when boot actually reached the API,
-  // because a failed boot has already said so and a modal would bury it.
-  if (appState.me && !session.feed) void openFeedSwitcher();
+  // because a failed boot has already said so and a modal would bury it, and
+  // only when the link did not ask for a modal of its own, which the router has
+  // already opened and which the switcher would land on top of.
+  if (appState.me && !session.feed && !appState.focus.modal) void openFeedSwitcher();
 });

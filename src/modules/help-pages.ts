@@ -1,10 +1,14 @@
 /* @vendored-from test-track:src/modules/help-pages.ts
-   @sha 868909e
+   @sha ec2f5d0
    @status modified
    @changes
-   - HELP_PAGES is [aboutPage] only: this app has no welcome or map-key page.
-     `868909e` added a direction-of-travel row to the map-key page, so there
-     is nothing here for it to land in.
+   - HELP_PAGES is [aboutPage, shortcutsPage]: this app has no welcome or
+     map-key page. `868909e` added a direction-of-travel row to the map-key
+     page, so there is nothing here for it to land in.
+   - The Keyboard Shortcuts page is upstream's, and so are
+     `buildShortcutsTable` and the `shortcuts` half of `setHelpRuntimeData`.
+     They are fed from this app's own `shortcut-list.ts` through
+     `describeShortcuts()`, so a command cannot be documented without existing.
    - `AboutApp` is yard-master's own, carried over from the old
      `about-modal.ts`: it says plainly that an uploaded schedule is stored and
      published, and names viz.rt.gtfs.zone as the sibling app.
@@ -97,13 +101,38 @@ function renderResourcesSection(): string {
 }
 
 /**
- * Version data isn't known when this module loads (it comes from
- * `__APP_VERSION__`), so `index.ts` pushes it in once during boot.
+ * Version and keyboard-shortcuts data aren't known when this module loads
+ * (they come from `__APP_VERSION__` and the app's own command list), so
+ * `index.ts` pushes them in once during boot.
  */
-let helpRuntimeData: { version: string } = { version: '' };
+let helpRuntimeData: {
+  version: string;
+  shortcuts: Array<{ key: string; description: string }>;
+} = { version: '', shortcuts: [] };
 
-export function setHelpRuntimeData(data: { version: string }): void {
+export function setHelpRuntimeData(data: {
+  version: string;
+  shortcuts: Array<{ key: string; description: string }>;
+}): void {
   helpRuntimeData = data;
+}
+
+function buildShortcutsTable(shortcuts: Array<{ key: string; description: string }>): string {
+  const rows = shortcuts
+    .map((s) => {
+      const keyHtml = s.key
+        .split('+')
+        .map((token) => `<kbd class="kbd kbd-xs">${token}</kbd>`)
+        .join('+');
+      return `<tr><td class="whitespace-nowrap">${keyHtml}</td><td>${s.description}</td></tr>`;
+    })
+    .join('');
+  return `
+    <table class="table table-xs w-full">
+      <thead><tr><th>Key</th><th>Action</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
 }
 
 const aboutPage: HelpPage = {
@@ -121,7 +150,15 @@ const aboutPage: HelpPage = {
     ].join('\n'),
 };
 
-export const HELP_PAGES: HelpPage[] = [aboutPage];
+const shortcutsPage: HelpPage = {
+  id: 'shortcuts',
+  label: 'Keyboard Shortcuts',
+  group: 'Reference',
+  title: 'Using keyboard shortcuts',
+  render: () => buildShortcutsTable(helpRuntimeData.shortcuts),
+};
+
+export const HELP_PAGES: HelpPage[] = [aboutPage, shortcutsPage];
 
 export function getHelpPage(id: string): HelpPage | undefined {
   return HELP_PAGES.find((page) => page.id === id);

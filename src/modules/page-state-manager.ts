@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/page-state-manager.ts
-   @sha e1dbca4
+   @sha ec2f5d0
    @status modified
    @changes
    - `pageStateToURL` / `urlToPageState` rewritten for yard-master's six
@@ -15,7 +15,17 @@
      without a migration.
    - Added `syncHash()`. `adoptState` is deliberately silent, but a focus
      restored from a link still has to survive the feed params being written
-     around it, and this module is the only thing allowed to touch the hash. */
+     around it, and this module is the only thing allowed to touch the hash.
+   - The modal dimension is taken: `parseModalParams`, `clearModal`, the
+     `modal_*` hash params and the modal-surviving home fallback. `clearModal`
+     is async so the class satisfies `modal-router.ts`'s `ModalHost` unchanged,
+     even though `setPageState` here is synchronous. The modal params are
+     namespaced, so they cannot collide with the feed params `buildHash` merges
+     into the same hash.
+   - Because the codec here switches on an explicit `type` rather than sniffing
+     which object key is present, every one of `urlToPageState`'s returns is
+     wrapped in `withModal`, the fallbacks to home included. That is what makes
+     a hash naming only a modal open it over home. */
 /* @vendored-from coloring-book:src/modules/page-state-manager.ts
    @sha a4b5ee1
    @status modified
@@ -39,12 +49,14 @@
      data for. */
 
 import type {
+  ModalState,
+  ModalType,
   NavigationEvent,
   PageState,
   PageStateManagerConfig,
   StateValidator,
 } from '../types/page-state';
-import { isPageState } from '../types/page-state';
+import { MODAL_TYPES, isPageState } from '../types/page-state';
 import type { BreadcrumbItem } from './breadcrumb-trail';
 
 const MAX_NAVIGATION_HISTORY = 50;
@@ -190,7 +202,8 @@ export class PageStateManager {
    */
   adoptState(state: PageState): void {
     if (state.type !== 'home' && this.stateValidator && !this.stateValidator(state)) {
-      this.currentState = { type: 'home' };
+      // The modal survives: it does not depend on the object that is missing.
+      this.currentState = { type: 'home', ...(state.modal && { modal: state.modal }) };
       return;
     }
     this.currentState = { ...state };
@@ -229,6 +242,17 @@ export class PageStateManager {
         break;
     }
 
+    // The modal rides on top of whatever page is beneath it, home included.
+    // Its params are prefixed so they cannot collide with the page's or with
+    // the feed params `buildHash` merges in.
+    const modal = pageState.modal;
+    if (modal) {
+      params.set('modal', modal.type);
+      if (modal.type === 'help' && modal.page) {
+        params.set('modal_page', modal.page);
+      }
+    }
+
     return params.toString();
   }
 
@@ -239,39 +263,85 @@ export class PageStateManager {
    * producing a state no page can render. A hash naming a retired variant —
    * the list pages, `service`, `assignments`, `managers`, `feed`, `tree`,
    * `people` — lands there too, so no migration is needed.
+   *
+   * The modal is read separately and carried onto whichever page results, the
+   * home fallbacks included: a modal names no object, so nothing the page half
+   * fails to resolve can invalidate it.
    */
   urlToPageState(hash: string): PageState {
     const params = new URLSearchParams(hash);
     const get = (key: string) => params.get(key) ?? undefined;
+    const modal = this.parseModalParams(params);
+    const withModal = (state: PageState): PageState => (modal ? { ...state, modal } : state);
 
     switch (params.get('type')) {
       case 'tracker': {
         const tracker_id = get('tracker');
-        return tracker_id === undefined ? { type: 'home' } : { type: 'tracker', tracker_id };
+        return withModal(
+          tracker_id === undefined ? { type: 'home' } : { type: 'tracker', tracker_id },
+        );
       }
       case 'alert': {
         const alert_id = get('alert');
-        return alert_id === undefined ? { type: 'home' } : { type: 'alert', alert_id };
+        return withModal(alert_id === undefined ? { type: 'home' } : { type: 'alert', alert_id });
       }
       case 'route': {
         const route_id = get('route');
-        if (route_id === undefined) return { type: 'home' };
+        if (route_id === undefined) return withModal({ type: 'home' });
         const direction_id = get('dir');
-        return { type: 'route', route_id, ...(direction_id !== undefined && { direction_id }) };
+        return withModal({
+          type: 'route',
+          route_id,
+          ...(direction_id !== undefined && { direction_id }),
+        });
       }
       case 'stop': {
         const stop_id = get('stop');
-        return stop_id === undefined ? { type: 'home' } : { type: 'stop', stop_id };
+        return withModal(stop_id === undefined ? { type: 'home' } : { type: 'stop', stop_id });
       }
       case 'trip': {
         const trip_id = get('trip');
-        if (trip_id === undefined) return { type: 'home' };
+        if (trip_id === undefined) return withModal({ type: 'home' });
         const route_id = get('route');
-        return { type: 'trip', trip_id, ...(route_id !== undefined && { route_id }) };
+        return withModal({ type: 'trip', trip_id, ...(route_id !== undefined && { route_id }) });
       }
       default:
-        return { type: 'home' };
+        return withModal({ type: 'home' });
     }
+  }
+
+  /**
+   * Read the modal dimension out of a parsed hash. An unknown modal name is
+   * dropped rather than throwing: the hash is user-editable.
+   */
+  private parseModalParams(params: URLSearchParams): ModalState | null {
+    const type = params.get('modal');
+    if (type === null) return null;
+    if (!MODAL_TYPES.includes(type as ModalType)) {
+      console.warn(`[PageStateManager] unknown modal in hash: ${type}`);
+      return null;
+    }
+    if (type === 'help') {
+      const page = params.get('modal_page');
+      return { type: 'help', ...(page !== null && { page }) };
+    }
+    return { type: 'alerts' };
+  }
+
+  /**
+   * Drop the modal from the current state, leaving the page beneath it. A
+   * no-op when no modal is open, so a modal that navigated away before closing
+   * does not bounce the page.
+   *
+   * Async only so the class satisfies `modal-router.ts`'s `ModalHost`; nothing
+   * here waits on anything.
+   */
+  async clearModal(): Promise<void> {
+    const current = this.getPageState();
+    if (!current.modal) return;
+    const rest = { ...current };
+    delete rest.modal;
+    this.setPageState(rest as PageState);
   }
 
   /** The full hash for a state, feed params first so links read consistently. */
@@ -307,7 +377,7 @@ export class PageStateManager {
 
     if (newState.type !== 'home' && this.stateValidator && !this.stateValidator(newState)) {
       console.warn('[PageStateManager] hashchange: object not in feed, falling back to home');
-      newState = { type: 'home' };
+      newState = { type: 'home', ...(newState.modal && { modal: newState.modal }) };
     }
 
     const navigationEvent: NavigationEvent = {
