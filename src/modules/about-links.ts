@@ -1,8 +1,8 @@
 /* @vendored-from test-track:src/modules/about-links.ts
-   @sha bf5cc8c
+   @sha 615a531
    @status verbatim */
 /* @vendored-from coloring-book:src/modules/about-links.ts
-   @sha 1c16f14
+   @sha 9673099
    @status verbatim */
 // The off-site destinations both gtfs.zone apps name in their About modal, and
 // the blocks that render them. Each app supplies its own identity through
@@ -12,6 +12,7 @@
 const SITE_URL = 'https://gtfs.zone';
 const MANAGER_URL = 'https://manage.rt.gtfs.zone';
 const FORGE_URL = 'https://git.kcfam.us/gtfs.zone';
+const GITHUB_URL = 'https://github.com/gtfs-zone';
 const CONTACT_EMAIL = 'inquiry@gtfs.zone';
 
 export interface AboutApp {
@@ -25,7 +26,7 @@ export interface AboutApp {
   blurbFooter?: string;
   /** Subject line the contact link opens with. */
   contactSubject: string;
-  /** Forgejo repo name under gtfs.zone. */
+  /** Repo name, the same on the Forgejo origin and the GitHub mirror. */
   repo: string;
   /** The other app, linked so each modal points at its sibling. */
   sibling: { name: string; href: string; note: string };
@@ -112,7 +113,8 @@ export function renderFeedbackSection(app: AboutApp): string {
     divider('Feedback') +
     list([
       `${link(mailto, CONTACT_EMAIL)}: questions, feed requests, anything else`,
-      `${link(`${FORGE_URL}/${app.repo}/issues/new`, 'File an issue')}: bug reports and feature requests (needs a git.kcfam.us account)`,
+      `${link(`${GITHUB_URL}/${app.repo}/issues/new`, 'File an issue on GitHub')}: bug reports and feature requests`,
+      `${link(`${FORGE_URL}/${app.repo}/issues/new`, 'File an issue on Forgejo')}: the same, on the primary forge (needs a git.kcfam.us account)`,
     ])
   );
 }

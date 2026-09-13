@@ -33,11 +33,12 @@ import { alertsBadgeCount, showAlertsModal } from './modules/alerts-modal';
 import { showShareModal } from './modules/share-modal';
 import { personLabel } from './modules/managed-render';
 import { renderNavbarActions } from './modules/navbar-actions';
+import { NAVBAR_ACTIONS } from './modules/navbar-action-list';
 
 // ─── Shell ────────────────────────────────────────────────────────────────────
 // The navbar's action row is data, not markup. It has to be rendered before
 // anything below looks a control up by id.
-renderNavbarActions(document.getElementById('navbar-actions')!);
+renderNavbarActions(document.getElementById('navbar-actions')!, NAVBAR_ACTIONS);
 
 const version = document.getElementById('app-version');
 if (version) version.textContent = __APP_VERSION__;
@@ -107,7 +108,10 @@ session.addEventListener('vehicles', showVehicles);
 const panelContent = document.getElementById('panel-content')!;
 const feedSwitcherBtn = document.getElementById('feed-switcher-btn') as HTMLButtonElement;
 const feedSwitcherLabel = document.getElementById('feed-switcher-label')!;
-const userBtn = document.getElementById('user-btn') as HTMLAnchorElement;
+const userBtn = document.getElementById('user-btn') as HTMLButtonElement;
+const userLabel = document.getElementById('user-label')!;
+// Nothing to send anyone to until boot has read /api/me.
+userBtn.classList.add('hidden');
 
 // Declared before AppState so the focus hook can name it; the hooks on both
 // sides are only ever called after this block has run.
@@ -251,8 +255,8 @@ session.addEventListener('change', syncAlertsBadge);
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 void appState.boot().then(() => {
   // Keycloak's Account Console is where somebody links another login provider.
-  // A deployment without one has no page to send them to, so the link goes away
-  // rather than 404ing.
+  // A deployment without one has no page to send them to, so the control goes
+  // away rather than 404ing.
   const me = appState.me;
   const url = me?.account_url;
   if (me && url) {
@@ -260,9 +264,11 @@ void appState.boot().then(() => {
     // resort is the surrogate user id, which says nothing to the person
     // reading it, so the navbar falls back to the generic word instead.
     const label = me.display_name || me.email ? personLabel(me) : 'Account';
-    userBtn.textContent = label;
+    userLabel.textContent = label;
     userBtn.setAttribute('aria-label', label);
-    userBtn.href = url;
+    userBtn.addEventListener('click', () => {
+      window.open(url, '_blank', 'noopener');
+    });
     userBtn.classList.remove('hidden');
   } else {
     userBtn.classList.add('hidden');
