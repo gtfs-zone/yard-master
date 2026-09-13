@@ -5,6 +5,11 @@
  * The panel itself is `PanelRenderer`, which owns its own re-rendering off the
  * session's events. Everything here does is tell it which page to show.
  */
+import {
+  renderAutoZoomControl,
+  syncAutoZoomControl,
+  wireAutoZoomControl,
+} from './modules/auto-zoom';
 import { MapController } from './map-controller';
 import type { GTFSScheduled } from './gtfs-scheduled';
 import type { PageState } from './types/page-state';
@@ -62,6 +67,12 @@ mapCtrl.initialize('map');
 themeController.onThemeChange(() => mapCtrl.refreshAccentColor());
 
 new PanelResizer(appContainer, mapCtrl);
+
+// The auto-zoom toggle. Rendered before it is wired, since the render replaces
+// the mount point's contents.
+document.getElementById('auto-zoom-mount')!.innerHTML = renderAutoZoomControl();
+syncAutoZoomControl(mapCtrl.isAutoZoomEnabled());
+wireAutoZoomControl(mapCtrl.getAutoZoom());
 
 const rightPanel = document.getElementById('right-panel')!;
 const bottomSheet = new BottomSheetController(rightPanel);

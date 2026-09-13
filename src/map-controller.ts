@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/map-controller.ts
-   @sha bac60b6
+   @sha dc25c3a
    @status modified
    @changes
    - The `vehicle` PageState variant became `tracker`, keyed by `Tracker.id`. The
@@ -22,13 +22,19 @@
      cannot answer "which of these is this tracker's".
    - The shape/stops render toggle is kept: `BasemapControl` is held on a field
      and wired to `LayerManager.setShapeMode`. Upstream dropped the control, so
-     this repo's `basemap-control.ts` keeps it too. */
+     this repo's `basemap-control.ts` keeps it too.
+   - Two extra camera moves go through `AutoZoom`, both of them focus kinds
+     upstream does not have: the `trip` case's fit and `showTrips`'s fit for a
+     whole assigned day. Every gate upstream has is gated the same way here, and
+     the two ungated moves are ungated here too — `fitFeed` and the follow ease
+     in `showVehicles`, which is upstream's vehicle follow. */
 import maplibregl from 'maplibre-gl';
 import { CONFIG } from './config';
 import type { GTFSScheduled } from './gtfs-scheduled';
 import type { PageState } from './types/page-state';
 import { BasemapControl, initialMapStyle } from './modules/basemap-control';
 import type { MapAppearance } from './modules/basemap-control';
+import { AutoZoom } from './modules/auto-zoom';
 import { LayerManager } from './modules/layer-manager';
 import type { MapDataIssues } from './modules/layer-manager';
 import { STOP_FOCUS_HALO_LAYER } from './modules/stop-layer-style';
@@ -206,6 +212,19 @@ export class MapController {
   private positions: VehiclePosition[] = [];
 
   /**
+   * The focus the camera is currently showing. Kept so the auto-zoom refit can
+   * re-run the camera move for it the moment the toggle goes back on.
+   */
+  private currentFocus: PageState = { type: 'home' };
+
+  /**
+   * Navigation-driven camera moves are suppressed while this is off. The feed
+   * fit and the follow ease bypass it deliberately: see `fitFeed` and
+   * `showVehicles`.
+   */
+  private autoZoom = new AutoZoom(() => this.focus(this.currentFocus));
+
+  /**
    * The drawn trip geometry, held so it can be re-added after a `setStyle`.
    * Empty when nothing is focused, or when nothing focused has a drawable path.
    *
@@ -302,6 +321,14 @@ export class MapController {
     }
   }
 
+  getAutoZoom(): AutoZoom {
+    return this.autoZoom;
+  }
+
+  isAutoZoomEnabled(): boolean {
+    return this.autoZoom.isEnabled();
+  }
+
   /** Feed problems the map found, for the status page. */
   get issues(): MapDataIssues {
     return this.layers.issues;
@@ -352,7 +379,9 @@ export class MapController {
       this.layers.setVehicles(positions);
       // Follow: re-centre on the followed tracker's new position. If it has
       // stopped reporting, leave the camera where it is — the tracker page
-      // says so in words rather than the map lying with a stale dot.
+      // says so in words rather than the map lying with a stale dot. Ungated by
+      // auto-zoom, matching test-track's vehicle follow: pressing Follow is a
+      // request for camera movement, not a navigation.
       if (this.following) {
         const v = this.trackerVehicle(this.following);
         if (v) {
@@ -395,6 +424,9 @@ export class MapController {
    *
    * Instant, with no duration: on the boot path a deep link's focus ease runs
    * right after this and would visibly interrupt an animated fit.
+   *
+   * Ungated by auto-zoom, matching coloring-book's feed-load exemption: a
+   * freshly loaded feed has to frame itself or the map opens on nothing.
    */
   private fitFeed(): void {
     const bounds = this.layers.stopsBounds();
@@ -421,6 +453,7 @@ export class MapController {
    * focus change, including one restored from a link.
    */
   focus(state: PageState): void {
+    this.currentFocus = state;
     this.whenLoaded(() => this.applyFocus(state));
   }
 
@@ -457,7 +490,9 @@ export class MapController {
         // route frames that route.
         const bounds = this.layers.stopsBounds();
         if (bounds) {
-          this.map.fitBounds(bounds, {
+          // AutoZoom takes a real LngLatBounds; the layer manager hands back
+          // the corner tuple.
+          this.autoZoom.fitBounds(this.map, new maplibregl.LngLatBounds(bounds), {
             padding: this.padding(),
             duration: CONFIG.FOCUS_BOUNDS_DURATION,
             essential: true,
@@ -484,7 +519,9 @@ export class MapController {
         this.layers.setFocus(null);
         const bounds = boundsOf(path);
         if (bounds) {
-          this.map.fitBounds(bounds, {
+          // AutoZoom takes a real LngLatBounds; boundsOf hands back the corner
+          // tuple.
+          this.autoZoom.fitBounds(this.map, new maplibregl.LngLatBounds(bounds), {
             padding: this.padding(),
             maxZoom: 15,
             duration: CONFIG.FOCUS_BOUNDS_DURATION,
@@ -499,7 +536,9 @@ export class MapController {
         this.layers.setFocus({ kind: 'route', id: state.route_id });
         const bounds = this.layers.routeBounds(state.route_id);
         if (bounds) {
-          this.map.fitBounds(bounds, {
+          // AutoZoom takes a real LngLatBounds; the layer manager hands back
+          // the corner tuple.
+          this.autoZoom.fitBounds(this.map, new maplibregl.LngLatBounds(bounds), {
             padding: this.padding(),
             maxZoom: 15,
             duration: CONFIG.FOCUS_BOUNDS_DURATION,
@@ -583,7 +622,9 @@ export class MapController {
 
       const bounds = boundsOf(this.tripShapes.flat());
       if (bounds) {
-        this.map.fitBounds(bounds, {
+        // AutoZoom takes a real LngLatBounds; boundsOf hands back the corner
+        // tuple.
+        this.autoZoom.fitBounds(this.map, new maplibregl.LngLatBounds(bounds), {
           padding: this.padding(),
           maxZoom: 15,
           duration: CONFIG.FOCUS_BOUNDS_DURATION,
@@ -643,13 +684,13 @@ export class MapController {
   }
 
   /**
-   * Ease to a point, always. Focusing something moves the camera to it — unlike
-   * the earlier "already visible" bail-out, which left the camera where it was
-   * and made a panel click feel like it did nothing.
+   * Ease to a point whenever auto-zoom allows it. Focusing something moves the
+   * camera to it — unlike the earlier "already visible" bail-out, which left the
+   * camera where it was and made a panel click feel like it did nothing.
    */
   private easeToPoint(point: [number, number] | null): void {
     if (!point) return;
-    this.map.easeTo({
+    this.autoZoom.easeTo(this.map, {
       center: point,
       zoom: Math.max(this.map.getZoom(), CONFIG.STOP_FOCUS_ZOOM),
       padding: { top: 0, left: 0, right: 0, bottom: this.bottomPadding },
