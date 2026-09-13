@@ -10,9 +10,7 @@
    - A vehicle feature carries `tracker_id` beside `vehicle_id`, and a vehicle
      hit returns it as `FocusTarget.trackerId`. `vehicle_id` is cafe-car's
      composite key, which addresses no tracker; the surrogate is what a page and
-     an API call are keyed by.
-   - `setShapeMode` and the shape/stops route geometry stay, with
-     `basemap-control.ts`'s toggle. Upstream draws every route from its shape. */
+     an API call are keyed by. */
 /* @vendored-from coloring-book:src/modules/layer-manager.ts
    @sha 0d38e50
    @status adopted
@@ -52,7 +50,6 @@ import type {
 import { CONFIG } from '../config';
 import type { GTFSScheduled } from '../gtfs-scheduled';
 import type { VehiclePosition } from '../map-controller';
-import type { ShapeMode } from './basemap-control';
 import { routeSortKey } from './route-sort';
 import { casingColor } from '../utils/route-colors';
 import { clearThemeColorCache, resolveThemeColor } from '../utils/theme-color';
@@ -222,9 +219,8 @@ const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: 
 export class LayerManager {
   private map: MapLibreMap;
   private feed: GTFSScheduled | null = null;
-  private shapeMode: ShapeMode = 'shapes';
 
-  /** Built once per feed / shape-mode change and re-used on style rebuilds. */
+  /** Built once per feed and re-used on style rebuilds. */
   private stopsData: GeoJSON.FeatureCollection = EMPTY;
   private routesData: GeoJSON.FeatureCollection = EMPTY;
   private vehiclesData: GeoJSON.FeatureCollection = EMPTY;
@@ -301,13 +297,6 @@ export class LayerManager {
     // `focused`/`onRoute` cannot survive into the new feed.
     this.hoveredStopId = null;
     this.setFocus(null);
-  }
-
-  setShapeMode(mode: ShapeMode): void {
-    if (this.shapeMode === mode) return;
-    this.shapeMode = mode;
-    this.routesData = this.feed ? this.buildRoutes(this.feed) : EMPTY;
-    this.pushData(ROUTES_SOURCE, this.routesData);
   }
 
   setVehicles(positions: VehiclePosition[]): void {
@@ -1040,7 +1029,7 @@ export class LayerManager {
       const seen = new Set<string>();
 
       for (const trip of trips) {
-        if (this.shapeMode === 'shapes' && trip.shape_id) {
+        if (trip.shape_id) {
           if (seen.has(`shape:${trip.shape_id}`)) continue;
           const coords = feed.shapes.get(trip.shape_id);
           if (coords && coords.length >= 2) {

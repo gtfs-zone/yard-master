@@ -1,11 +1,6 @@
 /* @vendored-from test-track:src/modules/basemap-control.ts
    @sha bac60b6
-   @status modified
-   @changes
-   - `ShapeToggleControl` is kept, with `MapAppearance.shapeMode`,
-     `onRenderModeChange` and `getShapeMode`. Upstream dropped the control when
-     coloring-book did; `layer-manager.ts` here still draws a route either from
-     its shape or stop-to-stop, and `map-controller.ts` still persists the mode. */
+   @status verbatim */
 /* @vendored-from coloring-book:src/modules/basemap-control.ts
    @sha 058d254
    @status verbatim */
@@ -16,17 +11,13 @@
 import { Map as MapLibreMap, StyleSpecification } from 'maplibre-gl';
 import { basemapStyles, getBasemapStyle } from './basemap-styles';
 
-export type ShapeMode = 'shapes' | 'stops';
-
 export interface MapAppearance {
   basemap: string;
-  shapeMode: ShapeMode;
 }
 
 export interface BasemapControlOptions {
   initial?: Partial<MapAppearance>;
-  onRenderModeChange?: (mode: ShapeMode) => void;
-  /** Fired whenever the basemap or the shape mode changes. */
+  /** Fired whenever the basemap changes, so a caller can persist it. */
   onAppearanceChange?: (appearance: MapAppearance) => void;
 }
 
@@ -71,74 +62,10 @@ export function initialMapStyle(
 
 const CONTROL_STYLE_ID = 'basemap-control-styles';
 
-/**
- * Toggle control for switching route render mode between GTFS shapes and
- * straight stop-to-stop lines. Owned by BasemapControl so it survives
- * basemap rebuilds with its state intact.
- */
-export class ShapeToggleControl {
-  private currentMode: ShapeMode;
-  private readonly onModeChange: (mode: ShapeMode) => void;
-
-  constructor(
-    onModeChange: (mode: ShapeMode) => void,
-    initialMode: ShapeMode = 'shapes'
-  ) {
-    this.onModeChange = onModeChange;
-    this.currentMode = initialMode;
-  }
-
-  public getMode(): ShapeMode {
-    return this.currentMode;
-  }
-
-  public setMode(mode: ShapeMode): void {
-    this.currentMode = mode;
-  }
-
-  /** Returns the HTML string to inject into the BasemapControl container. */
-  public render(): string {
-    const checked = this.currentMode === 'shapes' ? 'checked' : '';
-    return `
-      <label class="swap swap-rotate btn btn-lg btn-circle btn-neutral shape-toggle-swap" title="Toggle route geometry (shapes / straight lines)" aria-label="Toggle route geometry (shapes / straight lines)">
-        <input type="checkbox" class="shape-toggle-input" ${checked} />
-        <!-- Shapes icon: wavy line (shown when checked = shapes mode) -->
-        <svg class="swap-on w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M3 12c1.5-6 3-6 4.5 0s3 6 4.5 0 3-6 4.5 0 3 6 4.5 0"/>
-        </svg>
-        <!-- Stops icon: straight polyline with nodes (shown when unchecked = stops mode) -->
-        <svg class="swap-off w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M4 17l8-10 8 5"/>
-          <circle cx="4" cy="17" r="1.5" fill="currentColor" stroke="none"/>
-          <circle cx="12" cy="7" r="1.5" fill="currentColor" stroke="none"/>
-          <circle cx="20" cy="12" r="1.5" fill="currentColor" stroke="none"/>
-        </svg>
-      </label>
-    `;
-  }
-
-  /** Wire up the change listener after render() HTML has been inserted. */
-  public attachListener(container: HTMLElement): void {
-    const input = container.querySelector(
-      '.shape-toggle-input'
-    ) as HTMLInputElement | null;
-    if (!input) {
-      return;
-    }
-    input.addEventListener('change', (e) => {
-      this.currentMode = (e.target as HTMLInputElement).checked
-        ? 'shapes'
-        : 'stops';
-      this.onModeChange(this.currentMode);
-    });
-  }
-}
-
 export class BasemapControl {
   private map: MapLibreMap;
   private container: HTMLElement | null = null;
   private currentBasemap: string;
-  private shapeToggleControl: ShapeToggleControl | null = null;
   private onAppearanceChange: ((appearance: MapAppearance) => void) | null;
 
   constructor(map: MapLibreMap, options: BasemapControlOptions = {}) {
@@ -146,27 +73,12 @@ export class BasemapControl {
     this.currentBasemap = options.initial?.basemap ?? 'standard';
     this.onAppearanceChange = options.onAppearanceChange ?? null;
 
-    if (options.onRenderModeChange) {
-      const onChange = options.onRenderModeChange;
-      this.shapeToggleControl = new ShapeToggleControl((mode) => {
-        onChange(mode);
-        this.emitAppearance();
-      }, options.initial?.shapeMode ?? 'shapes');
-    }
-
     this.createControl();
     this.applyGlobeProjection();
   }
 
   public getAppearance(): MapAppearance {
-    return {
-      basemap: this.currentBasemap,
-      shapeMode: this.shapeToggleControl?.getMode() ?? 'shapes',
-    };
-  }
-
-  public getShapeMode(): ShapeMode {
-    return this.shapeToggleControl?.getMode() ?? 'shapes';
+    return { basemap: this.currentBasemap };
   }
 
   private emitAppearance(): void {
@@ -253,8 +165,6 @@ export class BasemapControl {
           )
           .join('')}
       </div>
-
-      ${this.shapeToggleControl ? this.shapeToggleControl.render() : ''}
     `;
 
     this.injectStyles();
@@ -292,11 +202,6 @@ export class BasemapControl {
       .basemap-control .fab label {
         pointer-events: auto;
       }
-
-      .basemap-control .shape-toggle-swap {
-        flex-shrink: 0;
-        pointer-events: auto;
-      }
     `;
     document.head.appendChild(style);
   }
@@ -322,11 +227,6 @@ export class BasemapControl {
           }
         });
       });
-
-    // Shape/stops render mode toggle
-    if (this.shapeToggleControl) {
-      this.shapeToggleControl.attachListener(this.container);
-    }
   }
 
   /**

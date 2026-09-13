@@ -20,9 +20,6 @@
    - The last pushed positions are kept here so a `tracker` focus can resolve
      the tracker's vehicles. LayerManager's layer is keyed by `key`, so it
      cannot answer "which of these is this tracker's".
-   - The shape/stops render toggle is kept: `BasemapControl` is held on a field
-     and wired to `LayerManager.setShapeMode`. Upstream dropped the control, so
-     this repo's `basemap-control.ts` keeps it too.
    - Two extra camera moves go through `AutoZoom`, both of them focus kinds
      upstream does not have: the `trip` case's fit and `showTrips`'s fit for a
      whole assigned day. Every gate upstream has is gated the same way here, and
@@ -173,7 +170,6 @@ function boundsOf(path: [number, number][] | null): [[number, number], [number, 
 export class MapController {
   private map!: maplibregl.Map;
   private layers!: LayerManager;
-  private basemap!: BasemapControl;
   private resizeTimeout: ReturnType<typeof setTimeout> | null = null;
   private viewSaveTimeout: ReturnType<typeof setTimeout> | null = null;
   /** Height of the mobile bottom sheet, kept out of the camera's way. */
@@ -282,12 +278,10 @@ export class MapController {
     };
     this.layers.onEmptySelect = () => this.onEmptySelect?.();
 
-    this.basemap = new BasemapControl(this.map, {
+    new BasemapControl(this.map, {
       initial: appearance,
-      onRenderModeChange: mode => this.layers.setShapeMode(mode),
       onAppearanceChange: next => writeStored(CONFIG.MAP_APPEARANCE_KEY, next),
     });
-    this.layers.setShapeMode(this.basemap.getShapeMode());
 
     this.map.once('load', () => {
       this.layers.rebuild();
