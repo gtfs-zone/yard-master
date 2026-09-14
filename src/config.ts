@@ -18,6 +18,13 @@ export const CONFIG = {
   // request cannot carry it, so its presence proves the caller ran our JS.
   CSRF_HEADER: 'X-Yard-Master',
 
+  // oauth2-proxy's sign-out endpoint, same origin like everything else.
+  // Relative on purpose, the way cafe-car's `oauth2_proxy_logout_url` is.
+  // Reached by a full navigation and never by fetch: it answers with a
+  // redirect chain and then HTML, which api-client reads as an expired
+  // session.
+  SIGN_OUT_URL: '/oauth2/sign_out',
+
   // localStorage keys. Per-device preferences, deliberately not in the URL.
   MAP_VIEW_KEY: 'ym.map.view',
   MAP_APPEARANCE_KEY: 'ym.map.appearance',

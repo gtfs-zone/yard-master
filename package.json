@@ -6,8 +6,7 @@
   "type": "module",
   "packageManager": "pnpm@11.20.0",
   "scripts": {
-    "dev": "vite",
-    "start": "vite",
+    "dev": "vite build --watch",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "vendor:check": "tsx scripts/vendor-check.ts",

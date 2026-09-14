@@ -65,9 +65,8 @@ export const NAVBAR_ACTIONS: NavbarAction[] = [
     kind: 'labeled',
     id: 'user-btn',
     // The signed-in person, labelled with their own name or address at boot.
-    // Starts hidden and opens Keycloak's Account Console in a new tab, like
-    // cafe-car's own account page: the console is a different origin with no
-    // link back, so navigating there in this tab strands the map.
+    // Starts hidden and opens the account modal, which holds the link out to
+    // Keycloak's Account Console and sign-out.
     label: 'Account',
     labelId: 'user-label',
     icon: renderLocalIcon(USER_PATH, 'h-4 w-4'),

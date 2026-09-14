@@ -10,7 +10,7 @@ authenticated JSON API. Replaces cafe-car's SQLAdmin admin interface.
 
 ```bash
 pnpm install
-pnpm dev          # :8091, proxies /api to a local cafe-car admin app on :8001
+pnpm dev          # watch build into dist/; there is no vite dev server
 pnpm typecheck    # the gate before any commit
 pnpm build
 pnpm vendor:check # diff vendored files against test-track
@@ -81,10 +81,14 @@ form; whichever is used decides what the feed is.
   coloring-book at `modified`: the cell shape and its scrolling chip stack are
   coloring-book's, the chips themselves, the `FeedSession` data source and the
   timeline half are this repo's own. See `VENDORED.md`.
-- Anything auth-shaped is verified at music-student's `:4180`, not at vite's
-  `:8091`. Session expiry, the cookie, the CSRF header on a write and SSE
-  through the proxy only exist behind the real oauth2-proxy; the dev proxy
-  forges headers and cannot fail the way production does.
+- music-student's `:4180` is the only local door: there is no vite dev server
+  and no dev proxy, and `pnpm dev` is a watch build into the `dist/` that stack
+  bind-mounts. Session expiry, the cookie, the CSRF header on a write, SSE
+  through the proxy and signing out only exist behind the real oauth2-proxy,
+  and a server forging the headers cannot fail the way production does.
+- Signing out is a full navigation to `CONFIG.SIGN_OUT_URL`
+  (`/oauth2/sign_out`), never a fetch: the endpoint answers with a redirect
+  chain ending in HTML, which `api-client.ts` reads as an expired session.
 
 ## Related Repos
 

@@ -13,7 +13,7 @@ Replaces cafe-car's SQLAdmin interface.
 
 ```bash
 pnpm install
-pnpm dev          # :8091, proxies /api to a local cafe-car admin app on :8001
+pnpm dev          # watch build into dist/, which the :4180 stack serves
 pnpm typecheck
 pnpm build
 pnpm vendor:check # diff vendored files against coloring-book / test-track
@@ -22,24 +22,23 @@ pnpm check-alert-enums # hold the alert enums to cafe-car's alert_enums.py
 pnpm check             # typecheck plus both of the above
 ```
 
-## Two local doors
+## One local door
 
-`pnpm dev` on :8091 is the fast one: HMR, and vite forges the proxy headers
-oauth2-proxy would set. It looks alice's real Keycloak subject up from the
-music-student stack so it lands on the same account a real login does; without
-that stack running it falls back to a literal and says so.
-
-The honest one is the music-student stack's `http://localhost:4180`, where a
-production build of this app is served by nginx behind the real oauth2-proxy and
-`/api` reaches cafe-car on the same origin. Build into the `dist/` it
-bind-mounts:
+The music-student stack's `http://localhost:4180`, where a production build of
+this app is served by nginx behind the real oauth2-proxy and `/api` reaches
+cafe-car on the same origin. Build into the `dist/` it bind-mounts:
 
 ```bash
 VITE_RT_BASE=http://localhost:8000 pnpm build --watch
 ```
 
-Anything auth-shaped is only real there: session expiry, the cookie, the CSRF
-header on a write, SSE staying open through the proxy. Take :8091's verdict on
-those with suspicion.
+There is no vite dev server. Anything auth-shaped is only real behind the
+proxy: session expiry, the cookie, the CSRF header on a write, SSE staying open,
+signing out. A server forging the `X-Auth-Request-*` headers cannot fail the way
+production does, so it would only ever hand out a verdict worth ignoring.
+
+`VITE_RT_BASE` is what points a path-only feed URL at the local feed server. A
+watch build is a production build, so `CONFIG.RT_BASE`'s dev branch never fires
+and without the variable the app resolves against `rt.gtfs.zone`.
 
 See `CURRENT_PLAN.md` for the build-out plan.

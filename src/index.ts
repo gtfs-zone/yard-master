@@ -20,6 +20,7 @@ import { ThemeController } from './modules/theme-controller';
 import { FeedSession } from './modules/feed-session';
 import { AppState } from './modules/app-state';
 import { showFeedSwitcher } from './modules/feed-switcher';
+import { showAccountModal } from './modules/account-modal';
 import { SearchController } from './modules/search-controller';
 import { buildSearchEntries } from './modules/search-entries';
 import { PanelRenderer } from './modules/panel-renderer';
@@ -283,12 +284,10 @@ session.addEventListener('change', syncAlertsBadge);
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 void appState.boot().then(() => {
-  // Keycloak's Account Console is where somebody links another login provider.
-  // A deployment without one has no page to send them to, so the control goes
-  // away rather than 404ing.
+  // The account modal holds the console link and sign-out. It needs a person
+  // to name, so the control appears only once boot has read one.
   const me = appState.me;
-  const url = me?.account_url;
-  if (me && url) {
+  if (me) {
     // Their own name, or the address they signed in with. `personLabel`'s last
     // resort is the surrogate user id, which says nothing to the person
     // reading it, so the navbar falls back to the generic word instead.
@@ -296,7 +295,7 @@ void appState.boot().then(() => {
     userLabel.textContent = label;
     userBtn.setAttribute('aria-label', label);
     userBtn.addEventListener('click', () => {
-      window.open(url, '_blank', 'noopener');
+      void showAccountModal(me);
     });
     userBtn.classList.remove('hidden');
   } else {
