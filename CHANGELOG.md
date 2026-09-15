@@ -1,3 +1,15 @@
+## v0.3.0 (2026-09-16)
+
+### Feat
+
+- **account**: add sign-out, and drop the vite dev server
+- **modals**: hash-route the alerts and help modals, and bind keyboard shortcuts
+
+### Refactor
+
+- consume the 35 shared modules from interlocking
+- **map**: drop the route geometry toggle
+
 ## v0.2.0 (2026-09-14)
 
 ### Feat
