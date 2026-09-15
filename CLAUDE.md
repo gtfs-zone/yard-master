@@ -49,6 +49,21 @@ A feed's schedule is set by one of two buttons on the feed page, *Upload GTFS
 schedule* and *Load schedule from URL*, never by a `source_kind` field in a
 form; whichever is used decides what the feed is.
 
+## Shared modules (`interlocking`)
+
+A third of `src/` is no longer in this repo. The 35 files that were identical in
+all three apps live in the `interlocking` package, a git dependency shipping raw
+TypeScript with no build step. Import them as `interlocking/modules/...`,
+`interlocking/utils/...` and `interlocking/types/gtfs-flex`; `tsconfig.json`
+`paths` and a `resolve.alias` in `vite.config.ts` both point at
+`node_modules/interlocking/src`.
+
+A shared change is a commit in interlocking, a tag, and a bump in each of the
+three consumers. It is not edited here and `vendor:check` does not cover it.
+
+What is still hand-copied is in `VENDORED.md`, and for that half test-track is
+still the upstream.
+
 ## Rules
 
 - Do NOT use Playwright or any browser automation. The user does visual
@@ -63,11 +78,10 @@ form; whichever is used decides what the feed is.
 - A 302 or non-JSON response to an XHR means the oauth2-proxy session expired.
   Do a full page reload so the browser can follow the redirect chain. Never
   parse it as an error payload.
-- Vendored files carry their banner and a `VENDORED.md` row. test-track is the
-  upstream; `modal-utils.ts` is the one exception and names coloring-book. Do not
-  edit a `verbatim` file: change it upstream and re-vendor, promote it to
-  `modified` with an `@changes` list, or promote it to `adopted` if this repo has
-  taken it over for good.
+- Vendored files carry their banner and a `VENDORED.md` row, and test-track is
+  the upstream for all of them. Do not edit a `verbatim` file: change it
+  upstream and re-vendor, promote it to `modified` with an `@changes` list, or
+  promote it to `adopted` if this repo has taken it over for good.
 - A file taken out of test-track's tree keeps test-track's own banner underneath
   ours. `vendor-check` strips the banner on the local side only, so deleting the
   inner one reports DRIFT.
