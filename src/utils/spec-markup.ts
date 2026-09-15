@@ -1,5 +1,5 @@
 /* @vendored-from coloring-book:src/utils/spec-markup.ts
-   @sha dca23b3
+   @sha 7c69e52
    @status modified
    @changes
    - Image support removed. The three vendored SVG imports and the `SPEC_IMAGES`

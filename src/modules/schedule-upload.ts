@@ -15,7 +15,7 @@
 import { CONFIG } from '../config';
 import type { Feed, GtfsUpload } from '../types/api';
 import { createFeed, uploadSchedule } from './api-client';
-import { formatBytes } from './feed-download';
+import { formatBytes } from 'interlocking/modules/feed-download';
 import type { FormField } from './entity-form';
 import { showEntityForm } from './entity-form';
 import { previewGtfsZip } from './gtfs-zip-preview';

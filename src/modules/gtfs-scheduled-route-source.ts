@@ -1,13 +1,13 @@
 /* @vendored-from test-track:src/modules/gtfs-scheduled-route-source.ts
-   @sha f54ae79
+   @sha f40d80a
    @status verbatim */
 /**
  * `RouteSource` over `GTFSScheduled`. The scheduled feed is loaded once and never
  * mutated, so this needs no invalidation and no adapter-side caching.
  */
 import type { GTFSScheduled } from '../gtfs-scheduled';
-import type { StopTimeRef } from '../types/gtfs-flex';
-import type { RouteSource, RouteSourceTrip, RouteSourceStopTime } from './route-source';
+import type { StopTimeRef } from 'interlocking/types/gtfs-flex';
+import type { RouteSource, RouteSourceTrip, RouteSourceStopTime } from 'interlocking/modules/route-source';
 
 export class GTFSScheduledRouteSource implements RouteSource {
   constructor(private feed: GTFSScheduled) {}

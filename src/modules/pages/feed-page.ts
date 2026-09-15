@@ -36,10 +36,10 @@ import {
   personLabel,
   trackerLiveness,
 } from '../managed-render';
-import { resolveRealtimeUrl } from '../feed-url-resolve';
+import { resolveRealtimeUrl } from 'interlocking/modules/feed-url-resolve';
 import { isHosted, publicScheduleUrl, sourceLabel } from '../feed-source';
-import { formatBytes } from '../feed-download';
-import { routeSortKey } from '../route-sort';
+import { formatBytes } from 'interlocking/modules/feed-download';
+import { routeSortKey } from 'interlocking/modules/route-sort';
 import { assignmentCounts } from '../service-catalog';
 
 /** Where a section heading's `(?)` sends a reader who wants the whole thing. */

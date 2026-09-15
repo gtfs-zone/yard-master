@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/map-controller.ts
-   @sha dc25c3a
+   @sha f40d80a
    @status modified
    @changes
    - The `vehicle` PageState variant became `tracker`, keyed by `Tracker.id`. The
@@ -29,13 +29,13 @@ import maplibregl from 'maplibre-gl';
 import { CONFIG } from './config';
 import type { GTFSScheduled } from './gtfs-scheduled';
 import type { PageState } from './types/page-state';
-import { BasemapControl, initialMapStyle } from './modules/basemap-control';
-import type { MapAppearance } from './modules/basemap-control';
-import { AutoZoom } from './modules/auto-zoom';
+import { BasemapControl, initialMapStyle } from 'interlocking/modules/basemap-control';
+import type { MapAppearance } from 'interlocking/modules/basemap-control';
+import { AutoZoom } from 'interlocking/modules/auto-zoom';
 import { LayerManager } from './modules/layer-manager';
 import type { MapDataIssues } from './modules/layer-manager';
-import { STOP_FOCUS_HALO_LAYER } from './modules/stop-layer-style';
-import { resolveThemeColor } from './utils/theme-color';
+import { STOP_FOCUS_HALO_LAYER } from 'interlocking/modules/stop-layer-style';
+import { resolveThemeColor } from 'interlocking/utils/theme-color';
 
 export interface VehiclePosition {
   /**

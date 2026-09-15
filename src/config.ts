@@ -2,9 +2,10 @@
  * Application-wide configuration constants.
  * All magic numbers live here, import CONFIG rather than inlining literals.
  *
- * The map and realtime blocks are the constants the vendored map stack reads.
- * They came across with those files (see VENDORED.md) and are kept in the same
- * order as test-track's so the two are diffable.
+ * The map and realtime blocks are the constants `interlocking`'s map stack and
+ * the vendored realtime files read. They came across with those files (see
+ * VENDORED.md) and are kept in the same order as test-track's so the two are
+ * diffable.
  */
 export const CONFIG = {
   // Same-origin in every environment. In production Traefik routes
@@ -172,8 +173,8 @@ export const CONFIG = {
 
   // Where a path-only feed URL resolves to. Dev is the music-student stack's
   // cafe-car (`docker-compose.yml`, service `api`); prod is the deployed feed
-  // server. Read by the vendored `feed-url-resolve.ts`, which is shared with
-  // coloring-book and so cannot hardcode either.
+  // server. Read by `interlocking`'s `feed-url-resolve.ts`, which all three
+  // apps share and so cannot hardcode either.
   //
   // The DEV flag alone is not enough: the copy served behind the local
   // oauth2-proxy is a production build, so it would resolve against the real

@@ -15,7 +15,7 @@
  * 3 trackers and 2 alerts" is the sentence that stops the wrong delete.
  */
 
-import { showModal } from './modal-utils';
+import { showModal } from 'interlocking/modules/modal-utils';
 import { escHtml } from './render-utils';
 
 function consequenceList(consequences: string[]): string {

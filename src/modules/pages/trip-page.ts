@@ -21,7 +21,7 @@ import { entityRow, entityRowList, rowSection } from '../entity-row';
 import { actionButton, describeRecurrence, formatWindow } from '../managed-render';
 import { zoneLabel } from '../feed-time';
 import type { Prediction, RtIndex } from '../rt-index';
-import { STRIP_ROW_CLASS } from '../route-strip';
+import { STRIP_ROW_CLASS } from 'interlocking/modules/route-strip';
 import type { RenderContext } from '../render-utils';
 import {
   entityLink,

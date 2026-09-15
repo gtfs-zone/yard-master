@@ -1,11 +1,11 @@
 /* @vendored-from test-track:src/gtfs-scheduled.ts
-   @sha bf5cc8c
+   @sha f40d80a
    @status verbatim */
 import JSZip from 'jszip';
 import Papa from 'papaparse';
-import { splitInnerZipPath } from './modules/feed-url-resolve';
-import { downloadWithProgress } from './modules/feed-download';
-import { routeColor, routeTextColor } from './utils/route-colors';
+import { splitInnerZipPath } from 'interlocking/modules/feed-url-resolve';
+import { downloadWithProgress } from 'interlocking/modules/feed-download';
+import { routeColor, routeTextColor } from 'interlocking/utils/route-colors';
 
 /** Verbatim CSV rows, kept so object pages can dump every column. */
 export type RawRow = Record<string, string>;

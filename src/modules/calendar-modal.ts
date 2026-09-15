@@ -1,5 +1,5 @@
 /* @vendored-from coloring-book:src/modules/calendar-modal.ts
-   @sha dca23b3
+   @sha 7c69e52
    @status modified
    @changes
    - The chips are this repo's: a service chip and an assignment chip, coloured
@@ -41,7 +41,7 @@ import { CONFIG } from '../config';
 import type { Assignment, TrackerRule } from '../types/api';
 import type { PageState } from '../types/page-state';
 import type { FeedSession } from './feed-session';
-import { showModal } from './modal-utils';
+import { showModal } from 'interlocking/modules/modal-utils';
 import { formatWindow } from './managed-render';
 import type { RenderContext } from './render-utils';
 import { escHtml, section } from './render-utils';

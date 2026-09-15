@@ -27,7 +27,7 @@
  */
 
 import { CONFIG } from '../config';
-import { renderTriangleIcon } from './modal-utils';
+import { renderTriangleIcon } from 'interlocking/modules/modal-utils';
 import { escHtml } from './render-utils';
 import {
   addDays,

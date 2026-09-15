@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/breadcrumbs.ts
-   @sha 4ea08e7
+   @sha f40d80a
    @status modified
    @changes
    - The variant set is yard-master's. `vehicle` became `tracker` and resolves
@@ -28,8 +28,8 @@
  */
 
 import type { PageState } from '../types/page-state';
-import type { BreadcrumbItem } from './breadcrumb-trail';
-import { stopTypeLabel } from './breadcrumb-trail';
+import type { BreadcrumbItem } from 'interlocking/modules/breadcrumb-trail';
+import { stopTypeLabel } from 'interlocking/modules/breadcrumb-trail';
 import type { FeedSession } from './feed-session';
 
 /**

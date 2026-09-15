@@ -13,7 +13,7 @@
 import { CONFIG } from '../config';
 import type { Me } from '../types/api';
 import { personLabel } from './managed-render';
-import { showModal, type ModalAction } from './modal-utils';
+import { showModal, type ModalAction } from 'interlocking/modules/modal-utils';
 import { escHtml } from './render-utils';
 
 /** Opens the account modal. Resolves when it closes. */

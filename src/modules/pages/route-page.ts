@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/pages/route-page.ts
-   @sha 3f5d8e2
+   @sha f40d80a
    @status modified
    @changes
    - The `vehicle` PageState variant became `tracker`, keyed by `Tracker.id`,
@@ -35,13 +35,13 @@ import type { Route } from '../../gtfs-scheduled';
 import type { VehiclePosition } from '../../map-controller';
 import type { PageState } from '../../types/page-state';
 import { alertsForRoute, alertsForRouteStop, feedWideAlerts } from '../alerts';
-import { renderTriangleIcon, renderWarningIcon } from '../modal-utils';
+import { renderTriangleIcon, renderWarningIcon } from 'interlocking/modules/modal-utils';
 import { GTFSScheduledRouteSource } from '../gtfs-scheduled-route-source';
-import { routeGraph } from '../route-graph';
+import { routeGraph } from 'interlocking/modules/route-graph';
 import type { RtIndex, VehicleStopSequence } from '../rt-index';
 import type { Prediction } from '../rt-index';
-import type { RouteSequence, StopStats } from '../route-sequence';
-import { directionsForRoute, routeSequence } from '../route-sequence';
+import type { RouteSequence, StopStats } from 'interlocking/modules/route-sequence';
+import { directionsForRoute, routeSequence } from 'interlocking/modules/route-sequence';
 import {
   endpointNote,
   endpointThreshold,
@@ -51,8 +51,8 @@ import {
   railCell,
   rowPaths,
   STRIP_ROW_CLASS,
-} from '../route-strip';
-import type { RowDot } from '../route-strip';
+} from 'interlocking/modules/route-strip';
+import type { RowDot } from 'interlocking/modules/route-strip';
 import type { RenderContext } from '../render-utils';
 import { cappedNote, countBadge, entityRow, entityRowList, rowSection } from '../entity-row';
 import { assignmentCounts, servicesForTrips, weekdaysLabel } from '../service-catalog';

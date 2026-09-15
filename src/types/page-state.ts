@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/types/page-state.ts
-   @sha 4ea08e7
+   @sha f40d80a
    @status modified
    @changes
    - Variants replaced wholesale. yard-master browses a hierarchy neither
@@ -36,9 +36,8 @@
      than stringifying the whole state, so a modal added to a state does not
      depend on key order. `sameLocation` is the location half on its own: it is
      what tells a modal-only navigation from a page change.
-   - `BreadcrumbItem` moved out to `breadcrumb-trail.ts`, vendored from
-     coloring-book; it now carries a `typeLabel` this file has no reason to know
-     about.
+   - `BreadcrumbItem` moved out to `interlocking`'s `breadcrumb-trail.ts`; it
+     now carries a `typeLabel` this file has no reason to know about.
    - `ModalStateOf` follows upstream's drop: `modal-router.ts` narrows an
      opener's argument itself now. */
 

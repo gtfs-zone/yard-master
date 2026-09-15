@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/app-state.ts
-   @sha f1ee0ff
+   @sha f40d80a
    @status modified
    @changes
    - Selection is a feed row from the API, not a `FeedSelection` of URLs, so
@@ -83,7 +83,7 @@ import {
 import { scheduleFetchUrl } from './feed-source';
 import type { ServiceDate } from './service-date';
 import { getMe } from './api-client';
-import { notify } from './notification-system';
+import { notify } from 'interlocking/modules/notification-system';
 import { PageStateManager } from './page-state-manager';
 import { FeedEventStream } from './event-stream';
 
