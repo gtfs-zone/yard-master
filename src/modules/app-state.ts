@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/app-state.ts
-   @sha ec2f5d0
+   @sha f1ee0ff
    @status modified
    @changes
    - Selection is a feed row from the API, not a `FeedSelection` of URLs, so
@@ -11,10 +11,14 @@
    - `selectFeed()` added: it does not await the schedule download, because the
      managed half of the app is usable without it and an unreachable
      `static_feed_url` must not make the tree unusable.
-   - `f9d3e2c`'s `bootSeed` is not taken: it carries a half-filled
-     `FeedSelection` out of `boot()` so the load modal can be seeded with it.
+   - Neither half of upstream's boot-modal machinery is taken. `f9d3e2c`'s
+     `bootSeed` carried a half-filled `FeedSelection` out of `boot()` so the
+     load modal could be seeded with it, and `f1ee0ff` replaced it and `boot()`
+     with `bootRequest()` / `finishBoot()` / `bootEmpty()`, moving the load and
+     its error reporting to `index.ts` so a failed link can reopen the modal.
      There is no such modal and no `FeedSelection` here — a feed is one of your
-     own rows, named in the hash by `feed_name`.
+     own rows, named in the hash by `feed_name` — so `boot()` stays one call
+     that resolves that name and loads it.
    - A pending focus is held rather than resolved once. test-track can decide
      immediately because it awaits the load; here a `route`/`stop`/`trip` link
      cannot resolve until the zip parses, so `applyPendingFocus` runs at each
