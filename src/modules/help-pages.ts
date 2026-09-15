@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/help-pages.ts
-   @sha ec2f5d0
+   @sha 4ea08e7
    @status modified
    @changes
    - HELP_PAGES is [aboutPage, shortcutsPage]: this app has no welcome or
@@ -18,13 +18,16 @@
      this app to itself; the local one names both sibling apps instead. The
      shared Resources block names TransitLand as the source behind a Load menu
      this app does not have, so the local one links the realtime reference
-     this repo's spec is checked against. */
+     this repo's spec is checked against.
+   - `getHelpPage` is dropped with upstream: the viewer looks pages up in the
+     registry it was handed. */
 /**
  * The help page registry: what pages exist, their grouping, and their copy.
  *
  * Rendering lives in `help-modal.ts`. This module is data only.
  */
 
+import { type HelpPageEntry } from './help-modal';
 import {
   renderBlurb,
   renderVersionAndSource,
@@ -34,18 +37,13 @@ import {
 
 export type HelpGroup = 'Getting Started' | 'Reference';
 
-export interface HelpPage {
-  id: string;
-  label: string;
+/** This app's pages, narrowing the viewer's `group` to the groups it has. */
+export interface HelpPage extends HelpPageEntry {
   group: HelpGroup;
-  title: string;
-  render(): string;
-  /**
-   * Marks a page that is auto-shown once at its trigger and afterwards only
-   * reachable from the Guide menu. Pages without it are reference-only.
-   */
-  showOnce?: boolean;
 }
+
+/** The order the viewer's sidebar groups these in. */
+export const HELP_GROUP_ORDER: HelpGroup[] = ['Getting Started', 'Reference'];
 
 /** External anchor, matching the one `about-links` renders. */
 function link(href: string, label: string): string {
@@ -159,7 +157,3 @@ const shortcutsPage: HelpPage = {
 };
 
 export const HELP_PAGES: HelpPage[] = [aboutPage, shortcutsPage];
-
-export function getHelpPage(id: string): HelpPage | undefined {
-  return HELP_PAGES.find((page) => page.id === id);
-}

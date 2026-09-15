@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/page-state-manager.ts
-   @sha f1ee0ff
+   @sha 4ea08e7
    @status modified
    @changes
    - `pageStateToURL` / `urlToPageState` rewritten for yard-master's six
@@ -64,7 +64,7 @@ const MAX_NAVIGATION_HISTORY = 50;
 type NavigationEventHandler = (event: NavigationEvent) => void;
 
 /** Resolves a page state to its breadcrumb trail against the loaded feed. */
-export type BreadcrumbBuilder = (state: PageState) => BreadcrumbItem[];
+export type BreadcrumbBuilder = (state: PageState) => BreadcrumbItem<PageState>[];
 
 /** Single source of truth for what the app is currently looking at. */
 export class PageStateManager {
@@ -140,7 +140,7 @@ export class PageStateManager {
     this.notify(navigationEvent);
   }
 
-  getBreadcrumbs(): BreadcrumbItem[] {
+  getBreadcrumbs(): BreadcrumbItem<PageState>[] {
     if (!this.breadcrumbBuilder) return [];
     try {
       return this.breadcrumbBuilder(this.currentState);

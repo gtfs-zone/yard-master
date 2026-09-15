@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/breadcrumbs.ts
-   @sha df7813b
+   @sha 4ea08e7
    @status modified
    @changes
    - The variant set is yard-master's. `vehicle` became `tracker` and resolves
@@ -41,7 +41,7 @@ function truncate(text: string, max = 40): string {
   return text.length > max ? `${text.slice(0, max - 3)}...` : text;
 }
 
-function home(session: FeedSession): BreadcrumbItem {
+function home(session: FeedSession): BreadcrumbItem<PageState> {
   return {
     typeLabel: 'Feed',
     label: truncate(session.feed?.feed_name ?? 'Feed'),
@@ -133,7 +133,7 @@ function alertParent(session: FeedSession, alertId: string): AlertParent | null 
   return null;
 }
 
-function routeCrumb(session: FeedSession, routeId: string): BreadcrumbItem {
+function routeCrumb(session: FeedSession, routeId: string): BreadcrumbItem<PageState> {
   return {
     typeLabel: 'Route',
     label: truncate(routeLabel(session, routeId)),
@@ -141,7 +141,7 @@ function routeCrumb(session: FeedSession, routeId: string): BreadcrumbItem {
   };
 }
 
-export function buildBreadcrumbs(session: FeedSession, state: PageState): BreadcrumbItem[] {
+export function buildBreadcrumbs(session: FeedSession, state: PageState): BreadcrumbItem<PageState>[] {
   switch (state.type) {
     case 'home':
       return [];

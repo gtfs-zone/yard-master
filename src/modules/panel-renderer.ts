@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/panel-renderer.ts
-   @sha 5570228
+   @sha 4ea08e7
    @status modified
    @changes
    - The session events are yard-master's: `change`, `vehicles`, `assignments`
@@ -70,7 +70,7 @@ export class PanelRenderer {
   private hooks: PanelRendererHooks;
 
   private state: PageState = { type: 'home' };
-  private breadcrumbs: BreadcrumbItem[] = [];
+  private breadcrumbs: BreadcrumbItem<PageState>[] = [];
   private hoveredStopId: string | null = null;
 
   /** Invalidated on every payload event; rebuilt lazily on the next render. */
@@ -120,13 +120,13 @@ export class PanelRenderer {
    * session, so it goes stale whenever an object a crumb names arrives late;
    * this keeps the reader's scroll position, which `show` deliberately does not.
    */
-  setBreadcrumbs(breadcrumbs: BreadcrumbItem[]): void {
+  setBreadcrumbs(breadcrumbs: BreadcrumbItem<PageState>[]): void {
     this.breadcrumbs = breadcrumbs;
     this.queueRender();
   }
 
   /** Render `state`. `home` is the feed itself, so there is always a page. */
-  show(state: PageState, breadcrumbs: BreadcrumbItem[]): void {
+  show(state: PageState, breadcrumbs: BreadcrumbItem<PageState>[]): void {
     this.clearHoveredStop();
     this.state = state;
     this.breadcrumbs = breadcrumbs;

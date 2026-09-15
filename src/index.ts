@@ -12,7 +12,7 @@ import {
 } from './modules/auto-zoom';
 import { MapController } from './map-controller';
 import type { GTFSScheduled } from './gtfs-scheduled';
-import type { PageState } from './types/page-state';
+import type { ModalState, PageState } from './types/page-state';
 import { notify } from './modules/notification-system';
 import { PanelResizer, restorePanelWidth } from './modules/panel-resizer';
 import { BottomSheetController } from './modules/bottom-sheet';
@@ -27,8 +27,12 @@ import { PanelRenderer } from './modules/panel-renderer';
 import { Actions } from './modules/actions';
 import { addDays, startOfWeek, today } from './modules/service-date';
 import { initFieldTooltipPortal } from './utils/tooltip-position';
-import { showHelpModal } from './modules/help-modal';
-import { setHelpRuntimeData } from './modules/help-pages';
+import { setHelpPages, showHelpModal } from './modules/help-modal';
+import {
+  HELP_GROUP_ORDER,
+  HELP_PAGES,
+  setHelpRuntimeData,
+} from './modules/help-pages';
 import { calendarBadgeCount, showCalendarModal } from './modules/calendar-modal';
 import { alertsBadgeCount, showAlertsModal } from './modules/alerts-modal';
 import { showShareModal } from './modules/share-modal';
@@ -161,7 +165,9 @@ const actions = new Actions(appState, session);
 // calendar, sharing and the feed switcher are not routed: the first two hold
 // state the hash does not carry, and the third edits the selection, which is in
 // the hash already.
-const modalRouter = createModalRouter(appState.pages);
+// The viewer needs the registry before the router can open the guide.
+setHelpPages(HELP_PAGES, HELP_GROUP_ORDER);
+const modalRouter = createModalRouter<ModalState>(appState.pages);
 modalRouter.register('alerts', () =>
   showAlertsModal({
     ctx: { session, href: (state) => appState.hrefFor(state) },

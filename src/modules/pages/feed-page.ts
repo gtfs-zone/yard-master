@@ -69,11 +69,11 @@ function docsTooltip(url: string, content: string): string {
  *
  * `resolve` is for the realtime rows alone: those are stored as bare paths so a
  * link works in whichever environment opens it, and only they resolve against
- * `RT_BASE`. A schedule URL is already absolute — whatever its author typed,
+ * the RT base. A schedule URL is already absolute — whatever its author typed,
  * or the one this app publishes — and is shown as it stands.
  */
 function urlRow(label: string, url: string, resolve = false): string {
-  const href = resolve ? resolveRealtimeUrl(url) : url;
+  const href = resolve ? resolveRealtimeUrl(url, CONFIG.RT_BASE) : url;
   return prop(
     label,
     `<a href="${escHtml(href)}" target="_blank" rel="noopener" class="link break-all font-mono text-xs">${escHtml(
@@ -360,9 +360,9 @@ function renderRealtime(feed: Feed): string {
   // deployed viz and a newer one.
   const viz = new URLSearchParams({
     static: publicScheduleUrl(feed) ?? '',
-    rt_vp: resolveRealtimeUrl(feed.vehicle_positions_url),
-    rt_tu: resolveRealtimeUrl(feed.trip_updates_url),
-    rt_al: resolveRealtimeUrl(feed.service_alerts_url),
+    rt_vp: resolveRealtimeUrl(feed.vehicle_positions_url, CONFIG.RT_BASE),
+    rt_tu: resolveRealtimeUrl(feed.trip_updates_url, CONFIG.RT_BASE),
+    rt_al: resolveRealtimeUrl(feed.service_alerts_url, CONFIG.RT_BASE),
   });
 
   return section(

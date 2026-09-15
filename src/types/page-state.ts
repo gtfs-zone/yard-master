@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/types/page-state.ts
-   @sha ec2f5d0
+   @sha 4ea08e7
    @status modified
    @changes
    - Variants replaced wholesale. yard-master browses a hierarchy neither
@@ -38,7 +38,9 @@
      what tells a modal-only navigation from a page change.
    - `BreadcrumbItem` moved out to `breadcrumb-trail.ts`, vendored from
      coloring-book; it now carries a `typeLabel` this file has no reason to know
-     about. */
+     about.
+   - `ModalStateOf` follows upstream's drop: `modal-router.ts` narrows an
+     opener's argument itself now. */
 
 /**
  * Union of every page yard-master can display. Each variant carries the minimal
@@ -70,9 +72,6 @@ export type ModalType = (typeof MODAL_TYPES)[number];
  * page rather than to a separate page state.
  */
 export type ModalState = { type: 'alerts' } | { type: 'help'; page?: string };
-
-/** The modal state shape belonging to one modal type. */
-export type ModalStateOf<T extends ModalType> = Extract<ModalState, { type: T }>;
 
 /** Distributed so that narrowing on `type` still works through the modal field. */
 type WithModal<T> = T extends unknown ? T & { modal?: ModalState } : never;
