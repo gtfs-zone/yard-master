@@ -264,7 +264,7 @@ document
 
 // ─── Guide ────────────────────────────────────────────────────────────────────
 document
-  .getElementById('about-btn')
+  .getElementById('help-btn')
   ?.addEventListener('click', () => appState.openModal({ type: 'help', page: 'about' }));
 
 // ─── Keyboard shortcuts ───────────────────────────────────────────────────────

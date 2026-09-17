@@ -115,5 +115,6 @@ still the upstream.
 | railroad-club | Shared Python library for GTFS types and utilities | https://git.kcfam.us/gtfs.zone/railroad-club |
 | music-student | Orchestration repo for deployments and infra | https://git.kcfam.us/gtfs.zone/music-student |
 | landing-zone | Static marketing/status site | https://git.kcfam.us/gtfs.zone/landing-zone |
-| test-track | GTFS-RT visualizer, and this repo's vendor upstream | https://git.kcfam.us/gtfs.zone/test-track |
-| coloring-book | GTFS editor, where most vendored modules were born; reached through test-track, not vendored from directly | https://git.kcfam.us/gtfs.zone/coloring-book |
+| test-track | GTFS-RT visualizer, and upstream for the files still in `VENDORED.md` | https://git.kcfam.us/gtfs.zone/test-track |
+| coloring-book | GTFS editor, where most of the hand-copied modules were born; reached through test-track, never copied from directly | https://git.kcfam.us/gtfs.zone/coloring-book |
+| interlocking | Shared UI/GTFS library, upstream for everything it holds; edited there, not here | https://git.kcfam.us/gtfs.zone/interlocking |

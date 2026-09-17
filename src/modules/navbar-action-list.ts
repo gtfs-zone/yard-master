@@ -57,8 +57,8 @@ export const NAVBAR_ACTIONS: NavbarAction[] = [
   },
   {
     kind: 'icon',
-    id: 'about-btn',
-    label: 'About',
+    id: 'help-btn',
+    label: 'Guide',
     icon: renderNavIcon('guide'),
   },
   {
