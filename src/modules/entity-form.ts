@@ -31,7 +31,7 @@
 import { CONFIG } from '../config';
 import { attachCalendarInput, ISO_DATE_CODEC } from '../utils/calendar-input';
 import { ApiError, SessionExpiredError } from './api-client';
-import { showModal } from 'interlocking/modules/modal-utils';
+import { showModal } from 'interlocking/ui/modal-utils';
 import { escHtml } from './render-utils';
 import { WEEKDAY_DISPLAY, WEEKDAY_KEYS, WEEKDAY_LABELS } from './service-date';
 import type { SpecRef } from './spec-field';

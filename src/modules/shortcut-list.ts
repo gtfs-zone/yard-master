@@ -12,7 +12,7 @@
  * tracker from anywhere is a key pressed by accident.
  */
 
-import type { ShortcutCommand } from 'interlocking/modules/keyboard-shortcuts';
+import type { ShortcutCommand } from 'interlocking/ui/keyboard-shortcuts';
 
 interface ShortcutHost {
   /** Open the feed switcher and select whatever it returns. */

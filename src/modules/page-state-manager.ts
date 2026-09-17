@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/page-state-manager.ts
-   @sha f40d80a
+   @sha c9dcb42
    @status modified
    @changes
    - `pageStateToURL` / `urlToPageState` rewritten for yard-master's six
@@ -57,7 +57,7 @@ import type {
   StateValidator,
 } from '../types/page-state';
 import { MODAL_TYPES, isPageState } from '../types/page-state';
-import type { BreadcrumbItem } from 'interlocking/modules/breadcrumb-trail';
+import type { BreadcrumbItem } from 'interlocking/ui/breadcrumb-trail';
 
 const MAX_NAVIGATION_HISTORY = 50;
 

@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/help-pages.ts
-   @sha f40d80a
+   @sha c9dcb42
    @status modified
    @changes
    - HELP_PAGES is [aboutPage, shortcutsPage]: this app has no welcome or
@@ -27,13 +27,13 @@
  * Rendering lives in `help-modal.ts`. This module is data only.
  */
 
-import { type HelpPageEntry } from 'interlocking/modules/help-modal';
+import { type HelpPageEntry } from 'interlocking/ui/help-modal';
 import {
   renderBlurb,
   renderVersionAndSource,
   renderFeedbackSection,
   type AboutApp,
-} from 'interlocking/modules/about-links';
+} from 'interlocking/ui/about-links';
 
 export type HelpGroup = 'Getting Started' | 'Reference';
 

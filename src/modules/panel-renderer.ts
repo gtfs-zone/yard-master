@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/panel-renderer.ts
-   @sha f40d80a
+   @sha c9dcb42
    @status modified
    @changes
    - The session events are yard-master's: `change`, `vehicles`, `assignments`
@@ -38,8 +38,8 @@
  */
 
 import type { PageState } from '../types/page-state';
-import type { BreadcrumbItem } from 'interlocking/modules/breadcrumb-trail';
-import { renderBreadcrumbTrail } from 'interlocking/modules/breadcrumb-trail';
+import type { BreadcrumbItem } from 'interlocking/ui/breadcrumb-trail';
+import { renderBreadcrumbTrail } from 'interlocking/ui/breadcrumb-trail';
 import type { FeedSession } from './feed-session';
 import { RtIndex } from './rt-index';
 import type { RenderContext } from './render-utils';

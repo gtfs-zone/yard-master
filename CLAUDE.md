@@ -53,9 +53,9 @@ form; whichever is used decides what the feed is.
 
 A third of `src/` is no longer in this repo. The 35 files that were identical in
 all three apps live in the `interlocking` package, a git dependency shipping raw
-TypeScript with no build step. Import them as `interlocking/modules/...`,
-`interlocking/utils/...` and `interlocking/types/gtfs-flex`; `tsconfig.json`
-`paths` and a `resolve.alias` in `vite.config.ts` both point at
+TypeScript with no build step. Import them as `interlocking/ui/...`,
+`interlocking/gtfs/...`, `interlocking/map/...` and `interlocking/util/...`;
+`tsconfig.json` `paths` and a `resolve.alias` in `vite.config.ts` both point at
 `node_modules/interlocking/src`.
 
 A shared change is a commit in interlocking, a tag, and a bump in each of the

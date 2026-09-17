@@ -62,7 +62,7 @@ import {
 } from './api-client';
 import { confirmAction, confirmTyped } from './confirm';
 import { isHosted, publicScheduleUrl } from './feed-source';
-import { formatBytes } from 'interlocking/modules/feed-download';
+import { formatBytes } from 'interlocking/gtfs/feed-download';
 import { isHttpUrl, putSchedule, scheduleZipField } from './schedule-upload';
 import { rtEnum } from '../gtfs-rt-spec/index';
 import { tooltipLabelContent } from './spec-field';
@@ -92,8 +92,8 @@ import {
 import { parseGtfsClock } from './feed-time';
 import { dayLabel, isServiceDate, today, WEEKDAY_KEYS, weekdayKey } from './service-date';
 import { assignableTrips, tripLabel, tripName, tripOptions } from './trip-picker';
-import { showModal } from 'interlocking/modules/modal-utils';
-import { notify } from 'interlocking/modules/notification-system';
+import { showModal } from 'interlocking/ui/modal-utils';
+import { notify } from 'interlocking/ui/notification-system';
 import { escHtml } from './render-utils';
 
 /** One line of the cell menu: what it writes, and the write itself. */

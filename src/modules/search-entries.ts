@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/search-entries.ts
-   @sha f40d80a
+   @sha c9dcb42
    @status modified
    @changes
    - The vehicle loop became a tracker loop over the API's tracker list rather
@@ -31,7 +31,7 @@ import {
   routeMarker,
   stopMarker,
   type SearchEntry,
-} from 'interlocking/modules/search-controller';
+} from 'interlocking/ui/search-controller';
 
 // Alerts have no map feature and so no color of their own; amber reads as the
 // warning it is against every basemap.

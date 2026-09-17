@@ -9,25 +9,25 @@ import {
   renderAutoZoomControl,
   syncAutoZoomControl,
   wireAutoZoomControl,
-} from 'interlocking/modules/auto-zoom';
+} from 'interlocking/map/auto-zoom';
 import { MapController } from './map-controller';
 import type { GTFSScheduled } from './gtfs-scheduled';
 import type { ModalState, PageState } from './types/page-state';
-import { notify } from 'interlocking/modules/notification-system';
-import { PanelResizer, restorePanelWidth } from 'interlocking/modules/panel-resizer';
-import { BottomSheetController } from 'interlocking/modules/bottom-sheet';
-import { ThemeController } from 'interlocking/modules/theme-controller';
+import { notify } from 'interlocking/ui/notification-system';
+import { PanelResizer, restorePanelWidth } from 'interlocking/ui/panel-resizer';
+import { BottomSheetController } from 'interlocking/ui/bottom-sheet';
+import { ThemeController } from 'interlocking/ui/theme-controller';
 import { FeedSession } from './modules/feed-session';
 import { AppState } from './modules/app-state';
 import { showFeedSwitcher } from './modules/feed-switcher';
 import { showAccountModal } from './modules/account-modal';
-import { SearchController } from 'interlocking/modules/search-controller';
+import { SearchController } from 'interlocking/ui/search-controller';
 import { buildSearchEntries } from './modules/search-entries';
 import { PanelRenderer } from './modules/panel-renderer';
 import { Actions } from './modules/actions';
 import { addDays, startOfWeek, today } from './modules/service-date';
-import { initFieldTooltipPortal } from 'interlocking/utils/tooltip-position';
-import { setHelpPages, showHelpModal } from 'interlocking/modules/help-modal';
+import { initFieldTooltipPortal } from 'interlocking/util/tooltip-position';
+import { setHelpPages, showHelpModal } from 'interlocking/ui/help-modal';
 import {
   HELP_GROUP_ORDER,
   HELP_PAGES,
@@ -37,10 +37,10 @@ import { calendarBadgeCount, showCalendarModal } from './modules/calendar-modal'
 import { alertsBadgeCount, showAlertsModal } from './modules/alerts-modal';
 import { showShareModal } from './modules/share-modal';
 import { personLabel } from './modules/managed-render';
-import { renderNavbarActions } from 'interlocking/modules/navbar-actions';
+import { renderNavbarActions } from 'interlocking/ui/navbar-actions';
 import { NAVBAR_ACTIONS } from './modules/navbar-action-list';
-import { createModalRouter } from 'interlocking/modules/modal-router';
-import { KeyboardShortcuts, describeShortcuts } from 'interlocking/modules/keyboard-shortcuts';
+import { createModalRouter } from 'interlocking/ui/modal-router';
+import { KeyboardShortcuts, describeShortcuts } from 'interlocking/ui/keyboard-shortcuts';
 import { managerShortcuts } from './modules/shortcut-list';
 
 // ─── Shell ────────────────────────────────────────────────────────────────────

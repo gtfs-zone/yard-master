@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/gtfs-rt.ts
-   @sha f40d80a
+   @sha c9dcb42
    @status modified
    @changes
    - `e770356` reaches only the decoder: it captures a `TripDescriptor`'s

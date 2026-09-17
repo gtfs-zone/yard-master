@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/pages/stop-page.ts
-   @sha f40d80a
+   @sha c9dcb42
    @status modified
    @changes
    - The `vehicle` PageState variant became `tracker`, keyed by `Tracker.id`.
@@ -29,7 +29,7 @@ import type { AlertRecord } from '../../gtfs-rt';
 import type { Stop, Trip } from '../../gtfs-scheduled';
 import type { PageState } from '../../types/page-state';
 import { alertsForStop } from '../alerts';
-import { stopTypeLabel } from 'interlocking/modules/breadcrumb-trail';
+import { stopTypeLabel } from 'interlocking/ui/breadcrumb-trail';
 import { zoneLabel } from '../feed-time';
 import type { RtIndex } from '../rt-index';
 import type { RenderContext } from '../render-utils';

@@ -18,7 +18,7 @@ import { listFeeds } from './api-client';
 import { sourceLabel } from './feed-source';
 import { escHtml } from './render-utils';
 import { loadStatusBadge } from './managed-render';
-import { showModal } from 'interlocking/modules/modal-utils';
+import { showModal } from 'interlocking/ui/modal-utils';
 import { showNewFeedForm } from './schedule-upload';
 import type { Feed } from '../types/api';
 

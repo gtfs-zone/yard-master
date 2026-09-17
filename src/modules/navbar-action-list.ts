@@ -1,5 +1,5 @@
-import { renderMoonIcon, renderNavIcon, renderSunIcon } from 'interlocking/modules/nav-icons';
-import type { NavbarAction } from 'interlocking/modules/navbar-actions';
+import { renderMoonIcon, renderNavIcon, renderSunIcon } from 'interlocking/ui/nav-icons';
+import type { NavbarAction } from 'interlocking/ui/navbar-actions';
 
 /**
  * This app's navbar action row.

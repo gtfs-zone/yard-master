@@ -51,8 +51,8 @@ import type {
 import type { ServiceDate } from './service-date';
 import type { VehiclePosition } from '../map-controller';
 import { adoptFeedTimezone } from './feed-time';
-import { feedProgressIndicator } from 'interlocking/modules/feed-progress-indicator';
-import { downloadPercent, formatBytes, LoadCancelledError } from 'interlocking/modules/feed-download';
+import { feedProgressIndicator } from 'interlocking/ui/progress-indicator';
+import { downloadPercent, formatBytes, LoadCancelledError } from 'interlocking/gtfs/feed-download';
 
 export class FeedSession extends EventTarget {
   /** The selected feed's API row, or null when nothing is selected. */
