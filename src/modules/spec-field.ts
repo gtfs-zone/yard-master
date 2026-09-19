@@ -21,7 +21,7 @@
 import type { RTFieldSpec, RTPresence } from '../gtfs-rt-spec/types';
 import { rtField } from '../gtfs-rt-spec/index';
 import { renderSpecDescription } from 'interlocking/gtfs/spec-markup';
-import { escHtml } from './render-utils';
+import { escHtml } from 'interlocking/gtfs/entity-render';
 
 /** Which message field a form field is. Resolved against `src/gtfs-rt-spec/`. */
 export interface SpecRef {

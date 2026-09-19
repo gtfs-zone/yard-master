@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/pages/stop-page.ts
-   @sha b2a3de3
+   @sha fdb171c
    @status modified
    @changes
    - The `vehicle` PageState variant became `tracker`, keyed by `Tracker.id`.
@@ -25,14 +25,14 @@
  * in `stop_times`.
  */
 
-import type { AlertRecord } from '../../gtfs-rt';
+import type { AlertRecord } from 'interlocking/gtfs/rt-types';
 import type { Stop, Trip } from 'interlocking/gtfs/scheduled';
 import type { PageState } from '../../types/page-state';
-import { alertsForStop } from '../alerts';
+import { alertsForStop } from 'interlocking/gtfs/alerts';
 import { stopTypeLabel } from 'interlocking/ui/breadcrumb-trail';
 import { zoneLabel } from 'interlocking/gtfs/feed-time';
-import type { RtIndex } from '../rt-index';
-import type { RenderContext } from '../render-utils';
+import type { RtIndex } from '../render-context';
+import type { RenderContext } from '../render-context';
 import { cappedNote, entityRow, entityRowList, rowSection } from '../entity-row';
 import {
   VEHICLE_STATUS_LABELS,
@@ -49,7 +49,7 @@ import {
   routeBadge,
   section,
   vehicleDisplayName,
-} from '../render-utils';
+} from 'interlocking/gtfs/entity-render';
 import {
   servicesForTrips,
   weekdaysLabel,

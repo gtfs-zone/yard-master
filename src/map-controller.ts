@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/map-controller.ts
-   @sha b2a3de3
+   @sha fdb171c
    @status modified
    @changes
    - The `vehicle` PageState variant became `tracker`, keyed by `Tracker.id`. The
@@ -13,10 +13,10 @@
      shape lives here instead. The same source takes a whole
      day's assigned trips at once, which is what a selected day in the
      assignments calendar draws.
-   - `VehiclePosition` grows a `trackerId`. A tracker can carry several
-     concurrent vehicles, so `key` is the tracker *plus* the trip instance and
-     something else has to say which tracker they belong to; upstream's feeds
-     have no such object.
+   - `VehiclePosition` extends interlocking's with a `trackerId`. A tracker can
+     carry several concurrent vehicles, so `key` is the tracker *plus* the trip
+     instance and something else has to say which tracker they belong to;
+     upstream's feeds have no such object.
    - The last pushed positions are kept here so a `tracker` focus can resolve
      the tracker's vehicles. LayerManager's layer is keyed by `key`, so it
      cannot answer "which of these is this tracker's".
@@ -28,6 +28,7 @@
 import maplibregl from 'maplibre-gl';
 import { CONFIG } from './config';
 import type { GTFSScheduled } from 'interlocking/gtfs/scheduled';
+import type { VehiclePosition as RtVehiclePosition } from 'interlocking/gtfs/rt-types';
 import type { PageState } from './types/page-state';
 import { BasemapControl, initialMapStyle } from 'interlocking/map/basemap-control';
 import type { MapAppearance } from 'interlocking/map/basemap-control';
@@ -37,55 +38,20 @@ import type { MapDataIssues } from './modules/layer-manager';
 import { STOP_FOCUS_HALO_LAYER } from 'interlocking/map/stop-layer-style';
 import { resolveThemeColor } from 'interlocking/util/theme-color';
 
-export interface VehiclePosition {
-  /**
-   * The internal instance handle: the map feature id, the key in
-   * `FeedSession.vehicles`, and the click identity. Built by cafe-car as the
-   * surrogate `Tracker.id` plus the trip instance, which is the `vehicle:*`
-   * Redis key without its prefix, so it is unique even when one tracker is
-   * carrying several concurrent vehicles.
-   */
-  key: string;
+/**
+ * interlocking's vehicle, plus the tracker it is reporting under.
+ *
+ * `key` is the tracker's surrogate id plus the trip instance — the `vehicle:*`
+ * Redis key without its prefix — so it is unique even when one tracker is
+ * carrying several concurrent vehicles, which is why `trackerId` has to be
+ * carried beside it.
+ */
+export interface VehiclePosition extends RtVehiclePosition {
   /**
    * The surrogate `Tracker.id` this vehicle is reporting under. Several
    * vehicles can share one, which is the whole reason `key` is not it.
    */
   trackerId: string;
-  /**
-   * The feed's `vehicle.id`, **verbatim** — duplicated, empty, whatever the feed
-   * said. This is reportage, never plumbing: it is what the vehicle page shows
-   * and dumps, and never synthesized.
-   */
-  vehicleId: string;
-  entityId: string;
-  label?: string;
-  lat: number;
-  lon: number;
-  bearing?: number;
-  /** Metres per second, as the spec defines it. */
-  speed?: number;
-  tripId?: string;
-  routeId?: string;
-  directionId?: string;
-  startDate?: string;
-  startTime?: string;
-  /** TripDescriptor.schedule_relationship, or undefined when the producer omitted it. */
-  scheduleRelationship?: number;
-  /**
-   * The GTFS `stop_sequence` value of the stop the vehicle is working on — not
-   * an index into the trip's stop list. Absent in many feeds, which is why the
-   * route strip has an "unplaced vehicles" section.
-   */
-  currentStopSequence?: number;
-  /** `stop_id` of the same stop, when the feed reports it. */
-  stopId?: string;
-  /** VehicleStopStatus: 0 INCOMING_AT, 1 STOPPED_AT, 2 IN_TRANSIT_TO. */
-  currentStatus?: number;
-  occupancyStatus?: number;
-  /** Seconds since epoch, per the spec. Stale values are worth surfacing. */
-  timestamp?: number;
-  /** The decoded entity, kept verbatim for the vehicle page's raw dump. */
-  raw: unknown;
 }
 
 interface MapView {

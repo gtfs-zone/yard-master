@@ -14,7 +14,7 @@ import { CONFIG } from '../config';
 import type { Me } from '../types/api';
 import { personLabel } from './managed-render';
 import { showModal, type ModalAction } from 'interlocking/ui/modal-utils';
-import { escHtml } from './render-utils';
+import { escHtml } from 'interlocking/gtfs/entity-render';
 
 /** Opens the account modal. Resolves when it closes. */
 export async function showAccountModal(me: Me): Promise<void> {

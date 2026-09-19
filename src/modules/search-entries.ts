@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/search-entries.ts
-   @sha c9dcb42
+   @sha fdb171c
    @status modified
    @changes
    - The vehicle loop became a tracker loop over the API's tracker list rather
@@ -25,7 +25,7 @@
 import { CONFIG } from '../config';
 import type { PageState } from '../types/page-state';
 import type { FeedSession } from './feed-session';
-import { vehicleDisplayName } from './render-utils';
+import { vehicleDisplayName } from 'interlocking/gtfs/entity-render';
 import {
   dotMarker,
   routeMarker,

@@ -16,13 +16,14 @@
 
 import type { Trip } from 'interlocking/gtfs/scheduled';
 import type { PageState } from '../../types/page-state';
-import { alertsForTrip } from '../alerts';
+import { alertsForTrip } from 'interlocking/gtfs/alerts';
 import { entityRow, entityRowList, rowSection } from '../entity-row';
 import { actionButton, describeRecurrence, formatWindow } from '../managed-render';
 import { zoneLabel } from 'interlocking/gtfs/feed-time';
-import type { Prediction, RtIndex } from '../rt-index';
+import type { Prediction } from 'interlocking/gtfs/rt-index';
+import type { RtIndex } from '../render-context';
 import { STRIP_ROW_CLASS } from 'interlocking/gtfs/route-strip';
-import type { RenderContext } from '../render-utils';
+import type { RenderContext } from '../render-context';
 import {
   entityLink,
   escHtml,
@@ -36,7 +37,7 @@ import {
   routeBadge,
   section,
   vehicleDisplayName,
-} from '../render-utils';
+} from 'interlocking/gtfs/entity-render';
 import { serviceCatalog, weekdaysLabel } from '../service-catalog';
 import { renderAlertList } from './alert-page';
 

@@ -35,7 +35,7 @@
  */
 import { CONFIG } from '../config';
 import { GTFSScheduled } from 'interlocking/gtfs/scheduled';
-import type { AlertRecord, TripUpdate } from '../gtfs-rt';
+import type { AlertRecord, TripUpdate } from 'interlocking/gtfs/rt-types';
 import type {
   Alert,
   AlertDetail,

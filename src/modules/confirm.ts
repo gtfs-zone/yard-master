@@ -16,7 +16,7 @@
  */
 
 import { showModal } from 'interlocking/ui/modal-utils';
-import { escHtml } from './render-utils';
+import { escHtml } from 'interlocking/gtfs/entity-render';
 
 function consequenceList(consequences: string[]): string {
   if (consequences.length === 0) return '';

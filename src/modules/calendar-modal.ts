@@ -43,8 +43,8 @@ import type { PageState } from '../types/page-state';
 import type { FeedSession } from './feed-session';
 import { showModal } from 'interlocking/ui/modal-utils';
 import { formatWindow } from './managed-render';
-import type { RenderContext } from './render-utils';
-import { escHtml, section } from './render-utils';
+import type { RenderContext } from './render-context';
+import { escHtml, section } from 'interlocking/gtfs/entity-render';
 import {
   serviceCatalog,
   serviceRunsOn,

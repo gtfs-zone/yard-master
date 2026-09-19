@@ -94,7 +94,7 @@ import { dayLabel, isServiceDate, today, WEEKDAY_KEYS, weekdayKey } from './serv
 import { assignableTrips, tripLabel, tripName, tripOptions } from './trip-picker';
 import { showModal } from 'interlocking/ui/modal-utils';
 import { notify } from 'interlocking/ui/notification-system';
-import { escHtml } from './render-utils';
+import { escHtml } from 'interlocking/gtfs/entity-render';
 
 /** One line of the cell menu: what it writes, and the write itself. */
 interface MenuChoice {

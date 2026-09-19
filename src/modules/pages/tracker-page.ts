@@ -20,7 +20,7 @@ import { CONFIG } from '../../config';
 import type { Tracker } from '../../types/api';
 import type { PageState } from '../../types/page-state';
 import type { VehiclePosition } from '../../map-controller';
-import type { RenderContext } from '../render-utils';
+import type { RenderContext } from '../render-context';
 import { entityRow, entityRowList, rowSection } from '../entity-row';
 import {
   actionButton,
@@ -38,7 +38,7 @@ import {
   propList,
   section,
   timestampWithAge,
-} from '../render-utils';
+} from 'interlocking/gtfs/entity-render';
 
 /**
  * The credential, behind a disclosure.

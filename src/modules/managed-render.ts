@@ -17,7 +17,7 @@ import type { LoadStatus, Member, TrackerRule } from '../types/api';
 import { rtEnumValues } from '../gtfs-rt-spec/index';
 import { WEEKDAY_DISPLAY, WEEKDAY_KEYS, WEEKDAY_LABELS } from './service-date';
 import type { FeedSession } from './feed-session';
-import { escHtml, formatAbsolute, formatRelative, timestampWithAge } from './render-utils';
+import { escHtml, formatAbsolute, formatRelative, timestampWithAge } from 'interlocking/gtfs/entity-render';
 
 /** Epoch seconds from an ISO string, or undefined for a null/unparseable one. */
 function epochSeconds(iso: string | null | undefined): number | undefined {

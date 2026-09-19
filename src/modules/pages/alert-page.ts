@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/pages/alert-page.ts
-   @sha 5570228
+   @sha fdb171c
    @status modified
    @changes
    - `renderAlertPage` renders the *managed* alert, the row this app owns, from
@@ -33,7 +33,7 @@
  * the wrong alert.
  */
 
-import type { AlertRecord, ServiceAlert } from '../../gtfs-rt';
+import type { AlertRecord, ServiceAlert } from 'interlocking/gtfs/rt-types';
 import type { Alert, InformedEntity } from '../../types/api';
 import type { PageState } from '../../types/page-state';
 import {
@@ -47,8 +47,8 @@ import {
   preferredText,
   selectorLevel,
   translations,
-} from '../alerts';
-import type { RenderContext } from '../render-utils';
+} from 'interlocking/gtfs/alerts';
+import type { RenderContext } from '../render-context';
 import { emptyState, entityRow, entityRowList, rowSection } from '../entity-row';
 import { actionButton, formatIso } from '../managed-render';
 import {
@@ -62,7 +62,7 @@ import {
   propList,
   renderRawJson,
   section,
-} from '../render-utils';
+} from 'interlocking/gtfs/entity-render';
 
 type EntitySelector = NonNullable<ServiceAlert['informedEntity']>[number];
 

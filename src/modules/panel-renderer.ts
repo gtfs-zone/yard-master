@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/panel-renderer.ts
-   @sha c9dcb42
+   @sha fdb171c
    @status modified
    @changes
    - The session events are yard-master's: `change`, `vehicles`, `assignments`
@@ -41,9 +41,9 @@ import type { PageState } from '../types/page-state';
 import type { BreadcrumbItem } from 'interlocking/ui/breadcrumb-trail';
 import { renderBreadcrumbTrail } from 'interlocking/ui/breadcrumb-trail';
 import type { FeedSession } from './feed-session';
-import { RtIndex } from './rt-index';
-import type { RenderContext } from './render-utils';
-import { formatRelative } from './render-utils';
+import { RtIndex as LiveRtIndex } from 'interlocking/gtfs/rt-index';
+import type { RenderContext, RtIndex } from './render-context';
+import { formatRelative } from 'interlocking/gtfs/entity-render';
 import { renderAlertPage } from './pages/alert-page';
 import { renderRoutePage } from './pages/route-page';
 import { renderStopPage } from './pages/stop-page';
@@ -233,7 +233,7 @@ export class PanelRenderer {
 
   /** The realtime read-model for the current payloads, built on demand. */
   get rtIndex(): RtIndex {
-    return (this.index ??= new RtIndex(this.session));
+    return (this.index ??= new LiveRtIndex(this.session));
   }
 
   private renderPage(ctx: RenderContext): string {

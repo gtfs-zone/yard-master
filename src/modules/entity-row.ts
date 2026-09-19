@@ -21,8 +21,8 @@
  */
 
 import type { PageState } from '../types/page-state';
-import type { RenderContext } from './render-utils';
-import { entityLink, escHtml, section } from './render-utils';
+import type { RenderContext } from './render-context';
+import { entityLink, escHtml, section } from 'interlocking/gtfs/entity-render';
 
 export interface EntityRow {
   /** Where the row goes. A row with no state is text, not a link. */

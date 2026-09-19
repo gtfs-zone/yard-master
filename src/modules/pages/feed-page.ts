@@ -25,8 +25,8 @@
 
 import { CONFIG } from '../../config';
 import type { Feed, GtfsUpload } from '../../types/api';
-import type { RenderContext } from '../render-utils';
-import { escHtml, prop, propList, routeBadge, section } from '../render-utils';
+import type { RenderContext } from '../render-context';
+import { escHtml, prop, propList, routeBadge, section } from 'interlocking/gtfs/entity-render';
 import { cappedNote, entityRow, entityRowList, rowSection } from '../entity-row';
 import {
   actionButton,
