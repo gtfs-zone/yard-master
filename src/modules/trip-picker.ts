@@ -14,10 +14,10 @@
  * schedule either.
  */
 
-import type { GTFSScheduled, Trip } from '../gtfs-scheduled';
+import type { GTFSScheduled, Trip } from 'interlocking/gtfs/scheduled';
 import type { FieldOption } from './entity-form';
 import type { FeedSession } from './feed-session';
-import { formatScheduleTime } from './feed-time';
+import { formatScheduleTime } from 'interlocking/gtfs/feed-time';
 
 /** What a trip is called here: its short name, then its headsign, then its id. */
 export function tripName(trip: Trip): string {

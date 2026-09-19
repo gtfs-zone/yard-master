@@ -14,7 +14,7 @@
  */
 
 import { CONFIG } from '../config';
-import { feedTimezone } from './feed-time';
+import { feedTimezone } from 'interlocking/gtfs/feed-time';
 
 /** A `YYYY-MM-DD` service date. Named for what it means, not for its shape. */
 export type ServiceDate = string;

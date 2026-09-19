@@ -34,7 +34,7 @@
  * would otherwise be either immortal or invisible.
  */
 import { CONFIG } from '../config';
-import { GTFSScheduled } from '../gtfs-scheduled';
+import { GTFSScheduled } from 'interlocking/gtfs/scheduled';
 import type { AlertRecord, TripUpdate } from '../gtfs-rt';
 import type {
   Alert,
@@ -50,7 +50,7 @@ import type {
 } from '../types/api';
 import type { ServiceDate } from './service-date';
 import type { VehiclePosition } from '../map-controller';
-import { adoptFeedTimezone } from './feed-time';
+import { adoptFeedTimezone } from 'interlocking/gtfs/feed-time';
 import { feedProgressIndicator } from 'interlocking/ui/progress-indicator';
 import { downloadPercent, formatBytes, LoadCancelledError } from 'interlocking/gtfs/feed-download';
 

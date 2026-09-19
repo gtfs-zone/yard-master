@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/render-utils.ts
-   @sha 846e955
+   @sha b2a3de3
    @status verbatim */
 /**
  * Shared furniture for the object pages: escaping, entity links, the raw column
@@ -11,13 +11,13 @@
  * intercepts to navigate without a reload.
  */
 
-import type { RawRow } from '../gtfs-scheduled';
-import type { GTFSScheduled, Route } from '../gtfs-scheduled';
+import type { RawRow } from 'interlocking/gtfs/scheduled';
+import type { GTFSScheduled, Route } from 'interlocking/gtfs/scheduled';
 import type { VehiclePosition } from '../map-controller';
 import type { PageState } from '../types/page-state';
 import type { FeedSession } from './feed-session';
 import type { VehicleStopSequence } from './rt-index';
-import { clockAt, feedTimezone, formatScheduleTime, zoneLabel } from './feed-time';
+import { clockAt, feedTimezone, formatScheduleTime, zoneLabel } from 'interlocking/gtfs/feed-time';
 
 
 export interface RenderContext {

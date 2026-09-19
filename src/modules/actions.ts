@@ -89,7 +89,7 @@ import {
   ruleTimeInput,
   toLocalInput,
 } from './managed-render';
-import { parseGtfsClock } from './feed-time';
+import { parseGtfsClock } from 'interlocking/gtfs/feed-time';
 import { dayLabel, isServiceDate, today, WEEKDAY_KEYS, weekdayKey } from './service-date';
 import { assignableTrips, tripLabel, tripName, tripOptions } from './trip-picker';
 import { showModal } from 'interlocking/ui/modal-utils';

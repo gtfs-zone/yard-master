@@ -16,7 +16,7 @@
  * nothing downstream sees the zip's form.
  */
 
-import type { Calendar, GTFSScheduled, Trip } from '../gtfs-scheduled';
+import type { Calendar, GTFSScheduled, Trip } from 'interlocking/gtfs/scheduled';
 import type { FeedSession } from './feed-session';
 import type { ServiceDate } from './service-date';
 import { ruleWeekdayIndex, WEEKDAY_DISPLAY, WEEKDAY_LABELS } from './service-date';

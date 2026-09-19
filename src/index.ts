@@ -11,7 +11,7 @@ import {
   wireAutoZoomControl,
 } from 'interlocking/map/auto-zoom';
 import { MapController } from './map-controller';
-import type { GTFSScheduled } from './gtfs-scheduled';
+import type { GTFSScheduled } from 'interlocking/gtfs/scheduled';
 import type { ModalState, PageState } from './types/page-state';
 import { notify } from 'interlocking/ui/notification-system';
 import { PanelResizer, restorePanelWidth } from 'interlocking/ui/panel-resizer';
@@ -42,6 +42,13 @@ import { NAVBAR_ACTIONS } from './modules/navbar-action-list';
 import { createModalRouter } from 'interlocking/ui/modal-router';
 import { KeyboardShortcuts, describeShortcuts } from 'interlocking/ui/keyboard-shortcuts';
 import { managerShortcuts } from './modules/shortcut-list';
+import { configureSpecMarkup } from 'interlocking/gtfs/spec-markup';
+
+// A `#anchor` in a spec description resolves against the realtime reference.
+// The realtime reference embeds no images, so none are handed in.
+configureSpecMarkup({
+  referenceUrl: 'https://gtfs.org/documentation/realtime/reference/',
+});
 
 // ─── Shell ────────────────────────────────────────────────────────────────────
 // The navbar's action row is data, not markup. It has to be rendered before

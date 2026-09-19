@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/rt-index.ts
-   @sha 2076877
+   @sha b2a3de3
    @status verbatim */
 /**
  * Lookups over the last realtime poll: predictions by trip and by stop,
@@ -13,7 +13,7 @@
 
 import type { TripUpdate } from '../gtfs-rt';
 import { presentNumber } from '../gtfs-rt';
-import type { GTFSScheduled } from '../gtfs-scheduled';
+import type { GTFSScheduled } from 'interlocking/gtfs/scheduled';
 import type { VehiclePosition } from '../map-controller';
 import type { FeedSession } from './feed-session';
 

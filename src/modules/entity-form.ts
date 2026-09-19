@@ -29,7 +29,7 @@
  */
 
 import { CONFIG } from '../config';
-import { attachCalendarInput, ISO_DATE_CODEC } from '../utils/calendar-input';
+import { attachCalendarInput, ISO_DATE_CODEC } from 'interlocking/ui/calendar-input';
 import { ApiError, SessionExpiredError } from './api-client';
 import { showModal } from 'interlocking/ui/modal-utils';
 import { escHtml } from './render-utils';

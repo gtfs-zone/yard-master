@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/map-controller.ts
-   @sha c9dcb42
+   @sha b2a3de3
    @status modified
    @changes
    - The `vehicle` PageState variant became `tracker`, keyed by `Tracker.id`. The
@@ -27,7 +27,7 @@
      in `showVehicles`, which is upstream's vehicle follow. */
 import maplibregl from 'maplibre-gl';
 import { CONFIG } from './config';
-import type { GTFSScheduled } from './gtfs-scheduled';
+import type { GTFSScheduled } from 'interlocking/gtfs/scheduled';
 import type { PageState } from './types/page-state';
 import { BasemapControl, initialMapStyle } from 'interlocking/map/basemap-control';
 import type { MapAppearance } from 'interlocking/map/basemap-control';

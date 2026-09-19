@@ -20,7 +20,7 @@
 
 import type { RTFieldSpec, RTPresence } from '../gtfs-rt-spec/types';
 import { rtField } from '../gtfs-rt-spec/index';
-import { renderSpecDescription } from '../utils/spec-markup';
+import { renderSpecDescription } from 'interlocking/gtfs/spec-markup';
 import { escHtml } from './render-utils';
 
 /** Which message field a form field is. Resolved against `src/gtfs-rt-spec/`. */

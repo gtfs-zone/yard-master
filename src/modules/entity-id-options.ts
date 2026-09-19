@@ -13,7 +13,7 @@
  * either, and an alert written now is right as soon as the zip loads.
  */
 
-import type { GTFSScheduled } from '../gtfs-scheduled';
+import type { GTFSScheduled } from 'interlocking/gtfs/scheduled';
 import type { FieldOption } from './entity-form';
 
 /** What a combo says when there is no schedule to suggest from. */

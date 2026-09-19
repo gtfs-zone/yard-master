@@ -14,12 +14,12 @@
  * silently rewrite 25:10:00 as 01:10 the wrong day.
  */
 
-import type { Trip } from '../../gtfs-scheduled';
+import type { Trip } from 'interlocking/gtfs/scheduled';
 import type { PageState } from '../../types/page-state';
 import { alertsForTrip } from '../alerts';
 import { entityRow, entityRowList, rowSection } from '../entity-row';
 import { actionButton, describeRecurrence, formatWindow } from '../managed-render';
-import { zoneLabel } from '../feed-time';
+import { zoneLabel } from 'interlocking/gtfs/feed-time';
 import type { Prediction, RtIndex } from '../rt-index';
 import { STRIP_ROW_CLASS } from 'interlocking/gtfs/route-strip';
 import type { RenderContext } from '../render-utils';
