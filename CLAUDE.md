@@ -65,6 +65,12 @@ lookups and the page furniture the pages render through. Import them as `interlo
 A shared change is a commit in interlocking, a tag, and a bump in each of the
 three consumers. It is not edited here and `vendor:check` does not cover it.
 
+Restart the dev server after a bump. The alias resolves through a pnpm symlink
+into the store, and Vite does not watch `node_modules`, so files whose transform
+is still cached keep importing the old store path: the page then holds two
+copies of a shared module, each with its own module-level state. Interlocking's
+`util/module-state` keeps that from corrupting anything and logs `loaded twice`.
+
 What is still hand-copied is in `VENDORED.md`, and for that half test-track is
 still the upstream.
 
