@@ -37,7 +37,7 @@
     "@leeoniya/ufuzzy": "^1.0.14",
     "@tailwindcss/postcss": "^4.2.4",
     "daisyui": "^5.5.19",
-    "interlocking": "git+https://git.kcfam.us/gtfs.zone/interlocking.git#v2.2.1",
+    "interlocking": "git+https://git.kcfam.us/gtfs.zone/interlocking.git#v2.4.0",
     "jszip": "^3.10.1",
     "maplibre-gl": "^5.7.2",
     "papaparse": "^5.5.3"
