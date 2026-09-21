@@ -224,7 +224,6 @@ export class PageStateManager {
         break;
       case 'route':
         params.set('route', pageState.route_id);
-        if (pageState.direction_id) params.set('dir', pageState.direction_id);
         break;
       case 'stop':
         params.set('stop', pageState.stop_id);
@@ -287,13 +286,7 @@ export class PageStateManager {
       }
       case 'route': {
         const route_id = get('route');
-        if (route_id === undefined) return withModal({ type: 'home' });
-        const direction_id = get('dir');
-        return withModal({
-          type: 'route',
-          route_id,
-          ...(direction_id !== undefined && { direction_id }),
-        });
+        return withModal(route_id === undefined ? { type: 'home' } : { type: 'route', route_id });
       }
       case 'stop': {
         const stop_id = get('stop');

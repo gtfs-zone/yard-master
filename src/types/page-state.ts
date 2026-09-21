@@ -53,7 +53,7 @@ export type PageLocation =
   | { type: 'home' }
   | { type: 'tracker'; tracker_id: string }
   | { type: 'alert'; alert_id: string }
-  | { type: 'route'; route_id: string; direction_id?: string }
+  | { type: 'route'; route_id: string }
   | { type: 'stop'; stop_id: string }
   | { type: 'trip'; trip_id: string; route_id?: string };
 
@@ -118,7 +118,7 @@ export function isPageState(value: unknown): value is PageState {
       return typeof state.alert_id === 'string';
 
     case 'route':
-      return typeof state.route_id === 'string' && isOptionalString(state.direction_id);
+      return typeof state.route_id === 'string';
 
     case 'stop':
       return typeof state.stop_id === 'string';

@@ -50,6 +50,8 @@ import {
   isEndpoint,
   isMinority,
   railCell,
+  renderCoverage,
+  renderDirectionSections,
   rowPaths,
   STRIP_ROW_CLASS,
 } from 'interlocking/gtfs/route-strip';
@@ -387,25 +389,7 @@ function renderStrip(
     .join('')}</div>`;
 }
 
-// ─── Coverage and unplaced notes ──────────────────────────────────────────────
-
-function renderCoverage(sequence: RouteSequence): string {
-  const notes: string[] = [];
-  if (sequence.totalPatterns > 1) {
-    notes.push(
-      `${sequence.totalPatterns} stop patterns across ${sequence.totalTrips} trips, all of them on the strip. A trip count marks a stop fewer than half the trips call at; a filled dot marks where trips start or end. Platforms are shown under their parent station.`,
-    );
-  }
-  if (sequence.isLoop) {
-    notes.push(
-      'Some trips visit a stop more than once. Repeat visits are shown as separate rows rather than collapsed onto one.',
-    );
-  }
-  if (notes.length === 0) return '';
-  return `<div class="text-xs opacity-60 space-y-1">${notes
-    .map(n => `<p>${escHtml(n)}</p>`)
-    .join('')}</div>`;
-}
+// ─── Unplaced notes ───────────────────────────────────────────────────────────
 
 function renderUnplaced(ctx: RenderContext, unplaced: Unplaced[]): string {
   if (unplaced.length === 0) return '';
@@ -505,7 +489,7 @@ function renderTrips(ctx: RenderContext, routeId: string, directionId: string): 
 /**
  * When this route runs: one row per service, in cascade order.
  *
- * Both directions, not the tab's: a route's calendar is a property of the route
+ * Outside the direction sections: a route's calendar is a property of the route
  * and splitting it by direction would say the same thing twice. A service is
  * not an object this app browses, so a row is a fact rather than a link.
  */
@@ -532,25 +516,6 @@ function renderServices(ctx: RenderContext, route: Route): string {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-function renderDirectionTabs(
-  ctx: RenderContext,
-  routeId: string,
-  directions: { direction_id: string; label: string; tripCount: number }[],
-  active: string,
-): string {
-  if (directions.length < 2) return '';
-  return `<div role="tablist" class="tabs tabs-border tabs-sm">
-    ${directions
-      .map(d => {
-        const state: PageState = { type: 'route', route_id: routeId, direction_id: d.direction_id };
-        return `<a role="tab" href="${escHtml(ctx.href(state))}" data-nav="${escHtml(
-          JSON.stringify(state),
-        )}" class="tab ${d.direction_id === active ? 'tab-active' : ''}">${escHtml(d.label)}</a>`;
-      })
-      .join('')}
-  </div>`;
-}
-
 export function renderRoutePage(
   ctx: RenderContext,
   rt: RtIndex,
@@ -562,12 +527,6 @@ export function renderRoutePage(
 
   const source = new GTFSScheduledRouteSource(feed);
   const directions = directionsForRoute(source, route.id);
-  const active =
-    directions.find(d => d.direction_id === state.direction_id)?.direction_id ??
-    directions[0]?.direction_id ??
-    '';
-  const sequence = routeSequence(source, route.id, active);
-  const { placed, unplaced } = placeVehicles(ctx, rt, sequence, route.id, active);
 
   const agency = feed.agencies.find(a => a.id === route.agency_id) ?? feed.agencies[0];
 
@@ -582,11 +541,21 @@ export function renderRoutePage(
       ${renderAlertList(ctx, feedWideAlerts(ctx.session), 'Feed-wide alerts')}
       ${renderAlertList(ctx, alertsForRoute(ctx.session, route.id), 'Route alerts')}
 
-      ${renderDirectionTabs(ctx, route.id, directions, active)}
-      ${renderCoverage(sequence)}
-      ${renderStrip(ctx, rt, route, sequence, active, placed)}
-      ${renderUnplaced(ctx, unplaced)}
-      ${renderTrips(ctx, route.id, active)}
+      ${renderDirectionSections(directions, d => {
+        const sequence = routeSequence(source, route.id, d.direction_id);
+        const { placed, unplaced } = placeVehicles(
+          ctx,
+          rt,
+          sequence,
+          route.id,
+          d.direction_id,
+        );
+        return `
+          ${renderCoverage(sequence)}
+          ${renderStrip(ctx, rt, route, sequence, d.direction_id, placed)}
+          ${renderUnplaced(ctx, unplaced)}
+          ${renderTrips(ctx, route.id, d.direction_id)}`;
+      })}
       ${renderServices(ctx, route)}
 
       ${section(
@@ -596,7 +565,6 @@ export function renderRoutePage(
           agency?.name ? prop('Agency', escHtml(agency.name)) : '',
           prop('Trips', String((feed.tripsByRoute.get(route.id) ?? []).length)),
           prop('Trackers with a fix', String((rt.vehiclesByRoute.get(route.id) ?? []).length)),
-          prop('Stops on strip', String(sequence.stops.length)),
         ]),
       )}
       ${renderRawFields('routes.txt', route.raw)}
