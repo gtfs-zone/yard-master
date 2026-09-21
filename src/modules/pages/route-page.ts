@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/pages/route-page.ts
-   @sha fdb171c
+   @sha 968e2de
    @status modified
    @changes
    - The `vehicle` PageState variant became `tracker`, keyed by `Tracker.id`,
@@ -13,8 +13,9 @@
    - The Trips and Unplaced trackers lists render through this repo's
      `entity-row.ts`, the one row shape every list in the app uses. The strip
      itself is untouched: a vehicle chip sits in a rail row, not in a list.
-   - The direction tabs use `tabs-border`, matching the calendar modal's tab
-     bar rather than upstream's `tabs-box`.
+   - Each direction section carries its own Trips list, inside the section
+     rather than after it. The Service calendar stays outside them, since a
+     route's calendar is not per-direction.
  */
 /**
  * The route page: a vertical transit-map strip with live vehicles sitting in
