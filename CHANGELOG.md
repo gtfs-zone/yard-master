@@ -1,3 +1,10 @@
+## v0.5.0 (2026-09-22)
+
+### Feat
+
+- point map clicks, follow and search at a fleet's single vehicle
+- give each vehicle of a multi-vehicle tracker its own page
+
 ## v0.4.0 (2026-09-21)
 
 ### Feat
