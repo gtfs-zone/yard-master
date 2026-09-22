@@ -2,13 +2,16 @@
    @sha 968e2de
    @status modified
    @changes
-   - `pageStateToURL` / `urlToPageState` rewritten for yard-master's six
+   - `pageStateToURL` / `urlToPageState` rewritten for yard-master's seven
      variants. The hash carries an explicit `type` param and the codec switches
      on it, rather than telling the pages apart by which object key is present
      the way test-track's four could.
    - A tracker appears in the hash as `tracker=<Tracker.id>`. The surrogate is
      not a secret and is unique; `device_key` is the credential and never
      reaches a URL, and nickname is a label that may repeat.
+   - A vehicle appears as `tracker=<Tracker.id>&vehicle=<VehiclePosition.key>`.
+     The key is opaque here: the server builds it and nothing in the browser
+     parses it. A hash missing either param falls back to home.
    - Every variant but `home` names an object, so a hash missing that object's
      key falls back to home. So does any `type` the switch does not know, which
      is what retires the list, `service`, `assignments` and `managers` hashes
@@ -232,6 +235,10 @@ export class PageStateManager {
         // The surrogate, never `device_key`.
         params.set('tracker', pageState.tracker_id);
         break;
+      case 'vehicle':
+        params.set('tracker', pageState.tracker_id);
+        params.set('vehicle', pageState.vehicle_key);
+        break;
       case 'trip':
         params.set('trip', pageState.trip_id);
         if (pageState.route_id) params.set('route', pageState.route_id);
@@ -278,6 +285,15 @@ export class PageStateManager {
         const tracker_id = get('tracker');
         return withModal(
           tracker_id === undefined ? { type: 'home' } : { type: 'tracker', tracker_id },
+        );
+      }
+      case 'vehicle': {
+        const tracker_id = get('tracker');
+        const vehicle_key = get('vehicle');
+        return withModal(
+          tracker_id === undefined || vehicle_key === undefined
+            ? { type: 'home' }
+            : { type: 'vehicle', tracker_id, vehicle_key },
         );
       }
       case 'alert': {

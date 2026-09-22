@@ -18,7 +18,12 @@
    - `validateState` answers true for the managed variants while the API list
      is still loading: an empty `trackers` map means "not fetched yet" as often
      as it means "no such tracker", and falling back to home on a slow request
-     would drop a perfectly good link. */
+     would drop a perfectly good link.
+   - `vehicle` added as this repo's own: one live vehicle of a tracker carrying
+     several, hung off its tracker. Its label is read from the live record and
+     falls back to a plain "Vehicle" once that record has expired, and
+     `validateState` checks only the tracker: the vehicle page itself says a
+     vehicle has stopped reporting, which a fallback to home would hide. */
 /**
  * Synchronous breadcrumb building and focus validation against the session.
  *
@@ -73,6 +78,12 @@ export function tripLabel(session: FeedSession, tripId: string): string {
 /** Nickname is the label a tracker shows; the surrogate is the fallback. */
 export function trackerLabel(session: FeedSession, trackerId: string): string {
   return session.trackers.get(trackerId)?.nickname || trackerId;
+}
+
+/** A live vehicle's own label; an expired one has nothing left to name it by. */
+export function vehicleLabel(session: FeedSession, key: string): string {
+  const vehicle = session.vehicles.get(key);
+  return vehicle?.label || vehicle?.vehicleId || 'Vehicle';
 }
 
 export function alertLabel(session: FeedSession, alertId: string): string {
@@ -152,6 +163,21 @@ export function buildBreadcrumbs(session: FeedSession, state: PageState): Breadc
         {
           typeLabel: 'Tracker',
           label: truncate(trackerLabel(session, state.tracker_id)),
+          pageState: state,
+        },
+      ];
+
+    case 'vehicle':
+      return [
+        home(session),
+        {
+          typeLabel: 'Tracker',
+          label: truncate(trackerLabel(session, state.tracker_id)),
+          pageState: { type: 'tracker', tracker_id: state.tracker_id },
+        },
+        {
+          typeLabel: 'Vehicle',
+          label: truncate(vehicleLabel(session, state.vehicle_key)),
           pageState: state,
         },
       ];
@@ -238,6 +264,7 @@ export function validateState(session: FeedSession, state: PageState): boolean {
     case 'trip':
       return session.scheduledFeed?.trips.has(state.trip_id) ?? false;
     case 'tracker':
+    case 'vehicle':
       return session.trackers.size === 0 || session.trackers.has(state.tracker_id);
     case 'alert':
       if (session.serviceAlerts.has(state.alert_id)) return true;

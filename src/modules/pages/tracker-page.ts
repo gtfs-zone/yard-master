@@ -33,6 +33,7 @@ import {
   VEHICLE_STATUS_LABELS,
   entityLink,
   escHtml,
+  formatRelative,
   missing,
   prop,
   propList,
@@ -79,7 +80,7 @@ function mapsLink(position: VehiclePosition): string {
 }
 
 /** One of the tracker's vehicles: where it is, and what it is running. */
-function renderVehicle(ctx: RenderContext, position: VehiclePosition): string {
+export function renderVehicle(ctx: RenderContext, position: VehiclePosition): string {
   const feed = ctx.session.scheduledFeed;
   const routeId = position.routeId ?? (position.tripId ? feed?.trips.get(position.tripId)?.route_id : undefined);
   const route = routeId ? feed?.routes.get(routeId) : undefined;
@@ -128,9 +129,10 @@ function renderVehicle(ctx: RenderContext, position: VehiclePosition): string {
  * Where the tracker is reporting from.
  *
  * *Every* vehicle it is reporting, not the first one found. One credential can
- * be carrying a whole fleet — a producer running fifty trains under one tracker
- * is the case this exists for — and a page that showed one of them would be
- * silently hiding the other forty-nine.
+ * be carrying a whole fleet (a producer running fifty trains under one tracker
+ * is the case this exists for), and a page that showed one of them would be
+ * silently hiding the other forty-nine. A fleet is a list of rows, each opening
+ * that vehicle's own page; a single vehicle is the tracker and is shown inline.
  */
 function renderPosition(ctx: RenderContext, positions: VehiclePosition[]): string {
   if (positions.length === 0) {
@@ -147,19 +149,31 @@ function renderPosition(ctx: RenderContext, positions: VehiclePosition[]): strin
     return section('Position', renderVehicle(ctx, positions[0]));
   }
 
-  return section(
-    'Positions',
-    `<div class="space-y-3">
-      ${positions
-        .map(
-          (position) => `<div class="rounded-lg border border-base-300 p-2 space-y-1">
-            <p class="text-xs font-medium">${escHtml(position.label || position.vehicleId)}</p>
-            ${renderVehicle(ctx, position)}
-          </div>`
-        )
-        .join('')}
-    </div>`
-  );
+  const feed = ctx.session.scheduledFeed;
+  const rows = [...positions]
+    .sort((a, b) => (a.label || a.vehicleId).localeCompare(b.label || b.vehicleId, undefined, { numeric: true }))
+    .map((position) => {
+      const trip = position.tripId ? feed?.trips.get(position.tripId) : undefined;
+      const routeId = position.routeId ?? trip?.route_id;
+      const route = routeId ? feed?.routes.get(routeId) : undefined;
+      const sublabel = [route?.short_name || route?.long_name || routeId, trip?.headsign || position.tripId]
+        .filter(Boolean)
+        .join(' - ');
+      const age =
+        position.timestamp === undefined
+          ? ''
+          : `<span class="text-xs opacity-60 tabular-nums" data-since="${position.timestamp * 1000}">${escHtml(
+              formatRelative(position.timestamp * 1000)
+            )}</span>`;
+      return entityRow(ctx, {
+        state: { type: 'vehicle', tracker_id: position.trackerId, vehicle_key: position.key },
+        label: position.label || position.vehicleId,
+        ...(sublabel ? { sublabel } : {}),
+        badgeHtml: age,
+      });
+    });
+
+  return rowSection('Vehicles', positions.length, entityRowList(rows, ''));
 }
 
 /**

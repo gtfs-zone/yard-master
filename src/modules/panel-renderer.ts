@@ -10,9 +10,10 @@
      the panel always has something to render.
    - `setBreadcrumbs` added: the trail is rebuilt outside this class and can
      arrive after the page it belongs to, without a scroll reset.
-   - The dispatcher covers yard-master's six variants: `home` renders the feed
-     itself, `trip` is this repo's own page, `vehicle` is gone, and `tracker`
-     and `alert` render the managed objects. There are no list pages; a list is
+   - The dispatcher covers yard-master's seven variants: `home` renders the
+     feed itself, `trip` and `vehicle` are this repo's own pages (`vehicle`
+     being one vehicle of a tracker that carries several), and `tracker` and
+     `alert` render the managed objects. There are no list pages; a list is
      a scrollbox on the page of the object that owns it.
    - `meUserId` added to the hooks: sharing marks the signed-in row, and
      `RenderContext` is a verbatim type that has no business growing a field
@@ -48,6 +49,7 @@ import { renderAlertPage } from './pages/alert-page';
 import { renderRoutePage } from './pages/route-page';
 import { renderStopPage } from './pages/stop-page';
 import { renderTrackerPage } from './pages/tracker-page';
+import { renderVehiclePage } from './pages/vehicle-page';
 import { renderFeedPage } from './pages/feed-page';
 import { renderTripPage } from './pages/trip-page';
 
@@ -251,6 +253,8 @@ export class PanelRenderer {
         return renderAlertPage(ctx, this.state);
       case 'tracker':
         return renderTrackerPage(ctx, this.state);
+      case 'vehicle':
+        return renderVehiclePage(ctx, this.state);
     }
   }
 }

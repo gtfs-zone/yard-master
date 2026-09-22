@@ -6,9 +6,11 @@
      upstream has: `tracker` is a managed object from the API, `route`, `stop`
      and `trip` come from the in-browser GTFS. Dropped `vehicle`; kept `alert`,
      which here is a managed object rather than a decoded GTFS-RT entity.
+     `vehicle` came back later as this repo's own: one live vehicle of a
+     tracker carrying several, keyed by `VehiclePosition.key`.
    - `home` is the feed itself: its own properties, its children, and the facts
      about it. There is no separate `feed` variant.
-   - Six variants and a maximum depth of three. There are no list variants: a
+   - Seven variants and a maximum depth of three. There are no list variants: a
      list is a scrollbox on the page of the object that owns it, never a page,
      so no crumb is ever a category.
    - `MODAL_TYPES` is `alerts` and `help`, this repo's two of upstream's editor
@@ -52,6 +54,7 @@
 export type PageLocation =
   | { type: 'home' }
   | { type: 'tracker'; tracker_id: string }
+  | { type: 'vehicle'; tracker_id: string; vehicle_key: string }
   | { type: 'alert'; alert_id: string }
   | { type: 'route'; route_id: string }
   | { type: 'stop'; stop_id: string }
@@ -113,6 +116,9 @@ export function isPageState(value: unknown): value is PageState {
 
     case 'tracker':
       return typeof state.tracker_id === 'string';
+
+    case 'vehicle':
+      return typeof state.tracker_id === 'string' && typeof state.vehicle_key === 'string';
 
     case 'alert':
       return typeof state.alert_id === 'string';
