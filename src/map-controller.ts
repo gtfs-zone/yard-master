@@ -24,9 +24,14 @@
      upstream does not have: the `trip` case's fit and `showTrips`'s fit for a
      whole assigned day. Every gate upstream has is gated the same way here, and
      the two ungated moves are ungated here too — `fitFeed` and the follow ease
-     in `showVehicles`, which is upstream's vehicle follow. */
+     in `showVehicles`, which is upstream's vehicle follow.
+   - `vehicle` focus is back, as this repo's own: one vehicle of a tracker
+     carrying several. A vehicle click goes through `vehicleLocation`, so it
+     opens the tracker for a one-vehicle tracker and that vehicle's page for a
+     fleet, and follow tracks either a tracker or a single vehicle key. */
 import maplibregl from 'maplibre-gl';
 import { CONFIG } from './config';
+import { vehicleLocation } from './modules/vehicle-location';
 import type { GTFSScheduled } from 'interlocking/gtfs/scheduled';
 import type { VehiclePosition as RtVehiclePosition } from 'interlocking/gtfs/rt-types';
 import type { PageState } from './types/page-state';
@@ -156,17 +161,16 @@ export class MapController {
   private pending: Array<() => void> = [];
 
   /**
-   * The `Tracker.id` currently being followed, or null. Focusing a tracker
-   * enters follow mode; each positions push re-centres on its newest fix until
-   * the user takes the camera back (see the gesture listeners in
-   * `initialize`). Focusing anything else — including home and alert — leaves
-   * follow mode.
+   * What is being followed, or null. Focusing a tracker or a vehicle enters
+   * follow mode; each positions push re-centres on its fix until the user takes
+   * the camera back (see the gesture listeners in `initialize`). Focusing
+   * anything else, including home and alert, leaves follow mode.
    *
-   * A tracker rather than a vehicle key, because a tracker running several
-   * vehicles would otherwise stop being followed the moment the one the camera
-   * latched onto stopped reporting.
+   * A tracker follows its newest vehicle, so a tracker page keeps following
+   * when the vehicle the camera latched onto stops reporting. A vehicle page
+   * follows that one key and stops when it expires.
    */
-  private following: string | null = null;
+  private following: { trackerId: string } | { key: string } | null = null;
 
   /**
    * The last positions handed to `showVehicles`. LayerManager holds these too
@@ -235,13 +239,17 @@ export class MapController {
         case 'route':
           this.onSelect?.({ type: 'route', route_id: target.id });
           break;
-        case 'vehicle':
-          // The map's moving dots are trackers, addressed by their surrogate.
-          // `target.id` is the composite feature key, never a tracker id.
-          if (target.trackerId) {
+        case 'vehicle': {
+          // `target.id` is the feature key, never a tracker id. A vehicle whose
+          // record has just gone falls back to its tracker.
+          const vehicle = this.positions.find(p => p.key === target.id);
+          if (vehicle) {
+            this.onSelect?.(vehicleLocation(this.positions, vehicle));
+          } else if (target.trackerId) {
             this.onSelect?.({ type: 'tracker', tracker_id: target.trackerId });
           }
           break;
+        }
       }
     };
     this.layers.onEmptySelect = () => this.onEmptySelect?.();
@@ -345,7 +353,7 @@ export class MapController {
       // auto-zoom, matching test-track's vehicle follow: pressing Follow is a
       // request for camera movement, not a navigation.
       if (this.following) {
-        const v = this.trackerVehicle(this.following);
+        const v = this.followedVehicle(this.following);
         if (v) {
           this.map.easeTo({
             center: [v.lon, v.lat],
@@ -362,11 +370,19 @@ export class MapController {
     this.whenLoaded(() => this.layers.setVehicles([]));
   }
 
+  /** The vehicle a follow resolves to right now, or undefined when it has gone. */
+  private followedVehicle(
+    following: { trackerId: string } | { key: string }
+  ): VehiclePosition | undefined {
+    if ('key' in following) return this.positions.find(p => p.key === following.key);
+    return this.trackerVehicle(following.trackerId);
+  }
+
   /**
    * A tracker's most recently reported vehicle, or undefined when it has none.
    *
    * Most recent rather than first: scan order is not the fleet's order, and a
-   * tracker running several trips should be followed on the one that just
+   * tracker running several vehicles should be followed on the one that just
    * moved.
    */
   private trackerVehicle(trackerId: string): VehiclePosition | undefined {
@@ -441,8 +457,8 @@ export class MapController {
   }
 
   private applyFocus(state: PageState): void {
-    // Any focus that is not this same tracker leaves follow mode.
-    if (state.type !== 'tracker') this.following = null;
+    // Any focus that is not a tracker or a vehicle leaves follow mode.
+    if (state.type !== 'tracker' && state.type !== 'vehicle') this.following = null;
 
     switch (state.type) {
       case 'home': {
@@ -526,7 +542,18 @@ export class MapController {
           vehicle ? { kind: 'vehicle', id: vehicle.key, trackerId: vehicle.trackerId } : null
         );
         // Re-arm follow on this tracker (a different one replaces the old).
-        this.following = state.tracker_id;
+        this.following = { trackerId: state.tracker_id };
+        if (vehicle) this.easeToPoint([vehicle.lon, vehicle.lat]);
+        return;
+      }
+
+      case 'vehicle': {
+        this.clearTrip();
+        const vehicle = this.positions.find(p => p.key === state.vehicle_key);
+        this.layers.setFocus(
+          vehicle ? { kind: 'vehicle', id: vehicle.key, trackerId: vehicle.trackerId } : null
+        );
+        this.following = { key: state.vehicle_key };
         if (vehicle) this.easeToPoint([vehicle.lon, vehicle.lat]);
         return;
       }

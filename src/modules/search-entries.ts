@@ -4,9 +4,11 @@
    @changes
    - The vehicle loop became a tracker loop over the API's tracker list rather
      than the live vehicle map, so a tracker that has never reported a fix is
-     still findable, and a tracker running several vehicles is one entry rather
-     than one per vehicle. The payload is a `tracker` PageState keyed by `Tracker.id`,
+     still findable. The payload is a `tracker` PageState keyed by `Tracker.id`,
      which is the key both maps use.
+   - A tracker running several vehicles also gets one entry per live vehicle,
+     payload from `vehicleLocation`, beside the tracker's own entry, which then
+     reads as the fleet ("N vehicles") rather than as one of them.
    - A managed service alert loop added, keyed by `String(Alert.id)`.
    - Priorities rebucketed so managed objects sort ahead of GTFS objects:
      trackers 0, alerts 1, stations 2, routes 3, plain stops 4. */
@@ -25,6 +27,8 @@
 import { CONFIG } from '../config';
 import type { PageState } from '../types/page-state';
 import type { FeedSession } from './feed-session';
+import type { VehiclePosition } from '../map-controller';
+import { vehicleLocation } from './vehicle-location';
 import { vehicleDisplayName } from 'interlocking/gtfs/entity-render';
 import {
   dotMarker,
@@ -70,24 +74,50 @@ export function buildSearchEntries(session: FeedSession): SearchEntry<PageState>
     });
   }
 
+  // Same color the map paints a vehicle: its trip's route, or unmatched grey.
+  const vehicleRoute = (position: VehiclePosition | undefined) =>
+    position?.routeId || (position?.tripId ? feed?.trips.get(position.tripId)?.route_id : undefined);
+  const vehicleColor = (routeId: string | undefined) =>
+    (routeId ? feed?.routes.get(routeId)?.color : undefined) ?? CONFIG.VEHICLE_UNMATCHED_COLOR;
+
   // A tracker is searched for as itself, whether or not it is reporting: the
-  // list is the API's, not the live map's. Its newest fix is what colors and
-  // describes the row, and a tracker running several vehicles is still one
-  // entry, since one tracker is one page.
+  // list is the API's, not the live map's. A one-vehicle tracker is that
+  // vehicle, so its fix colors and describes the row; a fleet is described as
+  // a fleet, and each of its vehicles is an entry of its own.
   for (const tracker of session.trackers.values()) {
-    const [position] = session.vehiclesFor(tracker.id);
-    // Same color the map paints it: the assigned trip's route, or unmatched grey.
-    const routeId =
-      position?.routeId || (position?.tripId ? feed?.trips.get(position.tripId)?.route_id : undefined);
-    const color = (routeId ? feed?.routes.get(routeId)?.color : undefined) ?? CONFIG.VEHICLE_UNMATCHED_COLOR;
+    const positions = session.vehiclesFor(tracker.id);
+    const fleet = positions.length > 1;
+    const [position] = positions;
+    const routeId = fleet ? undefined : vehicleRoute(position);
     entries.push({
       payload: { type: 'tracker', tracker_id: tracker.id },
-      icon: dotMarker(color),
+      icon: dotMarker(vehicleColor(routeId)),
       primary: tracker.nickname,
-      secondary: position ? vehicleDisplayName(feed, position) : 'no fix',
-      haystack: haystack(tracker.nickname, position?.label, position?.tripId, routeId),
+      secondary: fleet
+        ? `${positions.length} vehicles`
+        : position
+          ? vehicleDisplayName(feed, position)
+          : 'no fix',
+      haystack: fleet
+        ? haystack(tracker.nickname)
+        : haystack(tracker.nickname, position?.label, position?.tripId, routeId),
       priority: 0,
     });
+
+    if (!fleet) continue;
+    for (const vehicle of positions) {
+      const vehicleRouteId = vehicleRoute(vehicle);
+      entries.push({
+        payload: vehicleLocation(positions, vehicle),
+        icon: dotMarker(vehicleColor(vehicleRouteId)),
+        primary: vehicle.label || vehicle.vehicleId,
+        secondary: [tracker.nickname, vehicle.tripId ? feed?.trips.get(vehicle.tripId)?.headsign : undefined]
+          .filter(Boolean)
+          .join(' - '),
+        haystack: haystack(vehicle.label, vehicle.vehicleId, vehicle.tripId, vehicleRouteId),
+        priority: 0,
+      });
+    }
   }
 
   for (const alert of session.serviceAlerts.values()) {

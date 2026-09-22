@@ -18,6 +18,7 @@ import type { Trip } from 'interlocking/gtfs/scheduled';
 import type { PageState } from '../../types/page-state';
 import { alertsForTrip } from 'interlocking/gtfs/alerts';
 import { entityRow, entityRowList, rowSection } from '../entity-row';
+import { vehicleLocation } from '../vehicle-location';
 import { actionButton, describeRecurrence, formatWindow } from '../managed-render';
 import { zoneLabel } from 'interlocking/gtfs/feed-time';
 import type { Prediction } from 'interlocking/gtfs/rt-index';
@@ -162,14 +163,19 @@ function renderTrackers(ctx: RenderContext, rt: RtIndex, trip: Trip): string {
     'Reporting this trip',
     vehicles.length,
     entityRowList(
-      vehicles.map((v) =>
-        entityRow(ctx, {
-          // The tracker, not the vehicle: `key` is the tracker plus the
-          // vehicle id, and only `trackerId` addresses a page.
-          state: { type: 'tracker', tracker_id: v.trackerId },
-          label: vehicleDisplayName(ctx.session.scheduledFeed, v),
-        })
-      ),
+      vehicles.map((v) => {
+        // A one-vehicle tracker opens the tracker; a fleet's vehicle opens its
+        // own page and is named as itself, since the trip's name is the same
+        // for every vehicle running it.
+        const state = vehicleLocation(ctx.session.vehicles.values(), v);
+        return entityRow(ctx, {
+          state,
+          label:
+            state.type === 'vehicle'
+              ? v.label || v.vehicleId
+              : vehicleDisplayName(ctx.session.scheduledFeed, v),
+        });
+      }),
       'Nothing is reporting this trip.'
     )
   );
