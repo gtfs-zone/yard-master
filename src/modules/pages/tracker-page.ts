@@ -118,8 +118,8 @@ function renderVehicle(ctx: RenderContext, position: VehiclePosition): string {
           entityLink(ctx, { type: 'stop', stop_id: stop.id }, stop.name || stop.id)
         )
       : '',
-    // Only worth a row when there is more than one: it is what tells the two
-    // apart, and on a single-vehicle tracker it is just the nickname again.
+    // The service date of the trip being run, when the producer reports one.
+    // Data about the trip, not part of what identifies the vehicle.
     position.startDate ? prop('Service date', escHtml(position.startDate)) : '',
   ]);
 }

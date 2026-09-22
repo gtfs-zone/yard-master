@@ -164,8 +164,8 @@ function renderTrackers(ctx: RenderContext, rt: RtIndex, trip: Trip): string {
     entityRowList(
       vehicles.map((v) =>
         entityRow(ctx, {
-          // The tracker, not the vehicle: `key` is the tracker plus the trip
-          // instance, and only `trackerId` addresses a page.
+          // The tracker, not the vehicle: `key` is the tracker plus the
+          // vehicle id, and only `trackerId` addresses a page.
           state: { type: 'tracker', tracker_id: v.trackerId },
           label: vehicleDisplayName(ctx.session.scheduledFeed, v),
         })

@@ -210,8 +210,9 @@ const VEHICLE_CASING_COLOR = '#0f172a';
 type FocusTarget =
   | { kind: 'stop'; id: string }
   | { kind: 'route'; id: string }
-  // `id` is `VehiclePosition.key`, the composite the layer is keyed by;
-  // `trackerId` is the surrogate that addresses a tracker page.
+  // `id` is `VehiclePosition.key`, the tracker-plus-vehicle composite the
+  // layer is keyed by; `trackerId` is the surrogate that addresses a tracker
+  // page.
   | { kind: 'vehicle'; id: string; trackerId: string }
   | null;
 

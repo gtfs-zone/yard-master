@@ -123,12 +123,15 @@ export class FeedSession extends EventTarget {
 
   /**
    * Every vehicle currently reporting, keyed by `VehiclePosition.key` — the
-   * surrogate `Tracker.id` plus the trip instance, which is what the map
+   * surrogate `Tracker.id` plus the vehicle's own id, which is what the map
    * feature is keyed by too.
    *
    * Not keyed by tracker: one tracker can be running several concurrent
    * vehicles, and keying by tracker would silently keep only the last one to
    * arrive. `vehiclesFor` is how a tracker's vehicles are asked for.
+   *
+   * The key is the vehicle's, not the trip's, so a vehicle that changes trip
+   * replaces its own entry instead of adding a second one beside it.
    */
   vehicles = new Map<string, VehiclePosition>();
 
@@ -237,10 +240,11 @@ export class FeedSession extends EventTarget {
   /**
    * One tracker's vehicles, newest fix first.
    *
-   * Usually zero or one. A producer running many vehicles under a single
-   * credential (a whole fleet on one Traccar device) returns all of them, and
-   * the tracker page lists all of them, because showing the first one the scan
-   * happened to return would silently hide the rest.
+   * Usually zero or one, and one entry per real vehicle rather than per trip.
+   * A producer running many vehicles under a single credential (a whole fleet
+   * under one tracker) returns all of them, and the tracker page lists all of
+   * them, because showing the first one the scan happened to return would
+   * silently hide the rest.
    */
   vehiclesFor(trackerId: string): VehiclePosition[] {
     const mine: VehiclePosition[] = [];

@@ -14,8 +14,8 @@
      day's assigned trips at once, which is what a selected day in the
      assignments calendar draws.
    - `VehiclePosition` extends interlocking's with a `trackerId`. A tracker can
-     carry several concurrent vehicles, so `key` is the tracker *plus* the trip
-     instance and something else has to say which tracker they belong to;
+     carry several concurrent vehicles, so `key` is the tracker *plus* the
+     vehicle id and something else has to say which tracker they belong to;
      upstream's feeds have no such object.
    - The last pushed positions are kept here so a `tracker` focus can resolve
      the tracker's vehicles. LayerManager's layer is keyed by `key`, so it
@@ -41,10 +41,12 @@ import { resolveThemeColor } from 'interlocking/util/theme-color';
 /**
  * interlocking's vehicle, plus the tracker it is reporting under.
  *
- * `key` is the tracker's surrogate id plus the trip instance — the `vehicle:*`
- * Redis key without its prefix — so it is unique even when one tracker is
- * carrying several concurrent vehicles, which is why `trackerId` has to be
- * carried beside it.
+ * `key` is the tracker's surrogate id plus the vehicle's own id — the
+ * `vehicle:*` Redis key without its prefix — so it is unique even when one
+ * tracker is carrying several concurrent vehicles, which is why `trackerId`
+ * has to be carried beside it. It identifies the vehicle, not the trip it
+ * happens to be on: a vehicle that finishes one trip and starts another keeps
+ * the same key, and so the same map feature.
  */
 export interface VehiclePosition extends RtVehiclePosition {
   /**
@@ -161,8 +163,8 @@ export class MapController {
    * follow mode.
    *
    * A tracker rather than a vehicle key, because a tracker running several
-   * trips would otherwise stop being followed the moment the instance the
-   * camera latched onto ended.
+   * vehicles would otherwise stop being followed the moment the one the camera
+   * latched onto stopped reporting.
    */
   private following: string | null = null;
 
