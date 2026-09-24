@@ -11,54 +11,7 @@
   </head>
 
   <body class="font-sans h-screen overflow-hidden">
-    <div class="app-container h-screen grid grid-rows-[auto_1fr]">
-      <!-- Navbar -->
-      <div class="navbar bg-base-100 col-span-2 border-b border-base-300 z-50">
-        <div class="navbar-start">
-          <a href="https://gtfs.zone" class="flex items-center gap-4" target="_blank" rel="noopener noreferrer">
-            <div class="avatar">
-              <div class="w-8 rounded-lg"><img src="logo.svg" alt="manage.rt.gtfs.zone logo" /></div>
-            </div>
-            <h1 class="text-xl font-bold hidden md:block">
-              <span class="text-primary">manage</span>.rt.gtfs.zone<sup id="app-version" class="text-xs opacity-50 font-normal ml-1"></sup>
-            </h1>
-          </a>
-        </div>
-        <div class="navbar-end">
-          <!-- Filled by renderNavbarActions from src/modules/navbar-actions.ts -->
-          <div id="navbar-actions" class="flex items-center gap-2"></div>
-        </div>
-      </div>
-
-      <!-- Map area -->
-      <div class="relative bg-base-300 min-h-0">
-        <div id="map" class="w-full h-full"></div>
-        <div id="map-controls" class="absolute top-2 left-2 right-2 z-40 flex flex-row items-start gap-2 pointer-events-none">
-          <div id="map-search-card" class="relative flex-1 max-w-sm card card-bordered bg-base-100 shadow-lg p-2 pointer-events-auto">
-            <input type="text" id="map-search" placeholder="Search" class="input input-sm w-full" />
-          </div>
-
-          <!-- Auto-zoom toggle: filled by renderAutoZoomControl from
-               src/modules/auto-zoom.ts. The wrapper carries pointer-events-auto
-               because #map-controls is pointer-events-none. -->
-          <div id="auto-zoom-mount" class="pointer-events-auto flex-shrink-0"></div>
-        </div>
-      </div>
-
-      <!-- Right panel: the browse tree and every properties page -->
-      <div id="right-panel" class="right-panel relative bg-base-200 border-l border-base-300 flex flex-col overflow-hidden min-h-0">
-        <div id="sheet-top-handle" class="md:hidden flex justify-center items-center py-2 cursor-grab active:cursor-grabbing flex-shrink-0">
-          <div class="w-10 h-1 rounded-full bg-base-content/20"></div>
-        </div>
-        <div id="panel-resizer" class="hidden md:block absolute left-0 top-0 bottom-0 w-2 cursor-col-resize z-10 group">
-          <div class="absolute inset-y-0 left-0.5 w-px bg-base-300 group-hover:bg-primary/50 transition-colors"></div>
-        </div>
-        <div id="panel-content" class="panel-scroll flex-1 overflow-y-auto bg-base-100 p-4">
-          <p class="text-base-content/50 text-sm text-center py-8">No feed selected</p>
-        </div>
-      </div>
-    </div>
-
+    <!-- The shell markup is mounted by src/shell.ts -->
     <script type="module" src="./index.ts"></script>
   </body>
 </html>

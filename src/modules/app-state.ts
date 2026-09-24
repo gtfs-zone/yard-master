@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/app-state.ts
-   @sha c9dcb42
+   @sha c24eb5b
    @status modified
    @changes
    - Selection is a feed row from the API, not a `FeedSelection` of URLs, so
@@ -24,8 +24,8 @@
      cannot resolve until the zip parses, so `applyPendingFocus` runs at each
      stage and only the last one is entitled to call a link dead.
    - `onFeedChange` added to the hooks, and `refreshFeed`/`clearFeed` with it.
-   - `emitFocus` is upstream's `emit`, with `loadPageData` on the focus side of
-     the split: opening the guide over a tracker page must not re-fetch the
+   - `emit` is overridden to put `loadPageData` on the focus side of the
+     split: opening the guide over a tracker page must not re-fetch the
      tracker any more than it re-renders the panel.
    - `loadPageData` added: a managed page may need an object the list requests
      do not carry (a tracker's `device_key`, an alert's informed entities), so
@@ -40,13 +40,12 @@
      fixes, and the sweep that expires a vehicle whose fix has aged out. Only
      this module knows a feed is selected *and* holds a timer. */
 /**
- * The single entry point for selecting a feed and for changing focus.
+ * Feed selection, on top of focus changes.
  *
- * Map click, panel link, hash change, feed switcher and boot restore all
- * converge here, and everything downstream — the panel, the map, the bottom
- * sheet, the address bar — reacts to this module rather than to each other. In
- * particular, only `PageStateManager` ever writes the hash, which is what keeps
- * its `suppressHashUpdate` guard honest.
+ * The focus half is `interlocking`'s `FocusController`: map click, panel link,
+ * hash change and boot restore all converge on it. What this adds is the feed
+ * half of the hash, the boot sequence that resolves it, and the page data each
+ * focus change fetches.
  *
  * The hash carries the feed by `feed_name` rather than by id, so a link reads
  * like the thing it points at. Resolving a name to a row costs one list
@@ -60,8 +59,11 @@
  */
 
 import { CONFIG } from '../config';
-import type { ModalState, PageState } from '../types/page-state';
-import { pageStatesEqual, sameLocation } from '../types/page-state';
+import type { PageState } from '../types/page-state';
+import type { BreadcrumbItem } from 'interlocking/ui/breadcrumb-trail';
+import type { FocusHooks } from 'interlocking/ui/focus-controller';
+import { FocusController } from 'interlocking/ui/focus-controller';
+import { homeWithModal, sameLocation } from 'interlocking/ui/page-state-manager';
 import type { Feed, LoadStatus, Me } from '../types/api';
 import type { VehiclePosition } from '../map-controller';
 import { buildBreadcrumbs, validateState } from './breadcrumbs';
@@ -84,30 +86,17 @@ import { scheduleFetchUrl } from './feed-source';
 import type { ServiceDate } from './service-date';
 import { getMe } from './api-client';
 import { notify } from 'interlocking/ui/notification-system';
-import { PageStateManager } from './page-state-manager';
+import { createPageStateManager } from './page-state-manager';
 import { FeedEventStream } from './event-stream';
 
-export interface AppStateHooks {
-  /**
-   * Called when the page underneath the modal changes, including the boot
-   * restore. Opening or closing a modal leaves the page alone, so this does
-   * not fire for one.
-   */
-  onFocusChange: (state: PageState) => void;
-  /**
-   * Called on every navigation, modal-only ones included. The modal router
-   * reads the whole state from here, which is what keeps the hash and the open
-   * modal reconciled however the modal was closed.
-   */
-  onStateChange: (state: PageState) => void;
+export interface AppStateHooks extends FocusHooks<PageState> {
   /** Called whenever the selected feed changes, including to null. */
   onFeedChange: (feed: Feed | null) => void;
 }
 
-export class AppState {
-  readonly pages = new PageStateManager({ enableUrlSync: true });
+export class AppState extends FocusController<PageState, BreadcrumbItem<PageState>> {
+  protected declare hooks: AppStateHooks;
   private session: FeedSession;
-  private hooks: AppStateHooks;
 
   /** The signed-in person. Null until `boot()` has answered. */
   me: Me | null = null;
@@ -160,44 +149,16 @@ export class AppState {
   private assignmentLoad: Promise<void> | null = null;
 
   constructor(session: FeedSession, hooks: AppStateHooks) {
+    super(createPageStateManager(), hooks);
     this.session = session;
-    this.hooks = hooks;
 
     this.pages.setBreadcrumbBuilder((state) => buildBreadcrumbs(session, state));
     this.pages.setStateValidator((state) => validateState(session, state));
-    this.pages.addNavigationHandler((event) => this.emit(event.to, event.from));
 
     // The parsed feed is the last thing a linked route/stop/trip was waiting
     // for, and the first thing that can invalidate a focus carried over from
     // the previous feed.
     session.addEventListener('scheduleloaded', () => this.onScheduleLoaded());
-  }
-
-  get focus(): PageState {
-    return this.pages.getPageState();
-  }
-
-  get breadcrumbs() {
-    return this.pages.getBreadcrumbs();
-  }
-
-  /**
-   * Navigate. The state replaces the current one whole, so a focus change with
-   * no `modal` field closes whatever modal was open — which is what an alert
-   * row inside the alerts modal wants.
-   */
-  setFocus(state: PageState): void {
-    if (pageStatesEqual(state, this.focus)) return;
-    this.pages.setPageState(state);
-  }
-
-  /** Open a modal over the current page, leaving that page where it is. */
-  openModal(modal: ModalState): void {
-    this.setFocus({ ...this.focus, modal });
-  }
-
-  clearFocus(): void {
-    this.setFocus({ type: 'home' });
   }
 
   /**
@@ -216,7 +177,7 @@ export class AppState {
     } catch (err) {
       if (err instanceof SessionExpiredError) return;
       notify.error(`Could not reach the API: ${describe(err)}`);
-      this.emit(this.focus);
+      this.repaint();
       return;
     }
 
@@ -230,7 +191,7 @@ export class AppState {
       // No feed means no focus worth restoring: every page but home is scoped
       // to one.
       this.hooks.onFeedChange(null);
-      this.emit(this.focus);
+      this.repaint();
       return;
     }
 
@@ -602,19 +563,15 @@ export class AppState {
    *
    * Every path that changes the state goes through here — the navigation
    * handler, the boot restore and the pending-focus resolver — so a page can
-   * never be shown without the request that fills it having been made.
-   *
-   * The focus half is skipped when only the modal moved, so opening the guide
-   * over a tracker page neither re-reads the tracker nor re-renders the panel
-   * nor moves the camera. `from` is omitted at boot, where there is no previous
-   * state and both hooks have to run.
+   * never be shown without the request that fills it having been made. The
+   * fetch sits on the focus side of the split, so opening the guide over a
+   * tracker page does not re-read the tracker.
    */
-  private emit(to: PageState, from?: PageState): void {
+  protected override emit(to: PageState, from?: PageState): void {
     if (!from || !sameLocation(from, to)) {
       void this.loadPageData(to);
-      this.hooks.onFocusChange(to);
     }
-    this.hooks.onStateChange(to);
+    super.emit(to, from);
   }
 
   /**
@@ -725,7 +682,7 @@ export class AppState {
       // `adoptState` is silent, and the feed params were written around it, so
       // the focus half of the hash has to be put back.
       this.pages.syncHash();
-      this.emit(this.focus);
+      this.repaint();
       return;
     }
 
@@ -733,26 +690,10 @@ export class AppState {
       this.pendingFocus = null;
       notify.warning(`Nothing in this feed matches the linked ${pending.type}.`);
       // The modal outlives the page it was linked over: it names no object.
-      this.pages.adoptState({ type: 'home', ...(pending.modal && { modal: pending.modal }) });
+      this.pages.adoptState(homeWithModal(pending));
       this.pages.syncHash();
-      this.emit(this.focus);
+      this.repaint();
     }
-  }
-
-  /**
-   * The hash a link to `state` should carry. Object pages render real `<a>`
-   * elements so middle-click and copy-link-address behave, even though the
-   * click itself is intercepted and handled in place.
-   */
-  hrefFor(state: PageState): string {
-    const hash = this.pages.buildHash(state);
-    return hash ? `#${hash}` : '#';
-  }
-
-  /** The full shareable URL for the current page. */
-  shareableUrl(): string {
-    const hash = this.pages.buildHash(this.focus);
-    return `${window.location.origin}${window.location.pathname}${hash ? `#${hash}` : ''}`;
   }
 }
 

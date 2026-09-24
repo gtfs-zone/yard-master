@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/modules/breadcrumbs.ts
-   @sha fdb171c
+   @sha 96c6144
    @status modified
    @changes
    - The variant set is yard-master's. `vehicle` became `tracker` and resolves

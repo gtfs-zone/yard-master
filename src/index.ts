@@ -5,6 +5,8 @@
  * The panel itself is `PanelRenderer`, which owns its own re-rendering off the
  * session's events. Everything here does is tell it which page to show.
  */
+// Mounts the shell markup; must stay the first import.
+import './shell';
 import {
   renderAutoZoomControl,
   syncAutoZoomControl,

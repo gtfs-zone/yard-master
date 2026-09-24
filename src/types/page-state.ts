@@ -1,5 +1,5 @@
 /* @vendored-from test-track:src/types/page-state.ts
-   @sha 968e2de
+   @sha c24eb5b
    @status modified
    @changes
    - Variants replaced wholesale. yard-master browses a hierarchy neither
@@ -34,12 +34,10 @@
      an exact-count check say nothing useful, so each field is checked by type.
      The modal is destructured out and validated on its own, which is the whole
      of what the modal dimension costs the guard here.
-   - `pageStatesEqual` compares the location and the modal separately rather
-     than stringifying the whole state, so a modal added to a state does not
-     depend on key order. `sameLocation` is the location half on its own: it is
-     what tells a modal-only navigation from a page change.
-   - `BreadcrumbItem` moved out to `interlocking`'s `breadcrumb-trail.ts`; it
-     now carries a `typeLabel` this file has no reason to know about.
+   - What is generic over the union (`NavigationEvent`, `StateValidator`,
+     `pageStatesEqual`, `sameLocation`) lives in `interlocking`'s
+     `ui/page-state-manager.ts`, as it does upstream, and `BreadcrumbItem` in
+     its `ui/breadcrumb-trail.ts`.
    - `ModalStateOf` follows upstream's drop: `modal-router.ts` narrows an
      opener's argument itself now. */
 
@@ -136,39 +134,3 @@ export function isPageState(value: unknown): value is PageState {
       return false;
   }
 }
-
-/** Two states name the same page when the modal above them is ignored. */
-export function sameLocation(a: PageState, b: PageState): boolean {
-  const { modal: _aModal, ...aLocation } = a;
-  const { modal: _bModal, ...bLocation } = b;
-  return JSON.stringify(aLocation) === JSON.stringify(bLocation);
-}
-
-/** Two states are equal when they name the same object with the same options. */
-export function pageStatesEqual(a: PageState, b: PageState): boolean {
-  return (
-    sameLocation(a, b) && JSON.stringify(a.modal ?? null) === JSON.stringify(b.modal ?? null)
-  );
-}
-
-/** Navigation event emitted on every focus change. */
-export type NavigationEvent = {
-  from: PageState;
-  to: PageState;
-  timestamp: number;
-};
-
-export type PageStateManagerConfig = {
-  enableHistory: boolean;
-  maxHistoryLength: number;
-  enableUrlSync: boolean;
-};
-
-/**
- * Checks whether a page state refers to an object that exists in the currently
- * loaded feed. Returns false and the caller falls back to home.
- *
- * Synchronous, unlike coloring-book's: our model is a set of in-memory maps and
- * API responses, not a database.
- */
-export type StateValidator = (state: PageState) => boolean;
