@@ -1,3 +1,13 @@
+## v0.5.1 (2026-09-25)
+
+### Fix
+
+- **map**: make the focused-vehicle halo a top-level zoom interpolate
+
+### Refactor
+
+- build the shell on interlocking's shared modules
+
 ## v0.5.0 (2026-09-22)
 
 ### Feat
